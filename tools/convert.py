@@ -9,7 +9,7 @@ Output per record: data/converted/<db>/<record>.npz with
   units    str[n_ch]
 plus data/converted/<db>/manifest.json listing records in record_id order.
 
-Usage: uv run python tools/convert.py tpehgdb|tpehgt|ehgdb
+Usage: uv run python tools/convert.py tpehgdb|tpehgt|ehgdb|icehg
 """
 
 import json
@@ -28,7 +28,8 @@ OUT = Path("data/converted")
 DATABASES = {
     "tpehgdb": (RAW / "tpehgdb/tpehgdb", ["1", "2", "3"]),
     "tpehgt": (RAW / "tpehgt", ["EHG1", "EHG2", "EHG3", "TOCO"]),
-    "ehgdb": (RAW / "ehgdb", None),
+    "ehgdb": (RAW / "ehgdb", [f"EHG{i}" for i in range(1, 17)]),  # numeric order = 4x4 grid order
+    "icehg": (RAW / "icehg-ds", ["S1", "S2", "S3"]),  # records live in per-outcome subfolders
 }
 
 
@@ -50,7 +51,7 @@ def convert_db(db: str) -> None:
     out_dir = OUT / db
     out_dir.mkdir(parents=True, exist_ok=True)
     manifest = []
-    for record_id, hea in enumerate(sorted(src.glob("*.hea"))):
+    for record_id, hea in enumerate(sorted(src.rglob("*.hea"))):
         name = hea.stem
         rec = convert_record(hea.with_suffix(""), channels)
         np.savez(out_dir / f"{name}.npz", **rec)

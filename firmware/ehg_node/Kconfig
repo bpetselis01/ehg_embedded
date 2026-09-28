@@ -1,0 +1,20 @@
+source "Kconfig.zephyr"
+
+menu "EHG node"
+
+config EHG_FRAMES_PER_PACKET
+	int "Frames batched into one BLE notification"
+	default 10
+	help
+	  Batching trades latency for fewer, larger packets (report 6.8, [16]).
+	  At 20 Hz, 10 frames = 0.5 s batching delay. Header 20 B + frames*n_ch*2 must fit MTU-3.
+
+config EHG_RING_FRAMES
+	int "Ring buffer capacity between injection and packetiser (frames)"
+	default 256
+
+config EHG_HISTORY_PACKETS
+	int "Sent packets kept for gateway re-requests"
+	default 256
+
+endmenu
