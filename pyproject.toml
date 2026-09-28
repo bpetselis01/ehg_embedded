@@ -1,0 +1,20 @@
+[project]
+name = "thesis-b-ehg"
+version = "0.1.0"
+description = "EHG telemetry pipeline host code: dataset tools, BLE gateway, ingest, evaluation"
+requires-python = ">=3.12"
+dependencies = [
+    "wfdb>=4.1",
+    "numpy>=2.0",
+    "bleak>=1.0",
+    "paho-mqtt>=2.1",
+    "influxdb-client>=1.46",
+    "matplotlib>=3.9",
+    "websockets>=13",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
