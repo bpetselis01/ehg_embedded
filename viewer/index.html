@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EHG raw viewer</title>
+<style>
+  :root { --bg: #fff; --fg: #1b1f24; --muted: #6a737d; --line: #1f6feb; --grid: #e6e8eb; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0f1216; --fg: #e6e8eb; --muted: #8b949e; --line: #58a6ff; --grid: #22272e; } }
+  body { margin: 0; padding: 12px 16px; background: var(--bg); color: var(--fg); font: 14px system-ui, sans-serif; }
+  header { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  #status { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .ch { display: grid; grid-template-columns: 56px 1fr; align-items: center; }
+  .ch span { color: var(--muted); font-size: 12px; }
+  canvas { width: 100%; height: 64px; display: block; border-bottom: 1px solid var(--grid); }
+</style>
+</head>
+<body>
+<header>
+  <strong>EHG raw viewer</strong>
+  <label>node <select id="node"></select></label>
+  <label>window <select id="win"><option>10</option><option selected>30</option><option>60</option></select> s</label>
+  <span id="status">connecting…</span>
+</header>
+<div id="chans"></div>
+<script>
+// Rolling per-channel traces, raw ADC units, each channel autoscaled to its own window.
+const nodes = {};           // node_id -> {fs, frames: [[c0..cN]], lastFrame, gaps}
+const sel = document.getElementById('node'), win = document.getElementById('win');
+const status = document.getElementById('status'), chansDiv = document.getElementById('chans');
+let canvases = [];
+
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => status.textContent = 'live';
+  ws.onclose = () => { status.textContent = 'disconnected - retrying'; setTimeout(connect, 2000); };
+  ws.onmessage = e => {
+    const m = JSON.parse(e.data);
+    let n = nodes[m.node_id];
+    if (!n) {
+      n = nodes[m.node_id] = { fs: m.fs_hz, frames: [], lastFrame: -1, gaps: 0 };
+      sel.add(new Option(m.node_id, m.node_id));
+    }
+    if (m.flags & 1) return;  // resends arrive late; the live trace skips them (Influx has them)
+    if (n.lastFrame >= 0 && m.frame_idx > n.lastFrame + 1) n.gaps++;
+    n.lastFrame = m.frame_idx + m.samples.length - 1;
+    n.frames.push(...m.samples);
+    const keep = 60 * n.fs;
+    if (n.frames.length > keep) n.frames.splice(0, n.frames.length - keep);
+  };
+}
+
+function ensureCanvases(nch) {
+  if (canvases.length === nch) return;
+  chansDiv.innerHTML = '';
+  canvases = [];
+  for (let c = 0; c < nch; c++) {
+    const row = document.createElement('div'); row.className = 'ch';
+    row.innerHTML = `<span>ch ${c + 1}</span>`;
+    const cv = document.createElement('canvas'); row.appendChild(cv);
+    chansDiv.appendChild(row); canvases.push(cv);
+  }
+}
+
+function draw() {
+  const n = nodes[sel.value];
+  if (n && n.frames.length) {
+    const frames = n.frames.slice(-Number(win.value) * n.fs);
+    const nch = frames[0].length;
+    ensureCanvases(nch);
+    const css = getComputedStyle(document.documentElement);
+    canvases.forEach((cv, c) => {
+      const w = cv.width = cv.clientWidth * devicePixelRatio, h = cv.height = cv.clientHeight * devicePixelRatio;
+      const g = cv.getContext('2d');
+      let lo = Infinity, hi = -Infinity;
+      for (const f of frames) { lo = Math.min(lo, f[c]); hi = Math.max(hi, f[c]); }
+      const span = hi - lo || 1, total = Number(win.value) * n.fs;
+      g.strokeStyle = css.getPropertyValue('--line'); g.lineWidth = devicePixelRatio;
+      g.beginPath();
+      frames.forEach((f, i) => {
+        const x = (i + total - frames.length) / total * w, y = h - (f[c] - lo) / span * (h - 4) - 2;
+        i ? g.lineTo(x, y) : g.moveTo(x, y);
+      });
+      g.stroke();
+    });
+    status.textContent = `live · ${n.fs} Hz · ${nch} ch · frame ${n.lastFrame} · gaps seen ${n.gaps}`;
+  }
+  requestAnimationFrame(draw);
+}
+connect();
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>

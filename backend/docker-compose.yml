@@ -1,5 +1,5 @@
 # EHG backend: MQTT broker -> ingest -> InfluxDB -> Grafana.
-# Run: cd backend && docker compose up -d   (Grafana http://localhost:3000, Influx http://localhost:8086)
+# Run: cd backend && docker compose up -d   (Grafana http://localhost:3300, Influx http://localhost:8086)
 services:
   mosquitto:
     image: eclipse-mosquitto:2
@@ -35,7 +35,7 @@ services:
 
   grafana:
     image: grafana/grafana-oss:13.0.2
-    ports: ["127.0.0.1:3000:3000"]
+    ports: ["127.0.0.1:3300:3000"]
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
       INFLUX_ORG: ${INFLUX_ORG}
