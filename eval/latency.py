@@ -3,9 +3,11 @@
 Per-sample latency = t_db_ack - (t_inject_host + i/fs) for frame i of each packet, so
 batching delay is included. Prints median/p95/p99/max overall and per stage; saves a CDF.
 
-Caveat (report with results): t_inject_host comes from the gateway's min-offset clock
-map, so absolute values exclude the minimum BLE link delay (one connection interval
-at most). See gateway/tracking.py:ClockMap.
+Clock alignment: the gateway's live t_inject_host uses a fixed min-offset (no drift), which
+is fine for dashboards. Here we recompute it offline from raw device ticks with a linear fit
+of the lower envelope of (t_gw_rx - t_dev), removing crystal drift (20-50 ppm = 72-180 ms/h;
+Moon, Skelly & Towsley, INFOCOM 1999). Caveat to report with results: absolute values
+exclude the minimum BLE link delay (~one connection interval, 15-30 ms).
 
 Usage: uv run python eval/latency.py --node EHG-0001 --since 1h
 """
@@ -19,11 +21,38 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
 
 
+TICK_HZ = 32768
+WINDOW_S = 60
+
+
+def drift_corrected_inject_host(ticks: np.ndarray, t_rx: np.ndarray) -> np.ndarray:
+    """Map u32 device ticks to host epoch using a linear fit of the per-window minimum offset."""
+    order = np.argsort(t_rx)
+    t_dev = np.empty(len(ticks))
+    t_dev[order] = np.unwrap(np.asarray(ticks, dtype=float)[order], period=2**32) / TICK_HZ
+    d = t_rx - t_dev
+    win = ((t_dev - t_dev.min()) // WINDOW_S).astype(int)
+    mins = [(t_dev[win == w][np.argmin(d[win == w])], d[win == w].min()) for w in np.unique(win)]
+    x, y = np.array(mins).T
+    if len(x) < 2:  # too short to fit drift: fall back to a constant min-offset
+        return t_dev + y.min()
+    slope, icept = np.polyfit(x, y, 1)
+    # shift the line down onto the envelope so no packet gets negative latency
+    icept += (d - (slope * t_dev + icept)).min()
+    return t_dev + slope * t_dev + icept
+
+
 def per_sample_latencies(pkts: list[dict], fs: float) -> np.ndarray:
+    # A packet is sendable only once its LAST frame is injected, so align that instant with
+    # t_gw_rx; aligning frame 0 would fold the batching delay into the clock offset.
+    batch_s = np.array([(p["n_frames"] - 1) / fs for p in pkts])
+    t_last_ticks = np.array([p["t_inject_dev"] for p in pkts]) + np.round(batch_s * TICK_HZ)
+    t0 = drift_corrected_inject_host(t_last_ticks, np.array([p["t_gw_rx"] for p in pkts])) - batch_s
     out = []
-    for p in pkts:
+    for p, t in zip(pkts, t0):
+        p["t_inject_host"] = t  # stage breakdown below uses the corrected value too
         for i in range(int(p["n_frames"])):
-            out.append(p["t_db_ack"] - (p["t_inject_host"] + i / fs))
+            out.append(p["t_db_ack"] - (t + i / fs))
     return np.array(out)
 
 

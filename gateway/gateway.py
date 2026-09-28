@@ -54,7 +54,10 @@ class Node:
             return
         self._log.writerow([p.seq, p.frame_idx, p.flags, f"{t_rx:.6f}", len(b)])
         if not p.flags & FLAG_RETRANS:  # resends are late by design; keep them out of the offset estimate
-            self.clock.update(p.t_inject, t_rx)
+            # Sendable once the LAST frame is injected: align that instant with t_rx, otherwise
+            # the batching delay is folded into the clock offset and latency reads ~0.
+            t_last = p.t_inject + (p.n_frames - 1) * TICK_HZ // p.fs_hz
+            self.clock.update(t_last & 0xFFFFFFFF, t_rx)
         for start, count in ranges(self.gaps.observe(p.seq)):
             self.request_resend(start, count)
         msg = {"node_id": self.id, "seq": p.seq, "frame_idx": p.frame_idx, "t_inject": p.t_inject,

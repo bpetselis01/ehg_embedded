@@ -4,7 +4,7 @@ Subscribes ehg/+/pkt (QoS 1, persistent session) and writes two measurements:
   ehg_raw  one point per frame. time = injection time of that frame (host clock).
            tags node_id, record_id; fields c0..cN (int, raw ADC units), seq, frame_idx
   ehg_pkt  one point per packet. time = injection time of frame 0.
-           fields seq, n_frames, retrans, t_inject_host, t_gw_rx, t_mqtt_pub, t_ingest_rx, t_db_ack
+           fields seq, n_frames, retrans, t_inject_dev (raw ticks, for offline drift fit), t_inject_host, t_gw_rx, t_mqtt_pub, t_ingest_rx, t_db_ack
            t_db_ack is stamped after the synchronous ehg_raw write returns, i.e. when the
            samples are queryable - the H1 end point.
 """
@@ -58,7 +58,7 @@ def on_message(client, userdata, msg):
     write.write(BUCKET, record=(
         Point("ehg_pkt").tag("node_id", m["node_id"])
         .field("seq", m["seq"]).field("n_frames", len(m["samples"])).field("retrans", bool(m["flags"] & 1))
-        .field("t_inject_host", m["t_inject_host"]).field("t_gw_rx", m["t_gw_rx"])
+        .field("t_inject_dev", m["t_inject"]).field("t_inject_host", m["t_inject_host"]).field("t_gw_rx", m["t_gw_rx"])
         .field("t_mqtt_pub", m["t_mqtt_pub"]).field("t_ingest_rx", t_ingest_rx).field("t_db_ack", t_db_ack)
         .time(ns(m["t_inject_host"]), WritePrecision.NS)))
 
