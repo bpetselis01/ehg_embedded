@@ -7,7 +7,7 @@ public EHG record ─▶ nRF52840 DK (Zephyr, digital injection) ─BLE GATT not
                                                                                                     └─────▶ WebSocket raw viewer
 ```
 
-Design: `docs/design/codebase-design.md`. Wire format: `docs/interface-spec.md`. Progress and open items: `docs/progress.md`.
+Plain-language code walkthrough: `docs/codebase-guide.md`. Design: `docs/design/codebase-design.md`. Wire format: `docs/interface-spec.md`. Progress and open items: `docs/progress.md`.
 
 ## Layout
 

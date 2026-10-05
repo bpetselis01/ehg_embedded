@@ -10,6 +10,17 @@ Moon, Skelly & Towsley, INFOCOM 1999). Caveat to report with results: absolute v
 exclude the minimum BLE link delay (~one connection interval, 15-30 ms).
 
 Usage: uv run python eval/latency.py --node EHG-0001 --since 1h
+
+PURPOSE: Answers H1: how long from "sample produced on the board" to "sample available in
+  the database"? Target: 95 % of samples under 2 s (stretch: under 1 s).
+HOW: Loads every packet's timing row. Re-converts the board's clock to laptop time more
+  carefully than the live gateway does (it also corrects for the board's clock running slightly
+  fast/slow). Then for each sample: latency = database-confirmed time - sampled time. Prints
+  summary numbers, a per-stage breakdown (radio, MQTT, ingest, database), and saves a
+  cumulative plot (CDF: "what fraction of samples arrived within X ms").
+ROLE IN THESIS: The H1 result. Stage breakdown shows which part of the pipeline costs the most.
+BEFORE -> AFTER: Before: ehg_pkt rows (ingest.py) fetched by eval/backend_client.py. After:
+  numbers on screen + eval/results/latency_cdf_<node>.png for the thesis. Tested by tests/test_latency.py.
 """
 
 import argparse
@@ -26,7 +37,12 @@ WINDOW_S = 60
 
 
 def drift_corrected_inject_host(ticks: np.ndarray, t_rx: np.ndarray) -> np.ndarray:
-    """Map u32 device ticks to host epoch using a linear fit of the per-window minimum offset."""
+    """Map u32 device ticks to host epoch using a linear fit of the per-window minimum offset.
+
+    In plain terms: in each 60 s window find the packet that arrived fastest, draw a straight
+    line through those points (the slope is the clock drift), then lower the line so no packet
+    comes out with a negative delay.
+    """
     order = np.argsort(t_rx)
     t_dev = np.empty(len(ticks))
     t_dev[order] = np.unwrap(np.asarray(ticks, dtype=float)[order], period=2**32) / TICK_HZ
@@ -43,6 +59,7 @@ def drift_corrected_inject_host(ticks: np.ndarray, t_rx: np.ndarray) -> np.ndarr
 
 
 def per_sample_latencies(pkts: list[dict], fs: float) -> np.ndarray:
+    """Latency in seconds for every sample of every packet (includes the batching wait)."""
     # A packet is sendable only once its LAST frame is injected, so align that instant with
     # t_gw_rx; aligning frame 0 would fold the batching delay into the clock offset.
     batch_s = np.array([(p["n_frames"] - 1) / fs for p in pkts])
@@ -57,11 +74,13 @@ def per_sample_latencies(pkts: list[dict], fs: float) -> np.ndarray:
 
 
 def summary(x: np.ndarray) -> str:
+    """Median / 95th / 99th percentile / max, in ms, as one line."""
     q = np.percentile(x, [50, 95, 99]) * 1000
     return f"n={len(x)} median={q[0]:.1f} ms p95={q[1]:.1f} ms p99={q[2]:.1f} ms max={x.max() * 1000:.1f} ms"
 
 
 def main():
+    """Query, compute, print PASS/FAIL against the H1 targets, and save the CDF plot."""
     from backend_client import query_pkts
 
     ap = argparse.ArgumentParser()

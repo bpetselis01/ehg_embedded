@@ -1,3 +1,6 @@
+"""Checks tools/convert.py keeps the original numbers exactly (the bit-exact
+starting point for H2/H4). Skipped if the TPEHG dataset is not downloaded."""
+
 import numpy as np
 import pytest
 import wfdb

@@ -1,4 +1,13 @@
 <!doctype html>
+<!--
+  PURPOSE: The live raw-EHG page: one scrolling trace per channel for the chosen node.
+  HOW: Opens a WebSocket to viewer/server.py, keeps the last 60 s of frames per node, and about
+    60 times a second redraws each channel on a canvas, scaled to fit its own min..max.
+    Counts gaps when a frame number is skipped. Re-sent packets are skipped here (they arrive
+    late); the database still has them.
+  ROLE IN THESIS: Gantt 3b raw viewer (report 6.11); a visual sanity check, not a measurement.
+  BEFORE -> AFTER: Before: viewer/server.py (fed by the gateway over MQTT). After: your screen.
+-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -30,6 +39,7 @@ const sel = document.getElementById('node'), win = document.getElementById('win'
 const status = document.getElementById('status'), chansDiv = document.getElementById('chans');
 let canvases = [];
 
+// Open the live feed; on each message append its frames to that node's buffer. Auto-reconnects.
 function connect() {
   const ws = new WebSocket(`ws://${location.host}/ws`);
   ws.onopen = () => status.textContent = 'live';
@@ -50,6 +60,7 @@ function connect() {
   };
 }
 
+// Make one labelled canvas row per channel (only when the channel count changes).
 function ensureCanvases(nch) {
   if (canvases.length === nch) return;
   chansDiv.innerHTML = '';
@@ -62,6 +73,7 @@ function ensureCanvases(nch) {
   }
 }
 
+// Redraw the selected node's last <window> seconds, every screen refresh.
 function draw() {
   const n = nodes[sel.value];
   if (n && n.frames.length) {

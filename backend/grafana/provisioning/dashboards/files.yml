@@ -1,3 +1,6 @@
+# PURPOSE: Tells Grafana to load dashboards from files at start-up, instead of by hand.
+# BEFORE -> AFTER: The folder below is backend/grafana/dashboards/ (mounted by docker-compose.yml),
+#   which holds ehg-overview.json (raw traces, latency, packet rate, resends).
 apiVersion: 1
 providers:
   - name: ehg

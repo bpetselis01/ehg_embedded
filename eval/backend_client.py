@@ -1,4 +1,13 @@
-"""Shared InfluxDB queries for the evaluation scripts. Reads credentials from backend/.env."""
+"""Shared InfluxDB queries for the evaluation scripts. Reads credentials from backend/.env.
+
+PURPOSE: One place that knows how to pull stored EHG data back out of the database.
+HOW: Reads the password/token from backend/.env, sends Flux queries (InfluxDB's query
+  language) and "pivots" the result so each row is one moment with all its fields side by side.
+ROLE IN THESIS: The read-back half of the pipeline. query_frames is also the proposed hook for
+  a downstream classifier (docs/interface-spec.md section 5).
+BEFORE -> AFTER: Before: rows written by backend/ingest/ingest.py. After: eval/integrity.py
+  uses query_frames (samples), eval/latency.py uses query_pkts (timings).
+"""
 
 from pathlib import Path
 
@@ -10,6 +19,7 @@ BUCKET = ENV["INFLUX_BUCKET"]
 
 
 def client() -> InfluxDBClient:
+    """Connection to the local InfluxDB (long timeout: soak queries can be large)."""
     return InfluxDBClient(url="http://localhost:8086", token=ENV["INFLUX_TOKEN"], org=ENV["INFLUX_ORG"], timeout=120_000)
 
 
@@ -30,6 +40,7 @@ def query_frames(node: str, since: str) -> tuple[int, dict[int, list[int]]]:
 
 
 def query_pkts(node: str, since: str) -> list[dict]:
+    """Returns one dict of timing fields (ehg_pkt) per packet from the node in the window."""
     q = f'''from(bucket:"{BUCKET}") |> range(start:-{since})
       |> filter(fn:(r) => r._measurement == "ehg_pkt" and r.node_id == "{node}")
       |> pivot(rowKey:["_time"], columnKey:["_field"], valueColumn:"_value")'''

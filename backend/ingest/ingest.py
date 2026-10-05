@@ -7,6 +7,17 @@ Subscribes ehg/+/pkt (QoS 1, persistent session) and writes two measurements:
            fields seq, n_frames, retrans, t_inject_dev (raw ticks, for offline drift fit), t_inject_host, t_gw_rx, t_mqtt_pub, t_ingest_rx, t_db_ack
            t_db_ack is stamped after the synchronous ehg_raw write returns, i.e. when the
            samples are queryable - the H1 end point.
+
+PURPOSE: Stores every packet published by the gateway into the time-series database (InfluxDB).
+HOW: Subscribes to all ehg/<node>/pkt messages. For each one: drop it if already seen
+  (QoS 1 can deliver twice), write one row per frame of samples (ehg_raw), then one row of
+  timing info for the whole packet (ehg_pkt) including the moment the database confirmed it.
+  Waits ("SYNCHRONOUS") for each write, so that confirmation time is real.
+ROLE IN THESIS: The ingest box in report Fig. 10. Its timestamps t_ingest_rx and t_db_ack close
+  the latency chain (H1). Rows keyed by frame_idx let eval/integrity.py check delivery (H2/H4).
+BEFORE -> AFTER: Before: gateway/gateway.py via the Mosquitto broker. Runs in Docker
+  (backend/docker-compose.yml, ingest/Dockerfile). After: InfluxDB, read by Grafana
+  (backend/grafana/), eval/backend_client.py, and a future classifier (docs/interface-spec.md 5).
 """
 
 import json
@@ -27,10 +38,12 @@ seen, seen_order = set(), deque(maxlen=100_000)
 
 
 def ns(t: float) -> int:
+    """Seconds -> whole nanoseconds (InfluxDB's time unit)."""
     return int(round(t * 1e9))
 
 
 def points_for(m: dict) -> list[Point]:
+    """One ehg_raw row per frame; frame i is timed at the packet start + i / sample rate."""
     pts = []
     for i, frame in enumerate(m["samples"]):
         p = (Point("ehg_raw").tag("node_id", m["node_id"]).tag("record_id", str(m["record_id"]))
@@ -43,6 +56,7 @@ def points_for(m: dict) -> list[Point]:
 
 
 def on_message(client, userdata, msg):
+    """Handle one MQTT message: de-duplicate, write samples, stamp t_db_ack, write timing row."""
     t_ingest_rx = time.time()
     m = json.loads(msg.payload)
     key = (m["node_id"], m["seq"], m["t_inject"])  # t_inject disambiguates seq reuse after node reboot
@@ -64,6 +78,7 @@ def on_message(client, userdata, msg):
 
 
 def main():
+    """Connect to the broker (retrying until it is up) and process messages forever."""
     c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="ehg-ingest", clean_session=False)
     c.on_connect = lambda cl, u, f, rc, p: cl.subscribe("ehg/+/pkt", qos=1)
     c.on_message = on_message

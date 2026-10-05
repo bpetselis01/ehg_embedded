@@ -1,3 +1,9 @@
+# PURPOSE: Declares the firmware's own tunable settings (with defaults), alongside Zephyr's.
+# HOW: Each "config" becomes a CONFIG_EHG_* constant in the C code; override in prj.conf.
+# ROLE IN THESIS: These knobs are the experiment variables for latency vs efficiency (H1)
+#   and how much loss can be recovered (H2).
+# BEFORE -> AFTER: Read at build time; used in replay.c (ring size) and ehg_service.c
+#   (frames per packet, history size).
 source "Kconfig.zephyr"
 
 menu "EHG node"
@@ -12,9 +18,15 @@ config EHG_FRAMES_PER_PACKET
 config EHG_RING_FRAMES
 	int "Ring buffer capacity between injection and packetiser (frames)"
 	default 256
+	help
+	  How many frames can wait if sending falls behind (256 frames = 12.8 s at 20 Hz).
+	  When full, new frames are counted as ring_overflow (replay.c).
 
 config EHG_HISTORY_PACKETS
 	int "Sent packets kept for gateway re-requests"
 	default 256
+	help
+	  How far back a lost packet can still be re-sent (256 x 10 frames = 128 s at 20 Hz).
+	  Older requests are counted as resend_miss (ehg_service.c).
 
 endmenu

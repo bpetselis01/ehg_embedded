@@ -8,6 +8,21 @@
 Every notification is timestamped on arrival and logged to gateway/logs/<node>.csv
 (seq, frame_idx, flags, t_gw_rx, bytes) so loss can be attributed to the radio vs the
 host stack (report Section 6.8/6.10).
+
+PURPOSE: The laptop-side bridge. It receives packets from the board over Bluetooth and
+  forwards them to the database side over the network (MQTT).
+HOW: Scans for devices named "EHG-*", connects, subscribes to the data slot, and sends START.
+  For every packet: decode it, write an arrival line to a CSV log, update the loss tracker and
+  clock map, ask the board to re-send anything missing, and publish a JSON message on topic
+  ehg/<node>/pkt. MQTT is a "post office": publishers drop messages on a topic, subscribers
+  receive them. QoS 1 means the post office keeps a message until delivery is confirmed.
+  --simulate replaces the board with software nodes that send identical packets.
+ROLE IN THESIS: The gateway box in report Fig. 10 (Gantt Phase 2). It adds the arrival
+  timestamp t_gw_rx and t_mqtt_pub (H1 stage timing), drives loss recovery (H2), and handles
+  several nodes at once (H3).
+BEFORE -> AFTER: Before: firmware (ehg_service.c) or the simulator. Uses gateway/packet.py to
+  decode and gateway/tracking.py to track. After: the Mosquitto broker (backend/), whose
+  subscribers are backend/ingest/ingest.py (stores to InfluxDB) and viewer/server.py (live plot).
 """
 
 import argparse
@@ -34,7 +49,11 @@ LOGS = Path("gateway/logs")
 
 
 class Node:
-    """Per-node state: loss tracking, clock map, arrival log, publishing."""
+    """Per-node state: loss tracking, clock map, arrival log, publishing.
+
+    The same class serves real boards and simulated ones; only `publish` and
+    `request_resend` (passed in) differ.
+    """
 
     def __init__(self, node_id: str, publish, request_resend):
         self.id = node_id
@@ -47,6 +66,7 @@ class Node:
             self._log.writerow(["seq", "frame_idx", "flags", "t_gw_rx", "bytes"])
 
     def on_bytes(self, b: bytes, t_rx: float):
+        """Handle one received packet: decode, log, track, request resends, publish."""
         try:
             p = parse(b)
         except ValueError as e:
@@ -66,6 +86,7 @@ class Node:
         self.publish(self.id, msg)
 
     def stats(self) -> str:
+        """One-line summary printed every ~10 s."""
         g = self.gaps
         return f"[{self.id}] rx={g.received} missing={len(g.missing)} dup={g.duplicates} streams={g.streams}"
 
@@ -74,7 +95,7 @@ class Node:
 
 
 def ranges(seqs: list[int]):
-    """[2,3,4,9] -> [(2,3),(9,1)]"""
+    """Group missing seqs into (start, count) runs, one RESEND each: [2,3,4,9] -> [(2,3),(9,1)]"""
     out = []
     for s in seqs:
         if out and out[-1][0] + out[-1][1] == s and out[-1][1] < 0xFFFF:
@@ -85,6 +106,7 @@ def ranges(seqs: list[int]):
 
 
 def make_publisher(args):
+    """Return (publish, close). Publishes to MQTT, or just prints when --no-mqtt."""
     if args.no_mqtt:
         def show(node_id, msg):
             print(f"{node_id} seq={msg['seq']} frame={msg['frame_idx']} first={msg['samples'][0]}")
@@ -105,6 +127,7 @@ def make_publisher(args):
 # ---------------------------------------------------------------- BLE source
 
 async def run_ble_node(device, publish, stop: asyncio.Event):
+    """Connect to one board, stream until stopped, reconnect automatically if the link drops."""
     from bleak import BleakClient
 
     node_id = device.name
@@ -131,6 +154,7 @@ async def run_ble_node(device, publish, stop: asyncio.Event):
 
 
 async def ble_main(args, publish):
+    """Scan for up to --nodes boards named EHG-*, then run one run_ble_node per board in parallel."""
     from bleak import BleakScanner
 
     print(f"scanning for up to {args.nodes} node(s) named {NAME_PREFIX}* ...")
@@ -151,7 +175,11 @@ async def ble_main(args, publish):
 # ---------------------------------------------------------------- simulated source
 
 async def sim_node(i: int, args, publish):
-    """Software node emitting the same wire format as the firmware, with optional loss."""
+    """Software node emitting the same wire format as the firmware, with optional loss.
+
+    Lets the whole backend be tested without hardware. Keeps its own history so resend
+    requests are answered just like the firmware's (flag = retransmission).
+    """
     rec = np.load(args.sim_record)
     src, fs = rec["samples"], float(rec["fs"])
     n_ch, nf = src.shape[1], args.frames
@@ -176,10 +204,12 @@ async def sim_node(i: int, args, publish):
 
 
 async def sim_main(args, publish):
+    """Run --simulate N software nodes in parallel."""
     await asyncio.gather(*(sim_node(i, args, publish) for i in range(args.simulate)))
 
 
 def main():
+    """Parse command-line options, then run either the BLE or the simulated source."""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--nodes", type=int, default=1)
     ap.add_argument("--scan-s", type=float, default=10)

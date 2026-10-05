@@ -1,3 +1,6 @@
+"""Checks eval/integrity.py:reconcile on a tiny fake record: perfect delivery, a missing
+run of frames, a changed number, and frame numbers past the end of the record (looping)."""
+
 import numpy as np
 
 from eval.integrity import reconcile

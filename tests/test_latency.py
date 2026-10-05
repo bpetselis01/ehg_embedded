@@ -1,3 +1,6 @@
+"""Checks eval/latency.py: the drift fit recovers a clock running 50 ppm slow over 6 h,
+and the batching wait is counted as latency rather than hidden in the clock offset (H1)."""
+
 import numpy as np
 
 from eval.latency import drift_corrected_inject_host

@@ -4,6 +4,15 @@ Grafana handles overview/alerts; raw multichannel traces go through this custom 
 the split used by ICU Cockpit [8] and RHMS [14] (report 6.11).
 
   uv run python viewer/server.py            then open http://localhost:8765
+
+PURPOSE: Shows the raw EHG waves live in a browser, with less delay than Grafana.
+HOW: Listens to the same MQTT messages as the ingest service and passes a slimmed-down copy of
+  each to every open browser tab over a WebSocket (a connection that stays open so the server
+  can push data). The same small server also serves the page itself (index.html).
+ROLE IN THESIS: Gantt 3b, the clinician-style raw-trace view. It sits beside the database
+  path, so watching does not affect storage or the H1/H2 measurements.
+BEFORE -> AFTER: Before: gateway/gateway.py publishing via Mosquitto. After: viewer/index.html
+  draws the traces.
 """
 
 import asyncio
@@ -21,12 +30,14 @@ clients = set()
 
 
 def page(connection, request):
+    """Serve index.html for normal requests; let /ws through to become a WebSocket."""
     if request.path == "/ws":
         return None  # proceed with the WebSocket handshake
     return Response(HTTPStatus.OK, "OK", Headers({"Content-Type": "text/html"}), PAGE)
 
 
 async def handler(ws):
+    """Track one open browser tab until it closes."""
     clients.add(ws)
     try:
         await ws.wait_closed()
@@ -35,6 +46,7 @@ async def handler(ws):
 
 
 async def main(mqtt_host="localhost", port=8765):
+    """Subscribe to MQTT and forward each message to all browser tabs; serve on port 8765."""
     loop = asyncio.get_running_loop()
 
     def on_message(client, userdata, msg):

@@ -1,5 +1,13 @@
 /*
  * replay.h - digital sample injection (Gantt 1a) into the ring buffer (1b).
+ *
+ * PURPOSE: The public "menu" of replay.c: what other firmware files may call to start/stop
+ *   the fake sensor and read its health counters.
+ * HOW: Declarations only; the code is in replay.c.
+ * ROLE IN THESIS: Digital injection = playing a stored real EHG recording as if a sensor
+ *   were measuring it live, so results can be checked against a known answer.
+ * BEFORE -> AFTER: Used by ehg_service.c (start/stop on gateway command, read frames from
+ *   replay_ring, read counters for the stats log).
  */
 #pragma once
 #include <zephyr/kernel.h>

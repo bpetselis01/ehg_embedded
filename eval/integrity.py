@@ -1,6 +1,15 @@
 """H2 (delivery) and H4 (bit-exact fidelity) - reconcile what reached InfluxDB against the source file.
 
 Usage: uv run python eval/integrity.py --node EHG-0001 --since 2h [--db tpehgdb]
+
+PURPOSE: Answers H2 (did every sample arrive? target > 99 %) and the bit-exact half of H4
+  (is every stored number identical to the original recording?).
+HOW: Pulls the stored samples for a node, opens the original converted file named by the
+  record_id they carry, lines the two up by frame_idx, then counts: frames delivered, frames
+  whose numbers differ, and runs of missing frames.
+ROLE IN THESIS: The H2/H4 result, end to end (dataset -> board -> radio -> gateway -> DB).
+BEFORE -> AFTER: Before: ehg_raw rows (ingest.py) via eval/backend_client.py, and
+  data/converted/ from tools/convert.py. After: printed results. Tested by tests/test_integrity.py.
 """
 
 import argparse
@@ -42,6 +51,7 @@ def main():
     manifest = json.loads(Path(f"data/converted/{a.db}/manifest.json").read_text())
     src = np.load(f"data/converted/{a.db}/{manifest[record_id]['file']}")["samples"]
     # Frames are counted from the first one seen in the window: a window can start mid-stream.
+    # Re-number from 0 and rotate the source so row 0 lines up with that first frame.
     lo, hi = min(frames), max(frames)
     shifted = {i - lo: v for i, v in frames.items()}
     src = np.roll(src, -(lo % len(src)), axis=0)

@@ -1,5 +1,13 @@
 # EHG backend: MQTT broker -> ingest -> InfluxDB -> Grafana.
 # Run: cd backend && docker compose up -d   (Grafana http://localhost:3300, Influx http://localhost:8086)
+#
+# PURPOSE: Starts the whole server side with one command, as four containers (isolated mini-computers).
+# HOW: mosquitto = MQTT post office; influxdb = time-series database; ingest = our script that
+#   copies MQTT messages into the database; grafana = dashboards. Settings come from backend/.env.
+#   Ports are bound to 127.0.0.1 so only this computer can reach them. Volumes keep data across restarts.
+# ROLE IN THESIS: The backend in report Fig. 10 (Gantt Phase 2).
+# BEFORE -> AFTER: Before: gateway/gateway.py publishes to port 1883. After: Grafana (3300) and
+#   eval/ scripts (8086) read the stored data; viewer/server.py also listens on 1883.
 services:
   mosquitto:
     image: eclipse-mosquitto:2

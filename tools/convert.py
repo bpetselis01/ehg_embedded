@@ -10,6 +10,18 @@ Output per record: data/converted/<db>/<record>.npz with
 plus data/converted/<db>/manifest.json listing records in record_id order.
 
 Usage: uv run python tools/convert.py tpehgdb|tpehgt|ehgdb|icehg
+
+PURPOSE: Step 0 of the pipeline. Turns downloaded public EHG recordings (PhysioNet's WFDB
+  format) into one simple file per recording that every later step can read.
+HOW: Reads each record with the `wfdb` library *without* converting to millivolts
+  (physical=False), keeps only the chosen channels, and saves the untouched whole numbers
+  plus the info needed to convert later (gain, baseline, units). Numbers each record
+  (record_id) in sorted order and writes that list to manifest.json.
+ROLE IN THESIS: Creates the "ground truth" that transmitted data is compared against.
+  Keeping raw numbers is what makes the bit-exact checks (H2/H4) possible.
+BEFORE -> AFTER: Before: data/raw/ (downloaded per README step 0). After: data/converted/,
+  used by tools/make_replay.py (firmware data), gateway.py --simulate, and eval/integrity.py
+  (the answer key). Tested by tests/test_convert.py.
 """
 
 import json
@@ -34,6 +46,7 @@ DATABASES = {
 
 
 def convert_record(path: str, channels: list[str] | None) -> dict:
+    """Read one WFDB record and return the arrays that go into its .npz file."""
     rec = wfdb.rdrecord(str(path), physical=False)
     idx = list(range(rec.n_sig)) if channels is None else [rec.sig_name.index(c) for c in channels]
     return {
@@ -47,6 +60,7 @@ def convert_record(path: str, channels: list[str] | None) -> dict:
 
 
 def convert_db(db: str) -> None:
+    """Convert every record of one database and write its manifest.json (record_id order)."""
     src, channels = DATABASES[db]
     out_dir = OUT / db
     out_dir.mkdir(parents=True, exist_ok=True)
