@@ -1,0 +1,17 @@
+# PURPOSE: Connects Grafana to InfluxDB automatically at start-up.
+# HOW: Points at the influxdb container, uses the Flux query language, and fills org/bucket/token
+#   from backend/.env (via docker-compose.yml). uid "influx" is what the dashboard JSON refers to.
+apiVersion: 1
+datasources:
+  - name: InfluxDB
+    uid: influx
+    type: influxdb
+    access: proxy
+    url: http://influxdb:8086
+    isDefault: true
+    jsonData:
+      version: Flux
+      organization: ${INFLUX_ORG}
+      defaultBucket: ${INFLUX_BUCKET}
+    secureJsonData:
+      token: ${INFLUX_TOKEN}

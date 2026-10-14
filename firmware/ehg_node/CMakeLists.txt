@@ -1,0 +1,17 @@
+# EHG sensor node: replays a public EHG record (digital injection) and streams it over BLE.
+# Build: see firmware/build.sh
+#
+# PURPOSE: Tells the build system which C files make up the firmware.
+# HOW: Loads Zephyr (the board's small operating system), refuses to build without the
+#   generated sample file, then lists the three source files.
+# ROLE IN THESIS / BEFORE -> AFTER: Called by firmware/build.sh; compiles src/*.c together with
+#   prj.conf (settings) and Kconfig (our own tunable settings).
+cmake_minimum_required(VERSION 3.20.0)
+find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
+project(ehg_node)
+
+if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/replay_data.h)
+  message(FATAL_ERROR "src/replay_data.h missing - run: uv run python tools/make_replay.py <npz> --record-id N")
+endif()
+
+target_sources(app PRIVATE src/main.c src/replay.c src/ehg_service.c)

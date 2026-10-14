@@ -1,0 +1,27 @@
+# PURPOSE: Lists the laptop-side Python code's dependencies; `uv sync` installs them.
+# wfdb = read PhysioNet records (tools/), bleak = Bluetooth (gateway/), paho-mqtt = MQTT
+# (gateway/, viewer/, ingest), influxdb-client = database (eval/, ingest), matplotlib = plots
+# (eval/latency.py), websockets = live viewer. pythonpath lets tests import gateway/, tools/, eval/.
+[project]
+name = "thesis-b-ehg"
+version = "0.1.0"
+description = "EHG telemetry pipeline host code: dataset tools, BLE gateway, ingest, evaluation"
+requires-python = ">=3.12"
+dependencies = [
+    "wfdb>=4.1",
+    "numpy>=2.0",
+    "bleak>=1.0",
+    "paho-mqtt>=2.1",
+    "influxdb-client>=1.46",
+    "matplotlib>=3.9",
+    "websockets>=13",
+]
+
+[dependency-groups]
+dev = [
+    "pyserial>=3.5",
+    "pytest>=8",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
