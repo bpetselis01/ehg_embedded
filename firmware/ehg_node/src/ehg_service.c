@@ -1,26 +1,22 @@
 /*
  * ehg_service.c - GATT service, packetiser, history + resend.
  *
- * Data path: replay_ring (frames) -> tx_thread batches CONFIG_EHG_FRAMES_PER_PACKET frames
- * into one packet (header per ehg_packet.h) -> history[seq % N] -> bt_gatt_notify.
- *
- * Notifying from this dedicated thread blocks when BLE TX buffers are exhausted
- * (zephyr/subsys/bluetooth/host/att.c), so a slow link backs up into replay_ring and is
- * counted there as overflow rather than dropped silently inside the stack.
- *
- * PURPOSE: Turns the stream of frames into numbered radio packets, sends them to the laptop,
- *   and re-sends any the laptop reports missing.
- * HOW: (1) Declares a Bluetooth service with two slots: "data" (board pushes packets out =
- *   notify) and "control" (laptop writes START / STOP / RESEND commands). (2) A thread
- *   (tx_thread) collects N frames, adds the 20-byte header, gives it the next packet number
- *   (seq), keeps a copy in a history list, and sends it. (3) On RESEND, copies are looked up in
- *   history and sent again with the "retransmission" flag set.
- * ROLE IN THESIS: Gantt 1c (GATT service) and 1d (sequence numbers, timestamps). Batching
- *   trades latency for efficiency (H1); numbering + history/resend is the loss-recovery
- *   mechanism (H2). The counters printed by ehg_service_log_stats() show where any loss happened.
- * BEFORE -> AFTER: Frames come from replay.c via replay_ring. Packet layout from ehg_packet.h.
- *   Connection handed in by main.c. Packets go over the air to gateway/gateway.py, which
- *   decodes them with gateway/packet.py and sends RESEND commands back.
+ * PURPOSE: Frames -> numbered radio packets -> laptop. Re-sends packets the laptop reports missing.
+ * INPUT: frames from replay_ring (src/replay.c). Commands written to the control slot by
+ *   gateway/gateway.py: 01 START, 02 STOP, 03 RESEND <u32 seq> <u16 count> (docs/interface-spec.md 3).
+ * OUTPUT: Bluetooth notifications on the data slot, 1 packet each (layout: src/ehg_packet.h).
+ *   Retransmissions carry flags bit0 = 1.
+ * HOW: (1) Declares a service with 2 slots: "data" (board pushes = notify) and "control" (laptop writes).
+ *   (2) tx_thread collects CONFIG_EHG_FRAMES_PER_PACKET frames, adds the 20-byte header + next seq,
+ *   keeps a copy in history[seq % N], sends. (3) RESEND: copies looked up in history, sent again
+ *   with the retransmission flag.
+ *   Notify from this thread blocks when BLE TX buffers run out (zephyr/subsys/bluetooth/host/att.c),
+ *   so a slow link backs up into replay_ring and is counted there as overflow, not dropped silently.
+ * ROLE IN THESIS: Gantt 1c (GATT service), 1d (seq numbers, timestamps). Batching trades latency for
+ *   efficiency (H1); numbering + history/resend = loss recovery (H2). Counters from
+ *   ehg_service_log_stats() show where any loss happened.
+ * BEFORE -> AFTER: Frames from src/replay.c via replay_ring. Connection from src/main.c. Packets go
+ *   over the air to gateway/gateway.py (decodes with gateway/packet.py, sends RESEND back).
  */
 #include "ehg_service.h"
 
@@ -37,7 +33,7 @@
 LOG_MODULE_REGISTER(ehg_svc, LOG_LEVEL_INF);
 
 #define FRAMES CONFIG_EHG_FRAMES_PER_PACKET
-#define PKT_LEN (sizeof(struct ehg_pkt_hdr) + FRAMES * REPLAY_N_CH * sizeof(int16_t))
+#define PKT_LEN (sizeof(struct ehg_pkt_hdr) + FRAMES * REPLAY_N_CH * EHG_SAMPLE_BYTES)
 BUILD_ASSERT(PKT_LEN <= 244, "packet exceeds MTU 247 payload - lower CONFIG_EHG_FRAMES_PER_PACKET");
 BUILD_ASSERT(FRAMES <= UINT8_MAX);
 
@@ -178,7 +174,7 @@ static void tx_thread(void *a, void *b, void *c)
 {
 	uint8_t pkt[PKT_LEN];
 	struct ehg_pkt_hdr *hdr = (struct ehg_pkt_hdr *)pkt;
-	int16_t *samples = (int16_t *)(pkt + sizeof(*hdr));
+	uint8_t *samples = pkt + sizeof(*hdr);
 	struct ehg_frame f;
 	uint32_t seq = 0;
 	uint8_t nf = 0;
@@ -202,11 +198,19 @@ static void tx_thread(void *a, void *b, void *c)
 				.frame_idx = f.frame_idx,
 				.t_inject = f.tick,
 				.n_frames = FRAMES,
-				.flags = 0,
+				.flags = EHG_SAMPLE_FLAGS,
 				.record_id = REPLAY_RECORD_ID,
 			};
 		}
-		memcpy(&samples[nf * REPLAY_N_CH], f.s, REPLAY_N_CH * sizeof(int16_t));
+		uint8_t *dst = &samples[nf * REPLAY_N_CH * EHG_SAMPLE_BYTES];
+
+		for (int c = 0; c < REPLAY_N_CH; c++, dst += EHG_SAMPLE_BYTES) {
+#if EHG_SAMPLE_BYTES == 3
+			sys_put_le24((uint32_t)f.s[c], dst);
+#else
+			sys_put_le16((uint16_t)f.s[c], dst);
+#endif
+		}
 		if (++nf < FRAMES) {
 			continue;
 		}

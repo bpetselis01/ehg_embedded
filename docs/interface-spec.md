@@ -10,7 +10,7 @@ This spec defines how EHG samples move from a replay source to the backend, and 
 |---|---|---|---|
 | Channels | 3: signals `1`,`2`,`3` (unfiltered bipolar) | 16: `EHG1`…`EHG16` in numeric (grid) order | `S1..S3` / `EHG1..3`(+`TOCO`) |
 | fs | 20 Hz | 200 Hz | 20 Hz |
-| Sample type | int16, raw ADC units | int16, raw ADC units | int16 |
+| Sample type | int16, raw ADC units (24-bit optional, below) | int16, raw ADC units | int16 |
 | To physical units | `mV = (adu - baseline) / gain`; gain 13107 adu/mV, baseline 0 | gain 131.068 adu/mV | per `.npz` |
 | Timestamp epoch | device ticks at 32 768 Hz since boot (u32), mapped to Unix epoch seconds by the gateway | same | same |
 
@@ -20,7 +20,7 @@ Filtering is **not** applied in transit. Zicheng's 0.08–4 Hz zero-phase band-p
 
 ## 2. Converted file format (`data/converted/<db>/<record>.npz`)
 
-Produced by `tools/convert.py`. Keys: `samples` int16 `[n_frames, n_ch]`, `fs`, `channels`, `gain`, `baseline`, `units`. `manifest.json` maps `record_id` to the record name. `record_id` is what travels on the wire.
+Produced by `tools/convert.py`. Keys: `samples` int16 `[n_frames, n_ch]` (int32 with `--bits 24`), `fs`, `channels`, `gain`, `baseline`, `units`. `manifest.json` maps `record_id` to the record name. `record_id` is what travels on the wire, so it is tied to the record name and never reused (manifests are tracked in git).
 
 ## 3. Wire packet (BLE notification payload), little-endian
 
@@ -33,9 +33,9 @@ Produced by `tools/convert.py`. Keys: `samples` int16 `[n_frames, n_ch]`, `fs`, 
 | 8 | u32 | frame_idx: frame counter from stream start. Source row = `frame_idx % n_frames(record)` |
 | 12 | u32 | t_inject: device tick when frame 0 was injected |
 | 16 | u8 | n_frames |
-| 17 | u8 | flags (bit0 = retransmission) |
+| 17 | u8 | flags (bit0 = retransmission, bit1 = 24-bit samples) |
 | 18 | u16 | record_id |
-| 20 | i16 × n_frames × n_ch | samples, frame-major |
+| 20 | i16 × n_frames × n_ch | samples, frame-major. If flags bit1: 3-byte signed little-endian each instead (opt-in: `make_replay.py --bits 24`; for 24-bit front ends such as ADS129x) |
 
 Implemented in `firmware/ehg_node/src/ehg_packet.h` and `gateway/packet.py`. The BLE service is `4e480001-a0e1-4c3b-8747-9a1b2c3d4e5f`. Data characteristic `…0002` (notify). Control characteristic `…0003` (write): `01` start, `02` stop, `03 <u32 seq> <u16 count>` resend.
 
@@ -49,6 +49,13 @@ Implemented in `firmware/ehg_node/src/ehg_packet.h` and `gateway/packet.py`. The
 - `ehg_pkt`: one point per packet. Fields `seq, n_frames, retrans, t_inject_dev, t_inject_host, t_gw_rx, t_mqtt_pub, t_ingest_rx, t_db_ack`.
 
 **Proposed classifier hook:** the classifier reads `ehg_raw` for a `node_id` over a 60 s window with a 30 s step (Flux query in `eval/backend_client.py:query_frames`), converts to mV with the gain above, runs unchanged, and writes the label to measurement `ehg_label` (tags `node_id`, fields `label`, `score`, `window_start`). A separate subscriber like this is also how report §8.4 describes the hook.
+
+## 5b. FHIR export (clinical boundary)
+
+`tools/fhir_export.py` turns a stored window into an HL7 FHIR R5 Bundle: a `Device` (node id) and an `Observation`
+with one `component` per channel, each `valueSampledData` = raw counts in `data` ("E" for frames that never arrived),
+`factor` = 1/gain, `origin` = −baseline/gain mV, `interval` = 1000/fs ms. Raw counts stay unchanged (H4).
+The live path (BLE → MQTT → InfluxDB) stays custom. Codes use a local system: no standard EHG code was found.
 
 ## 6. Icelandic → classifier decimation policy (H4 stretch; proposed)
 

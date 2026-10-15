@@ -3,7 +3,7 @@ wrong-version packets are rejected (they would otherwise corrupt stored data).""
 
 import pytest
 
-from gateway.packet import Packet, pack, parse
+from gateway.packet import FLAG_24BIT, Packet, pack, parse
 
 
 def make(samples, **kw):
@@ -31,3 +31,29 @@ def test_unknown_version_rejected():
     b[0] = 2
     with pytest.raises(ValueError):
         parse(bytes(b))
+
+
+def test_24bit_roundtrip_with_extremes():
+    p = make([[-(2**23), 0, 2**23 - 1], [-1, 70000, -70000]], flags=FLAG_24BIT)
+    b = pack(p)
+    assert len(b) == 20 + 2 * 3 * 3
+    assert parse(b) == p
+
+
+def test_24bit_flag_survives_retransmission_flag():
+    p = make([[123456, -123456, 7]], flags=FLAG_24BIT | 0x01)
+    assert parse(pack(p)) == p
+
+
+def test_16bit_default_layout_unchanged():
+    # 2 bytes per sample, little-endian: what the firmware has always sent
+    b = pack(make([[1, -2, 258]]))
+    assert b[20:] == bytes([1, 0, 0xFE, 0xFF, 2, 1])
+
+
+def test_length_checked_against_sample_width():
+    b = pack(make([[1, 2, 3]]))  # 16-bit body
+    hdr = bytearray(b)
+    hdr[17] |= FLAG_24BIT       # claims 24-bit: body length no longer matches
+    with pytest.raises(ValueError):
+        parse(bytes(hdr))
