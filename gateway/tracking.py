@@ -1,15 +1,17 @@
-"""Pure gateway logic: packet-loss tracking and device-to-host clock mapping. No I/O.
+"""Pure gateway logic: packet-loss tracking + board-to-laptop clock mapping. No I/O.
 
-PURPOSE: Two bookkeeping helpers for each board: notice missing packets, and convert the
-  board's clock into real-world time on the laptop.
-HOW: GapTracker watches packet numbers (seq). If 5 arrives after 2, then 3 and 4 are missing.
-  ClockMap compares "board time when sampled" with "laptop time when received" and keeps the
-  smallest difference, which is the best estimate of how the two clocks line up.
-ROLE IN THESIS: GapTracker makes every loss identifiable and triggers re-requests (H2).
-  ClockMap gives every sample a real timestamp so latency can be measured (H1).
-BEFORE -> AFTER: Fed by gateway.py:Node.on_bytes for every packet. Missing seqs become RESEND
-  commands to the firmware; mapped times go into the MQTT message as t_inject_host and then
-  into InfluxDB. No network or file access here, so tests/test_tracking.py tests it directly.
+PURPOSE: 2 helpers per board: spot missing packets; turn the board's clock into real time.
+INPUT: GapTracker.observe(seq): packet number of each arrival.
+  ClockMap.update(ticks, t_host): board clock ticks (32768/s, 32-bit, wraps) + laptop time at arrival.
+OUTPUT: observe() -> list of newly missing seq numbers (e.g. 5 arrives after 2 -> [3, 4]).
+  ClockMap.to_host(ticks) -> laptop epoch seconds.
+HOW: GapTracker watches seq. ClockMap compares "board time at sampling" with "laptop time at
+  receipt" and keeps the smallest difference = best estimate of how the clocks line up.
+ROLE IN THESIS: GapTracker makes every loss identifiable, triggers re-requests (H2).
+  ClockMap gives every sample a real timestamp for latency (H1).
+BEFORE -> AFTER: Fed by gateway/gateway.py:Node.on_bytes per packet. Missing seqs -> RESEND commands
+  to the firmware; mapped times -> MQTT field t_inject_host -> InfluxDB. No network/file access, so
+  tests/test_tracking.py tests it directly.
 """
 
 from gateway.packet import TICK_HZ
