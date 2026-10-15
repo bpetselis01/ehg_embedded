@@ -1,19 +1,23 @@
-"""H2 (delivery) and H4 (bit-exact fidelity) - reconcile what reached InfluxDB against the source file.
+"""H2 (delivery) and H4 (bit-exact fidelity): compare what reached InfluxDB with the source file.
 
 Usage: uv run python eval/integrity.py --node EHG-0001 --since 2h [--db tpehgdb]
 
-PURPOSE: Answers H2 (did every sample arrive? target > 99 %) and the bit-exact half of H4
-  (is every stored number identical to the original recording?).
-HOW: Pulls the stored samples for a node, opens the original converted file named by the
-  record_id they carry, lines the two up by frame_idx, then counts: frames delivered, frames
-  whose numbers differ, and runs of missing frames.
-ROLE IN THESIS: The H2/H4 result, end to end (dataset -> board -> radio -> gateway -> DB).
-BEFORE -> AFTER: Before: ehg_raw rows (ingest.py) via eval/backend_client.py, and
-  data/converted/ from tools/convert.py. After: printed results. Tested by tests/test_integrity.py.
+PURPOSE: H2: did every sample arrive (target > 99 %)? H4 bit-exact half: is every stored number identical to the original?
+INPUT: stored samples + record_id from eval/backend_client.py:query_frames;
+  data/converted/<db>/manifest.json and the .npz it names (tools/convert.py; docs/data/tpehgdb.md).
+OUTPUT (printed):
+    node=EHG-0001 record_id=0 frames 0..35999
+    delivery 35990/36000 = 99.9722 %
+    bit-exact mismatches: 0
+    missing ranges (first 20): [(120, 129)]
+HOW: Look up the source file by record_id. Line stored and source frames up by frame_idx
+  (source loops: row = frame_idx % length). Count delivered, differing, and runs of missing frames.
+ROLE IN THESIS: H2/H4 result, end to end (dataset -> board -> radio -> gateway -> DB).
+BEFORE -> AFTER: Before: ehg_raw rows (backend/ingest/ingest.py) and data/converted/ (tools/convert.py).
+  After: printed results. Tested by tests/test_integrity.py.
 """
 
 import argparse
-import json
 from pathlib import Path
 
 import numpy as np
@@ -41,15 +45,15 @@ def reconcile(received: dict[int, list[int]], source: np.ndarray, expected_frame
 
 def main():
     from backend_client import query_frames  # local import: keeps reconcile() testable without Influx
+    from tools.convert import source_file
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--node", required=True)
     ap.add_argument("--since", default="1h")
     ap.add_argument("--db", default="tpehgdb")
     a = ap.parse_args()
-    record_id, frames = query_frames(a.node, a.since)
-    manifest = json.loads(Path(f"data/converted/{a.db}/manifest.json").read_text())
-    src = np.load(f"data/converted/{a.db}/{manifest[record_id]['file']}")["samples"]
+    record_id, frames, _ = query_frames(a.node, a.since)
+    src = np.load(source_file(Path(f"data/converted/{a.db}"), record_id))["samples"]
     # Frames are counted from the first one seen in the window: a window can start mid-stream.
     # Re-number from 0 and rotate the source so row 0 lines up with that first frame.
     lo, hi = min(frames), max(frames)
@@ -64,5 +68,5 @@ def main():
 
 if __name__ == "__main__":
     import sys
-    sys.path.insert(0, str(Path(__file__).parent))
+    sys.path[:0] = [str(Path(__file__).parent), str(Path(__file__).parent.parent)]  # eval/ + repo root
     main()
