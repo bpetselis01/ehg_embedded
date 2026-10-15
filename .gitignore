@@ -3,7 +3,8 @@ __pycache__/
 *.pyc
 .venv/
 data/raw/
-data/converted/
+# converted samples are reproducible; manifest.json is tracked because record_id must stay stable
+data/converted/**/*.npz
 build*/
 papers/*.pdf
 .env

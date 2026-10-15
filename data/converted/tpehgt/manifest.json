@@ -1,0 +1,250 @@
+[
+ {
+  "record_id": 0,
+  "record": "tpehgt_n001",
+  "n_frames": 35300,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_n001.npz"
+ },
+ {
+  "record_id": 1,
+  "record": "tpehgt_n002",
+  "n_frames": 35280,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_n002.npz"
+ },
+ {
+  "record_id": 2,
+  "record": "tpehgt_n003",
+  "n_frames": 35300,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_n003.npz"
+ },
+ {
+  "record_id": 3,
+  "record": "tpehgt_n004",
+  "n_frames": 35460,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_n004.npz"
+ },
+ {
+  "record_id": 4,
+  "record": "tpehgt_n005",
+  "n_frames": 35200,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_n005.npz"
+ },
+ {
+  "record_id": 5,
+  "record": "tpehgt_p001",
+  "n_frames": 36000,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_p001.npz"
+ },
+ {
+  "record_id": 6,
+  "record": "tpehgt_p002",
+  "n_frames": 35999,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_p002.npz"
+ },
+ {
+  "record_id": 7,
+  "record": "tpehgt_p003",
+  "n_frames": 36000,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_p003.npz"
+ },
+ {
+  "record_id": 8,
+  "record": "tpehgt_p004",
+  "n_frames": 36000,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_p004.npz"
+ },
+ {
+  "record_id": 9,
+  "record": "tpehgt_p005",
+  "n_frames": 36000,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_p005.npz"
+ },
+ {
+  "record_id": 10,
+  "record": "tpehgt_p006",
+  "n_frames": 36000,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_p006.npz"
+ },
+ {
+  "record_id": 11,
+  "record": "tpehgt_p007",
+  "n_frames": 36000,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_p007.npz"
+ },
+ {
+  "record_id": 12,
+  "record": "tpehgt_p008",
+  "n_frames": 36000,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_p008.npz"
+ },
+ {
+  "record_id": 13,
+  "record": "tpehgt_p009",
+  "n_frames": 35999,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_p009.npz"
+ },
+ {
+  "record_id": 14,
+  "record": "tpehgt_p010",
+  "n_frames": 36000,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_p010.npz"
+ },
+ {
+  "record_id": 15,
+  "record": "tpehgt_p011",
+  "n_frames": 35999,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_p011.npz"
+ },
+ {
+  "record_id": 16,
+  "record": "tpehgt_p012",
+  "n_frames": 36000,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_p012.npz"
+ },
+ {
+  "record_id": 17,
+  "record": "tpehgt_p013",
+  "n_frames": 35999,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_p013.npz"
+ },
+ {
+  "record_id": 18,
+  "record": "tpehgt_t001",
+  "n_frames": 36000,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_t001.npz"
+ },
+ {
+  "record_id": 19,
+  "record": "tpehgt_t002",
+  "n_frames": 36000,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_t002.npz"
+ },
+ {
+  "record_id": 20,
+  "record": "tpehgt_t003",
+  "n_frames": 35999,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_t003.npz"
+ },
+ {
+  "record_id": 21,
+  "record": "tpehgt_t004",
+  "n_frames": 35999,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_t004.npz"
+ },
+ {
+  "record_id": 22,
+  "record": "tpehgt_t005",
+  "n_frames": 35999,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_t005.npz"
+ },
+ {
+  "record_id": 23,
+  "record": "tpehgt_t006",
+  "n_frames": 36000,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_t006.npz"
+ },
+ {
+  "record_id": 24,
+  "record": "tpehgt_t007",
+  "n_frames": 36000,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_t007.npz"
+ },
+ {
+  "record_id": 25,
+  "record": "tpehgt_t008",
+  "n_frames": 35999,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_t008.npz"
+ },
+ {
+  "record_id": 26,
+  "record": "tpehgt_t009",
+  "n_frames": 35999,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_t009.npz"
+ },
+ {
+  "record_id": 27,
+  "record": "tpehgt_t010",
+  "n_frames": 35999,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_t010.npz"
+ },
+ {
+  "record_id": 28,
+  "record": "tpehgt_t011",
+  "n_frames": 35999,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_t011.npz"
+ },
+ {
+  "record_id": 29,
+  "record": "tpehgt_t012",
+  "n_frames": 36000,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_t012.npz"
+ },
+ {
+  "record_id": 30,
+  "record": "tpehgt_t013",
+  "n_frames": 36000,
+  "n_ch": 4,
+  "fs": 20.0,
+  "file": "tpehgt_t013.npz"
+ }
+]
