@@ -2,12 +2,12 @@
  * ehg_service.h - EHG GATT service (Gantt 1c) + packetiser with seq/timestamps (1d)
  * and a history buffer serving gateway re-requests (H2).
  *
- * PURPOSE: The public "menu" of ehg_service.c, plus the Bluetooth service ID.
- * HOW: Declarations and the ID macro. A UUID is a long unique number naming a Bluetooth
- *   "service" (a group of data slots); ours ends 0001, its data slot 0002, its command slot 0003.
+ * PURPOSE: Public "menu" of src/ehg_service.c + the Bluetooth service ID.
+ * HOW: Declarations + ID macro. UUID = long unique number naming a Bluetooth "service" (a group of
+ *   data slots). Ours ends 0001; data slot 0002 (board -> laptop), command slot 0003 (laptop -> board).
  * ROLE IN THESIS: Gantt 1c/1d.
- * BEFORE -> AFTER: main.c calls these on connect/disconnect and advertises EHG_SVC_UUID_VAL.
- *   gateway/gateway.py has the same IDs as strings.
+ * BEFORE -> AFTER: src/main.c calls these on connect/disconnect and advertises EHG_SVC_UUID_VAL.
+ *   gateway/gateway.py has the same IDs as strings. Slot/command details: docs/interface-spec.md 3.
  */
 #pragma once
 #include <zephyr/bluetooth/conn.h>

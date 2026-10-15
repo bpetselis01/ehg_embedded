@@ -1,24 +1,19 @@
 /*
  * main.c - EHG sensor node for the nRF52840 DK.
  *
- * Advertises as "EHG-XXXX" (XXXX from the chip's device ID, so several DKs get distinct
- * names for H3). On connect: requests 2M PHY and max data length, and logs what the
- * central actually granted (MTU, PHY, DLE, interval) because macOS decides these itself.
- * Streaming starts when the gateway writes START to the control characteristic.
- *
- * Logs on VCOM0 at 115200: link parameters on change, packet stats every 10 s.
- *
- * PURPOSE: Start-up and Bluetooth "front door" of the sensor board. It makes the board
- *   discoverable, accepts a connection from the laptop, and reports link quality.
- * HOW: Builds a unique name from the chip ID, turns Bluetooth on, and advertises (broadcasts
- *   "I'm here, connect to me"). When the laptop connects, it hands the connection to
- *   ehg_service.c and asks for the fastest radio settings. A set of callbacks print what was
- *   actually agreed. The main loop then just prints statistics every 10 s.
- * ROLE IN THESIS: The node side of the BLE link (report Fig. 10). The logged link settings
- *   explain latency (H1) and throughput limits. Distinct names allow several boards (H3).
- * BEFORE -> AFTER: Nothing runs before it (it is the program entry point). It calls into
- *   ehg_service.c (set_conn / log_stats). The gateway (gateway/gateway.py) finds the board by
- *   the "EHG-" name prefix and the service ID advertised here.
+ * PURPOSE: Start-up + Bluetooth "front door". Makes the board discoverable, accepts the laptop's
+ *   connection, reports link quality.
+ * INPUT: chip device ID (for the name); the laptop's connection and the radio settings it grants.
+ * OUTPUT: Bluetooth advertising as "EHG-XXXX" (XXXX from chip ID, so several DKs get distinct names, H3).
+ *   Log on VCOM0, 115200: link parameters on change (MTU, PHY, data length, interval), packet stats every 10 s.
+ * HOW: Builds name from chip ID, turns Bluetooth on, advertises ("I'm here, connect"). On connect:
+ *   hands the connection to src/ehg_service.c, asks for 2M PHY + max data length, and logs what was
+ *   actually granted (macOS decides itself). Main loop prints stats every 10 s.
+ *   Streaming starts when the gateway writes START to the control slot.
+ * ROLE IN THESIS: Node side of the BLE link (report Fig. 10). Logged link settings explain latency
+ *   (H1) and throughput limits.
+ * BEFORE -> AFTER: Program entry point, nothing before it. Calls src/ehg_service.c (set_conn /
+ *   log_stats). gateway/gateway.py finds the board by the "EHG-" prefix and the service ID advertised here.
  */
 #include <stdio.h>
 #include <zephyr/bluetooth/bluetooth.h>

@@ -1,6 +1,8 @@
 <!doctype html>
 <!--
   PURPOSE: The live raw-EHG page: one scrolling trace per channel for the chosen node.
+  INPUT: WebSocket /ws from viewer/server.py, 1 JSON per packet {node_id, fs_hz, frame_idx, flags, samples}.
+  OUTPUT: Canvas drawing, nothing stored.
   HOW: Opens a WebSocket to viewer/server.py, keeps the last 60 s of frames per node, and about
     60 times a second redraws each channel on a canvas, scaled to fit its own min..max.
     Counts gaps when a frame number is skipped. Re-sent packets are skipped here (they arrive

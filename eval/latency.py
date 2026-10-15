@@ -1,26 +1,21 @@
 """H1 - end-to-end latency: sample injected in firmware -> queryable in InfluxDB.
 
-Per-sample latency = t_db_ack - (t_inject_host + i/fs) for frame i of each packet, so
-batching delay is included. Prints median/p95/p99/max overall and per stage; saves a CDF.
-
-Clock alignment: the gateway's live t_inject_host uses a fixed min-offset (no drift), which
-is fine for dashboards. Here we recompute it offline from raw device ticks with a linear fit
-of the lower envelope of (t_gw_rx - t_dev), removing crystal drift (20-50 ppm = 72-180 ms/h;
-Moon, Skelly & Towsley, INFOCOM 1999). Caveat to report with results: absolute values
-exclude the minimum BLE link delay (~one connection interval, 15-30 ms).
-
 Usage: uv run python eval/latency.py --node EHG-0001 --since 1h
 
-PURPOSE: Answers H1: how long from "sample produced on the board" to "sample available in
-  the database"? Target: 95 % of samples under 2 s (stretch: under 1 s).
-HOW: Loads every packet's timing row. Re-converts the board's clock to laptop time more
-  carefully than the live gateway does (it also corrects for the board's clock running slightly
-  fast/slow). Then for each sample: latency = database-confirmed time - sampled time. Prints
-  summary numbers, a per-stage breakdown (radio, MQTT, ingest, database), and saves a
-  cumulative plot (CDF: "what fraction of samples arrived within X ms").
-ROLE IN THESIS: The H1 result. Stage breakdown shows which part of the pipeline costs the most.
-BEFORE -> AFTER: Before: ehg_pkt rows (ingest.py) fetched by eval/backend_client.py. After:
-  numbers on screen + eval/results/latency_cdf_<node>.png for the thesis. Tested by tests/test_latency.py.
+PURPOSE: H1: time from "sample produced on the board" to "sample available in the database".
+  Target: 95 % of samples under 2 s (stretch: under 1 s).
+INPUT: ehg_pkt rows (1 per packet; timestamps t_inject_dev, t_gw_rx, t_mqtt_pub, t_ingest_rx, t_db_ack)
+  from eval/backend_client.py:query_pkts. Fields: docs/interface-spec.md 5.
+OUTPUT: printed median / p95 / p99 / max, overall and per stage (radio, MQTT, ingest, database);
+  eval/results/latency_cdf_<node>.png (CDF = "fraction of samples arrived within X ms").
+HOW: Per sample: latency = t_db_ack - (t_inject_host + i/fs) for frame i of its packet, so batching delay counts.
+  Re-converts board clock to laptop time offline: linear fit of the lower envelope of (t_gw_rx - t_dev)
+  removes crystal drift (20-50 ppm = 72-180 ms/h; Moon, Skelly & Towsley, INFOCOM 1999). The live
+  gateway uses a fixed min-offset (no drift), fine for dashboards.
+  Caveat for results: absolute values exclude the minimum BLE link delay (~1 connection interval, 15-30 ms).
+ROLE IN THESIS: The H1 result. Stage breakdown shows which part of the pipeline costs most.
+BEFORE -> AFTER: Before: ehg_pkt rows written by backend/ingest/ingest.py. After: numbers on screen +
+  eval/results/latency_cdf_<node>.png for the thesis. Tested by tests/test_latency.py.
 """
 
 import argparse
