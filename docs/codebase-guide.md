@@ -1,8 +1,9 @@
 # Codebase guide: how the EHG pipeline fits together
 
 This is a plain-language map of the code. Every code file also starts with a short header covering
-**Purpose / How / Role in thesis / Before → After**, and each function has a one-line note. Read this guide
-first for the big picture, then open any file.
+**Purpose / Input / Output / How / Role in thesis / Before → After**, and each function has a one-line note. Read this guide
+first for the big picture, then open any file. What is inside the data folders (`.hea`, `.dat`, `.npz`)
+is in [docs/data/](data/): `tpehgdb.md`, `tpehgt.md`, `ehgdb.md`, `icehg.md`.
 
 ## The one-sentence version
 
@@ -12,28 +13,43 @@ so we can measure **how fast** it arrived (H1), **whether** it arrived (H2), and
 
 ## The journey of one sample
 
-```
- PhysioNet files ──▶ tools/convert.py ──▶ data/converted/*.npz ──▶ tools/make_replay.py ──▶ replay_data.h
-                                                │                                              │ (compiled in)
-                                                │ (answer key)                                 ▼
-                                                │                         ┌─────── nRF52840 board (firmware/) ───────┐
-                                                │                         │ replay.c  ─ring buffer─▶ ehg_service.c   │
-                                                │                         │ (fake sensor)          (packets + resend)│
-                                                │                         └───────────────┬──────────────────────────┘
-                                                │                                         │ Bluetooth (BLE)
-                                                │                                         ▼   ▲ RESEND requests
-                                                │                         gateway/gateway.py (+ packet.py, tracking.py)
-                                                │                                         │ MQTT  topic ehg/<node>/pkt
-                                                │                                         ▼
-                                                │                         Mosquitto broker (backend/)
-                                                │                            │                    │
-                                                │                            ▼                    ▼
-                                                │                 backend/ingest/ingest.py   viewer/server.py ─▶ viewer/index.html
-                                                │                            │                 (live traces)
-                                                │                            ▼
-                                                │                        InfluxDB ──▶ Grafana dashboard
-                                                │                            │
-                                                └──────────────────────▶ eval/ (latency.py = H1, integrity.py = H2/H4)
+```mermaid
+flowchart TD
+    subgraph PREP["1. Prepare data (laptop, offline)"]
+        A["PhysioNet files"] -->|tools/convert.py| B["data/converted/*.npz<br/>+ manifest.json"]
+        B -->|tools/make_replay.py| C["replay_data.h"]
+    end
+
+    subgraph BOARD["2. nRF52840 board (firmware/)"]
+        D["replay.c<br/>fake sensor"] -->|ring buffer| E["ehg_service.c<br/>packets + resend history"]
+    end
+
+    subgraph LAPTOP["3. Gateway (laptop)"]
+        F["gateway.py<br/>+ packet.py, tracking.py"]
+    end
+
+    subgraph BACKEND["4. Backend (Docker)"]
+        G["Mosquitto broker"]
+        H["ingest.py"]
+        I[("InfluxDB")]
+        J["Grafana dashboard"]
+        K["viewer/server.py<br/>live traces"]
+    end
+
+    subgraph EVAL["5. Measure"]
+        L["eval/latency.py (H1)<br/>eval/integrity.py (H2, H4)"]
+    end
+
+    C -->|compiled in| D
+    E -->|"Bluetooth (BLE)"| F
+    F -.->|RESEND requests| E
+    F -->|"MQTT ehg/&lt;node&gt;/pkt"| G
+    G --> H
+    G --> K
+    H --> I
+    I --> J
+    I --> L
+    B -->|answer key| L
 ```
 
 Step by step:
@@ -55,6 +71,7 @@ Step by step:
 7. **Look at it**: the Grafana dashboard (overview, latency, packet rate) and `viewer/` (live raw waves).
 8. **Measure**: `eval/latency.py` (H1) and `eval/integrity.py` (H2 and bit-exact H4). Both read the database
    through `eval/backend_client.py` and compare against the files from step 1.
+9. **Hand off** (`tools/fhir_export.py`): a stored window as an HL7 FHIR R5 Bundle (raw counts + mV scaling) for clinical systems.
 
 ## Where each hypothesis lives
 
