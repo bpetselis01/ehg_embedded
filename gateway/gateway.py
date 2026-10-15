@@ -5,24 +5,25 @@
   uv run python -m gateway.gateway --no-mqtt       # print instead of publishing
   uv run python -m gateway.gateway --simulate 3    # 3 software nodes, no BLE (backend tests, H3 load)
 
-Every notification is timestamped on arrival and logged to gateway/logs/<node>.csv
-(seq, frame_idx, flags, t_gw_rx, bytes) so loss can be attributed to the radio vs the
-host stack (report Section 6.8/6.10).
-
-PURPOSE: The laptop-side bridge. It receives packets from the board over Bluetooth and
-  forwards them to the database side over the network (MQTT).
-HOW: Scans for devices named "EHG-*", connects, subscribes to the data slot, and sends START.
-  For every packet: decode it, write an arrival line to a CSV log, update the loss tracker and
-  clock map, ask the board to re-send anything missing, and publish a JSON message on topic
-  ehg/<node>/pkt. MQTT is a "post office": publishers drop messages on a topic, subscribers
-  receive them. QoS 1 means the post office keeps a message until delivery is confirmed.
-  --simulate replaces the board with software nodes that send identical packets.
-ROLE IN THESIS: The gateway box in report Fig. 10 (Gantt Phase 2). It adds the arrival
-  timestamp t_gw_rx and t_mqtt_pub (H1 stage timing), drives loss recovery (H2), and handles
-  several nodes at once (H3).
-BEFORE -> AFTER: Before: firmware (ehg_service.c) or the simulator. Uses gateway/packet.py to
-  decode and gateway/tracking.py to track. After: the Mosquitto broker (backend/), whose
-  subscribers are backend/ingest/ingest.py (stores to InfluxDB) and viewer/server.py (live plot).
+PURPOSE: Laptop-side bridge. Packets from the board (Bluetooth) -> database side (MQTT).
+INPUT: 1 BLE notification per packet = bytes in the wire format (header + int16 samples;
+  docs/interface-spec.md 3, code gateway/packet.py). --simulate builds the same bytes from
+  data/converted/tpehgdb/tpehg1007.npz (--sim-record).
+OUTPUT:
+  MQTT topic ehg/<node>/pkt, QoS 1, 1 JSON per packet (docs/interface-spec.md 4):
+    {node_id, seq, frame_idx, t_inject, t_inject_host, n_ch, fs_hz, record_id, flags,
+     samples [[ch1, ch2, ch3], ...], t_gw_rx, t_mqtt_pub}
+  gateway/logs/<node>.csv, 1 line per packet: seq, frame_idx, flags, t_gw_rx, bytes
+    (splits loss into radio vs host stack, report 6.8/6.10)
+HOW: Scan for "EHG-*", connect, subscribe to the data slot, send START. Per packet: decode, write
+  CSV line, update loss tracker + clock map, ask board to re-send gaps, publish JSON.
+  MQTT = post office: publishers drop messages on a topic, subscribers receive.
+  QoS 1 = post office keeps a message until delivery confirmed.
+ROLE IN THESIS: Gateway box in report Fig. 10 (Gantt Phase 2). Adds t_gw_rx and t_mqtt_pub (H1 stage
+  timing), drives loss recovery (H2), handles several nodes (H3).
+BEFORE -> AFTER: Before: firmware/ehg_node/src/ehg_service.c (or the simulator). Decodes with
+  gateway/packet.py, tracks with gateway/tracking.py. After: Mosquitto broker (backend/), read by
+  backend/ingest/ingest.py (stores to InfluxDB) and viewer/server.py (live plot).
 """
 
 import argparse
@@ -36,7 +37,7 @@ from pathlib import Path
 
 import numpy as np
 
-from gateway.packet import FLAG_RETRANS, TICK_HZ, Packet, pack, parse
+from gateway.packet import FLAG_24BIT, FLAG_RETRANS, TICK_HZ, Packet, pack, parse
 from gateway.tracking import ClockMap, GapTracker
 
 # Must match firmware/ehg_node/src/ehg_service.c
@@ -192,9 +193,10 @@ async def sim_node(i: int, args, publish):
         t_frame0 = t0 + frame0 / fs
         await asyncio.sleep(max(0.0, t_frame0 + (nf - 1) / fs - time.monotonic()))  # last frame injected
         samples = [src[(frame0 + k) % len(src)].tolist() for k in range(nf)]
-        p = Packet(1, n_ch, int(fs), seq, frame0, int(t_frame0 * TICK_HZ) & 0xFFFFFFFF, nf, 0, 0, samples)
+        flags = FLAG_24BIT if src.dtype == np.int32 else 0  # convert.py --bits 24 records
+        p = Packet(1, n_ch, int(fs), seq, frame0, int(t_frame0 * TICK_HZ) & 0xFFFFFFFF, nf, flags, 0, samples)
         b = pack(p)
-        history[seq] = pack(Packet(**{**p.__dict__, "flags": FLAG_RETRANS}))
+        history[seq] = pack(Packet(**{**p.__dict__, "flags": flags | FLAG_RETRANS}))
         history.pop(seq - 1024, None)
         if random.random() >= args.sim_loss:
             node.on_bytes(b, time.time())
