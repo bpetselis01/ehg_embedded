@@ -7,20 +7,20 @@ public EHG record ─▶ nRF52840 DK (Zephyr, digital injection) ─BLE GATT not
                                                                                                     └─────▶ WebSocket raw viewer
 ```
 
-Plain-language code walkthrough: `docs/codebase-guide.md`. Design: `docs/design/codebase-design.md`. Wire format: `docs/interface-spec.md`. Progress and open items: `docs/progress.md`.
+Plain-language code walkthrough: [`docs/codebase-guide.md`](docs/codebase-guide.md). Design: [`docs/design/codebase-design.md`](docs/design/codebase-design.md). Wire format: [`docs/interface-spec.md`](docs/interface-spec.md). Progress and open items: [`docs/progress.md`](docs/progress.md).
 
 ## Layout
 
 | Path | What |
 |---|---|
-| `tools/` | `convert.py` (WFDB → int16 `.npz`), `make_replay.py` (`.npz` → firmware replay header) |
-| `firmware/ehg_node/` | Zephyr app for `nrf52840dk/nrf52840`, NCS v3.4.1. `firmware/build.sh` builds and flashes it |
-| `gateway/` | Bleak central → MQTT; `--simulate N` software nodes use the same wire format |
-| `backend/` | docker compose: Mosquitto, InfluxDB 2.7, ingest, Grafana (provisioned dashboard) |
-| `viewer/` | WebSocket raw multichannel viewer |
-| `eval/` | `latency.py` (H1), `integrity.py` (H2 + H4 bit-exact) |
-| `papers/` | `INDEX.md` (tracked) + open-access PDFs (not tracked) |
-| `docs/research/` | nRF / BLE / macOS environment notes with sources |
+| [`tools/`](tools) | [`convert.py`](tools/convert.py) (WFDB → int16 `.npz`), [`make_replay.py`](tools/make_replay.py) (`.npz` → firmware replay header) |
+| [`firmware/ehg_node/`](firmware/ehg_node) | Zephyr app for `nrf52840dk/nrf52840`, NCS v3.4.1. [`firmware/build.sh`](firmware/build.sh) builds and flashes it |
+| [`gateway/`](gateway) | Bleak central → MQTT; `--simulate N` software nodes use the same wire format |
+| [`backend/`](backend) | docker compose: Mosquitto, InfluxDB 2.7, ingest, Grafana (provisioned dashboard) |
+| [`viewer/`](viewer) | WebSocket raw multichannel viewer |
+| [`eval/`](eval) | [`latency.py`](eval/latency.py) (H1), [`integrity.py`](eval/integrity.py) (H2 + H4 bit-exact) |
+| [`papers/`](papers) | [`INDEX.md`](papers/INDEX.md) (tracked) + open-access PDFs (not tracked) |
+| [`docs/research/`](docs/research) | nRF / BLE / macOS environment notes with sources |
 
 ## Quickstart
 

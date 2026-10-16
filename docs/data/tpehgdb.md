@@ -1,7 +1,7 @@
 # tpehgdb: what's in each folder
 
 PhysioNet Term-Preterm EHG DB v1.0.1. 300 recordings, 1 per pregnancy, ~30 min, 3 channels, 20 Hz.
-262 term, 38 preterm (<37 wk). Main replay source. Download = README step 0. Converted by `tools/convert.py`.
+262 term, 38 preterm (<37 wk). Main replay source. Download = README step 0. Converted by [`tools/convert.py`](../../tools/convert.py).
 EHG = electrical signal of the uterus, measured by electrodes on the belly.
 
 ## data/raw/tpehgdb/ (downloaded, untouched)

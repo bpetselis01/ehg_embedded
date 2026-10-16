@@ -44,5 +44,5 @@ Same layout as tpehgdb (see [tpehgdb.md](tpehgdb.md) for the `.npz` array table)
 | `<record>.npz` x126 | 3 raw channels (`S1` `S2` `S3`) |
 | `manifest.json` | 126 records, `record_id` 0..125 in name order. `record_id` is tied to the name: re-running convert.py keeps it; new records get the next free id. Tracked in git |
 
-`icehgdsmat/` is skipped by `convert.py` (same 126 recordings as MATLAB copies; checked identical).
+`icehgdsmat/` is skipped by [`convert.py`](../../tools/convert.py) (same 126 recordings as MATLAB copies; checked identical).
 Before 2026-10-16 it was converted too, giving 252 records with each recording twice.
