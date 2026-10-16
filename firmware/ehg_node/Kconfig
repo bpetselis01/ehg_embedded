@@ -1,8 +1,7 @@
-# PURPOSE: Declares the firmware's own tunable settings (with defaults), alongside Zephyr's.
-# HOW: Each "config" becomes a CONFIG_EHG_* constant in the C code; override in prj.conf.
-# ROLE IN THESIS: These knobs are the experiment variables for latency vs efficiency (H1)
-#   and how much loss can be recovered (H2).
-# BEFORE -> AFTER: Read at build time; used in replay.c (ring size) and ehg_service.c
+# PURPOSE: Our own build settings (with defaults), next to Zephyr's.
+# HOW: Each "config" becomes a CONFIG_EHG_* constant in the C code. Change a value in prj.conf.
+# ROLE IN THESIS: The experiment knobs: latency vs efficiency (H1), how much loss can be recovered (H2).
+# BEFORE -> AFTER: Read at build time. Used in replay.c (queue size) and ehg_service.c
 #   (frames per packet, history size).
 source "Kconfig.zephyr"
 
@@ -12,21 +11,21 @@ config EHG_FRAMES_PER_PACKET
 	int "Frames batched into one BLE notification"
 	default 10
 	help
-	  Batching trades latency for fewer, larger packets (report 6.8, [16]).
-	  At 20 Hz, 10 frames = 0.5 s batching delay. Header 20 B + frames*n_ch*2 must fit MTU-3.
+	  More frames per packet = fewer, bigger packets, but more waiting (report 6.8, [16]).
+	  At 20 Hz, 10 frames = 0.5 s wait. 20-byte header + samples must fit 244 bytes.
 
 config EHG_RING_FRAMES
 	int "Ring buffer capacity between injection and packetiser (frames)"
 	default 256
 	help
-	  How many frames can wait if sending falls behind (256 frames = 12.8 s at 20 Hz).
-	  When full, new frames are counted as ring_overflow (replay.c).
+	  How many frames can wait if sending falls behind (256 = 12.8 s at 20 Hz).
+	  When full, new frames are dropped and counted as ring_overflow (replay.c).
 
 config EHG_HISTORY_PACKETS
 	int "Sent packets kept for gateway re-requests"
 	default 256
 	help
 	  How far back a lost packet can still be re-sent (256 x 10 frames = 128 s at 20 Hz).
-	  Older requests are counted as resend_miss (ehg_service.c).
+	  Older requests can't be served; counted as resend_miss (ehg_service.c).
 
 endmenu
