@@ -3,15 +3,15 @@
 #   firmware/build.sh                 build
 #   firmware/build.sh flash           build + flash the DK
 #   firmware/build.sh pristine flash  clean build + flash
-# NCS sysbuild breaks on paths containing spaces ("2026 Term 3/Thesis B"), so everything
-# is built through the space-free symlink ~/thesisb -> this repo.
+# Nordic's build breaks on folder names with spaces ("2026 Term 3/Thesis B"), so everything
+# is built through a space-free shortcut: ~/thesisb -> this repo.
 #
-# PURPOSE: One command to compile the board's program and copy it onto the board.
-# HOW: Makes the ~/thesisb shortcut if missing, checks the sample data file exists, then runs
-#   Nordic's build tool (west) inside Nordic's toolchain launcher, and optionally flashes.
-# ROLE IN THESIS: Makes firmware builds reproducible from the README.
-# BEFORE -> AFTER: Needs src/replay_data.h from tools/make_replay.py. Produces
-#   firmware/ehg_node/build/ and, with "flash", a programmed nRF52840 DK that main.c runs on.
+# PURPOSE: 1 command to compile the board's program and copy it onto the board.
+# HOW: Makes the ~/thesisb shortcut if missing, checks the recording file exists, runs Nordic's
+#   build tool (west) through Nordic's toolchain launcher, and optionally flashes the board.
+# ROLE IN THESIS: Makes firmware builds repeatable from the README.
+# BEFORE -> AFTER: Needs ehg_node/src/replay_data.h (tools/make_replay.py). Makes ehg_node/build/;
+#   with "flash", programs the nRF52840 DK. SEE: docs/firmware.md
 set -e
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 LINK="$HOME/thesisb"

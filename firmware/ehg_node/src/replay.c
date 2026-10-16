@@ -1,25 +1,25 @@
 /*
- * replay.c - digital sample injection (report 8.2, Sensor-in-the-Loop pattern [60]).
+ * replay.c - the fake sensor: plays a stored recording at its real speed
+ * (report 8.2, Sensor-in-the-Loop pattern [60]).
  *
- * PURPOSE: The fake "sensor". Releases 1 frame (1 sample per channel) at the recording's original
- *   rate, e.g. 20 per second for TPEHG.
- * INPUT: src/replay_data.h = REPLAY_N_CH / N_FRAMES / FS_HZ / RECORD_ID + replay_samples[] (raw int16).
- *   Made by tools/make_replay.py from data/converted/<db>/<record>.npz.
- * OUTPUT: `struct ehg_frame` {tick, frame_idx, s[ch]} into the queue replay_ring (src/ehg_packet.h).
- *   tick = board clock (32768/s) when the frame was released = t_inject.
- * HOW: Thread waits for START, then loops: work out when next frame is due, sleep until then, copy
- *   that row of the recording, stamp the clock tick, push to replay_ring. Queue full -> counted as
- *   overflow, never silently lost. Record loops: a 30 min TPEHG record feeds a 6 h soak (H2).
- *   Frame n is due at t0 + n * TICKS_PER_SEC / fs on the absolute tick timeline. A k_timer period
- *   would round to whole ticks (50 ms = 1638.4 ticks), giving 20.005 Hz instead of 20 Hz.
- *   Remaining per-frame lateness is measured (replay_max_late_ticks) for H1.
- * ROLE IN THESIS: Gantt 1a/1b. Start of every latency measurement (H1: the tick stamped here is
- *   t_inject) and the known source for loss + bit-exact checks (H2/H4).
- * BEFORE -> AFTER: Before: src/replay_data.h (tools/make_replay.py). After: replay_ring -> read by
- *   tx_thread in src/ehg_service.c.
- */
-/* Must come before any include: replay.h -> ehg_packet.h already pulls in replay_data.h,
- * and only this file may get the sample array. */
+ * PURPOSE: Releases 1 frame (1 sample per channel) at the recording's own rate, e.g. 20 per second
+ *   for TPEHG, as if a real sensor were measuring.
+ * INPUT: replay_data.h = the recording baked into the firmware (N_CH, N_FRAMES, FS_HZ, RECORD_ID,
+ *   replay_samples[]). Made by tools/make_replay.py from data/converted/<db>/<record>.npz.
+ * OUTPUT: frames {tick, frame_idx, samples} into the queue replay_ring (struct in ehg_packet.h).
+ *   tick = board clock (32768 ticks/s) when the frame was released = t_inject (start of H1 timing).
+ * HOW: A thread waits for START, then loops: work out when the next frame is due -> sleep until
+ *   then -> copy that row of the recording -> stamp the clock -> put it in the queue.
+ *   Queue full -> counted as overflow, never silently lost.
+ *   The recording loops, so a 30 min record can feed a 6 h test (H2).
+ *   Due time = start + n / fs, worked out fresh for every frame. A repeating 50 ms timer would
+ *   round to whole ticks (1638.4 -> 1638) and drift to 20.005 Hz; this way the rate stays exact.
+ * ROLE IN THESIS: Gantt 1a/1b. Start of every latency measurement (H1) and the known source for
+ *   loss + bit-exact checks (H2/H4).
+ * BEFORE -> AFTER: Before: replay_data.h (tools/make_replay.py). After: replay_ring -> ehg_service.c.
+  */
+/* Must come before the includes: only this file gets the big sample array from replay_data.h
+ * (replay.h -> ehg_packet.h already includes replay_data.h). */
 #define REPLAY_DEFINE_SAMPLES
 #include "replay.h"
 
@@ -30,11 +30,11 @@ LOG_MODULE_REGISTER(replay, LOG_LEVEL_INF);
 
 BUILD_ASSERT(REPLAY_N_CH <= EHG_MAX_CH, "replay source has more channels than EHG_MAX_CH");
 
-/* The ring buffer: a fixed-size queue of frames between this thread and the packetiser. */
+/* The queue between this thread and ehg_service.c. Fixed size: CONFIG_EHG_RING_FRAMES frames. */
 K_MSGQ_DEFINE(replay_ring, sizeof(struct ehg_frame), CONFIG_EHG_RING_FRAMES, 4);
 
-/* State shared between replay_start/stop (called from Bluetooth) and the replay thread.
- * The spinlock stops both sides from reading/writing it at the same moment. */
+/* State shared by replay_start/stop (called on laptop commands) and the replay thread.
+ * The lock stops both from changing it at the same moment. */
 static K_SEM_DEFINE(start_sem, 0, 1);
 static struct k_spinlock lock;
 static bool running;
@@ -43,7 +43,7 @@ static uint32_t n;
 static uint32_t overflows;
 static uint32_t max_late;
 
-/* Reset counters, note the start time t0, empty the queue, and wake the replay thread. */
+/* Reset counters, note the start time t0, empty the queue, wake the replay thread. */
 void replay_start(void)
 {
 	k_spinlock_key_t key = k_spin_lock(&lock);
@@ -60,7 +60,7 @@ void replay_start(void)
 		REPLAY_FS_HZ, REPLAY_N_FRAMES);
 }
 
-/* Ask the thread to stop after its current frame. */
+/* Ask the thread to stop after the current frame. */
 void replay_stop(void)
 {
 	k_spinlock_key_t key = k_spin_lock(&lock);
@@ -69,7 +69,7 @@ void replay_stop(void)
 	k_spin_unlock(&lock, key);
 }
 
-/* The sensor loop. Outer loop: wait for START. Inner loop: one iteration per frame. */
+/* The sensor loop. Outer loop: wait for START. Inner loop: 1 pass per frame. */
 static void replay_thread(void *a, void *b, void *c)
 {
 	struct ehg_frame f;
@@ -86,13 +86,13 @@ static void replay_thread(void *a, void *b, void *c)
 			if (!run) {
 				break;
 			}
-			/* frame idx is due at t0 + idx/fs seconds (in ticks); sleep until that exact moment */
+			/* frame idx is due at t0 + idx/fs seconds (in ticks): sleep until exactly then */
 			k_sleep(K_TIMEOUT_ABS_TICKS(due));
 
 			int64_t now = k_uptime_ticks();
 
 			key = k_spin_lock(&lock);
-			if (!running || n != idx) { /* stopped or restarted while sleeping */
+			if (!running || n != idx) { /* stopped or restarted while asleep */
 				k_spin_unlock(&lock, key);
 				continue;
 			}
@@ -100,7 +100,7 @@ static void replay_thread(void *a, void *b, void *c)
 			max_late = MAX(max_late, (uint32_t)(now - due));
 			k_spin_unlock(&lock, key);
 
-			/* build the frame: timestamp, counter, and row (idx mod record length) so it loops */
+			/* build the frame: clock tick, frame number, recording row (wraps round = loops) */
 			f.tick = (uint32_t)now;
 			f.frame_idx = idx;
 			memcpy(f.s, &replay_samples[(idx % REPLAY_N_FRAMES) * REPLAY_N_CH],
@@ -112,10 +112,10 @@ static void replay_thread(void *a, void *b, void *c)
 	}
 }
 
-/* Higher priority (lower number) than the packetiser so injection timing is not disturbed. */
+/* Priority 2 beats ehg_service.c's 5 (lower = more urgent), so sending never delays the timing. */
 K_THREAD_DEFINE(replay_tid, 1024, replay_thread, NULL, NULL, NULL, 2, 0, 0);
 
-/* Simple getters used by ehg_service.c (header fields and the stats log). */
+/* Getters for ehg_service.c (packet header fields + stats log). */
 uint32_t replay_overflows(void) { return overflows; }
 uint32_t replay_max_late_ticks(void) { return max_late; }
 uint8_t replay_n_ch(void) { return REPLAY_N_CH; }

@@ -1,23 +1,24 @@
 /*
- * ehg_service.c - GATT service, packetiser, history + resend.
+ * ehg_service.c - packs frames into numbered packets, sends them over Bluetooth, re-sends lost ones.
  *
- * PURPOSE: Frames -> numbered radio packets -> laptop. Re-sends packets the laptop reports missing.
- * INPUT: frames from replay_ring (src/replay.c). Commands written to the control slot by
- *   gateway/gateway.py: 01 START, 02 STOP, 03 RESEND <u32 seq> <u16 count> (docs/interface-spec.md 3).
- * OUTPUT: Bluetooth notifications on the data slot, 1 packet each (layout: src/ehg_packet.h).
- *   Retransmissions carry flags bit0 = 1.
- * HOW: (1) Declares a service with 2 slots: "data" (board pushes = notify) and "control" (laptop writes).
- *   (2) tx_thread collects CONFIG_EHG_FRAMES_PER_PACKET frames, adds the 20-byte header + next seq,
- *   keeps a copy in history[seq % N], sends. (3) RESEND: copies looked up in history, sent again
- *   with the retransmission flag.
- *   Notify from this thread blocks when BLE TX buffers run out (zephyr/subsys/bluetooth/host/att.c),
- *   so a slow link backs up into replay_ring and is counted there as overflow, not dropped silently.
- * ROLE IN THESIS: Gantt 1c (GATT service), 1d (seq numbers, timestamps). Batching trades latency for
- *   efficiency (H1); numbering + history/resend = loss recovery (H2). Counters from
- *   ehg_service_log_stats() show where any loss happened.
- * BEFORE -> AFTER: Frames from src/replay.c via replay_ring. Connection from src/main.c. Packets go
- *   over the air to gateway/gateway.py (decodes with gateway/packet.py, sends RESEND back).
- */
+ * PURPOSE: Frames -> numbered radio packets -> laptop. Re-sends any packet the laptop says it missed.
+ * INPUT: frames from the queue replay_ring (replay.c).
+ *   Commands the laptop (gateway/gateway.py) writes: 01 START, 02 STOP, 03 RESEND <seq> <count>.
+ * OUTPUT: 1 packet per Bluetooth message (layout: ehg_packet.h). Re-sent copies have flags bit0 = 1.
+ * HOW:
+ *   1. Sets up a Bluetooth "service" with 2 slots: data (board -> laptop, pushed = "notify")
+ *      and control (laptop -> board commands).
+ *   2. tx_thread collects 10 frames (CONFIG_EHG_FRAMES_PER_PACKET), adds the 20-byte header and the
+ *      next packet number (seq), keeps a copy in history, sends.
+ *   3. RESEND: finds the copy in history, sends it again with the "re-sent" flag.
+ *   If the radio is busy, sending waits instead of dropping. The wait backs up into replay_ring,
+ *   where any overflow is counted. So nothing is lost silently.
+ * ROLE IN THESIS: Gantt 1c/1d. Batching = latency vs efficiency trade-off (H1).
+ *   Numbering + history + resend = loss recovery (H2). Counters in the log show where loss happened.
+ * BEFORE -> AFTER: Frames from replay.c. Connection from main.c. Packets -> gateway/gateway.py
+ *   (decoded by gateway/packet.py), which sends RESEND back.
+ * SEE: docs/firmware.md (overview + glossary), docs/interface-spec.md 3 (byte layout, commands).
+  */
 #include "ehg_service.h"
 
 #include <string.h>
@@ -28,7 +29,7 @@
 
 #include "ehg_packet.h"
 #include "replay.h"
-#include "replay_data.h" /* constants only (REPLAY_DEFINE_SAMPLES not set) */
+#include "replay_data.h" /* just the constants (N_CH, FS_HZ, ...), not the sample array */
 
 LOG_MODULE_REGISTER(ehg_svc, LOG_LEVEL_INF);
 
@@ -41,15 +42,15 @@ static struct bt_uuid_128 svc_uuid = BT_UUID_INIT_128(EHG_UUID_BASE(1));
 static struct bt_uuid_128 data_uuid = BT_UUID_INIT_128(EHG_UUID_BASE(2));
 static struct bt_uuid_128 ctrl_uuid = BT_UUID_INIT_128(EHG_UUID_BASE(3));
 
-/* A pending resend request from the gateway: "send packets seq .. seq+count-1 again". */
+/* A resend request from the laptop: "send packets seq .. seq+count-1 again". */
 struct resend_req {
 	uint32_t seq;
 	uint16_t count;
 };
 K_MSGQ_DEFINE(resend_q, sizeof(struct resend_req), 16, 4);
 
-/* History: copies of the last CONFIG_EHG_HISTORY_PACKETS sent packets, slot = seq mod size.
- * Older packets are overwritten, so very late resend requests can no longer be served. */
+/* History: copies of the last 256 sent packets (CONFIG_EHG_HISTORY_PACKETS), slot = seq mod 256.
+ * Older ones get overwritten, so a very late resend request can't be served (counted as resend_miss). */
 static struct hist_entry {
 	uint32_t seq;
 	bool valid;
@@ -60,8 +61,8 @@ static struct bt_conn *conn;
 static K_MUTEX_DEFINE(conn_lock);
 static uint32_t n_sent, n_resent, n_resend_miss, n_notify_err;
 
-/* Runs when the gateway writes to the control slot. Decodes the 1-byte command; RESEND is
- * only queued here (sending happens in tx_thread so this Bluetooth callback stays quick). */
+/* Runs when the laptop writes a command. Reads the 1-byte command code. RESEND is only queued
+ * here; tx_thread does the sending, so this function returns quickly. */
 static ssize_t ctrl_write(struct bt_conn *c, const struct bt_gatt_attr *attr, const void *buf,
 			  uint16_t len, uint16_t offset, uint8_t flags)
 {
@@ -94,7 +95,7 @@ static ssize_t ctrl_write(struct bt_conn *c, const struct bt_gatt_attr *attr, co
 	return len;
 }
 
-/* The service table: data slot (notify) + its on/off switch (CCC) + control slot (write). */
+/* The service: data slot (board pushes) + its on/off switch the laptop sets (CCC) + command slot. */
 BT_GATT_SERVICE_DEFINE(ehg_svc,
 	BT_GATT_PRIMARY_SERVICE(&svc_uuid.uuid),
 	BT_GATT_CHARACTERISTIC(&data_uuid.uuid, BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_NONE, NULL, NULL, NULL),
@@ -105,7 +106,7 @@ BT_GATT_SERVICE_DEFINE(ehg_svc,
 
 #define DATA_ATTR (&ehg_svc.attrs[2])
 
-/* Remember (or forget, when c is NULL) the current connection. Losing it stops replay. */
+/* Remember the connection (or forget it when c is NULL). Losing it stops the replay. */
 void ehg_service_set_conn(struct bt_conn *c)
 {
 	k_mutex_lock(&conn_lock, K_FOREVER);
@@ -119,7 +120,7 @@ void ehg_service_set_conn(struct bt_conn *c)
 	}
 }
 
-/* Push one packet to the laptop, if connected and subscribed. Returns 0 on success. */
+/* Send 1 packet to the laptop, if connected and listening. Returns 0 on success. */
 static int send(const uint8_t *buf, uint16_t len)
 {
 	int err = -ENOTCONN;
@@ -131,12 +132,12 @@ static int send(const uint8_t *buf, uint16_t len)
 	if (!c) {
 		return err;
 	}
-	/* The central may not have finished the MTU exchange yet: wait rather than drop. */
+	/* Right after connecting, the max message size (MTU) may not be agreed yet: wait, don't drop. */
 	for (int i = 0; i < 100 && bt_gatt_get_mtu(c) - 3 < len; i++) {
 		k_sleep(K_MSEC(10));
 	}
 	if (bt_gatt_is_subscribed(c, DATA_ATTR, BT_GATT_CCC_NOTIFY)) {
-		err = bt_gatt_notify(c, DATA_ATTR, buf, len); /* copies buf; blocks for TX buffers */
+		err = bt_gatt_notify(c, DATA_ATTR, buf, len); /* copies buf; waits if the radio is busy */
 	}
 	bt_conn_unref(c);
 	if (err) {
@@ -145,7 +146,7 @@ static int send(const uint8_t *buf, uint16_t len)
 	return err;
 }
 
-/* Handle all queued RESEND requests: re-send each stored copy with the retransmission flag. */
+/* Handle queued RESEND requests: send each stored copy again with the "re-sent" flag. */
 static void serve_resends(void)
 {
 	struct resend_req r;
@@ -156,7 +157,7 @@ static void serve_resends(void)
 			const struct hist_entry *h = &history[s % CONFIG_EHG_HISTORY_PACKETS];
 
 			if (!h->valid || h->seq != s) {
-				n_resend_miss++; /* aged out of history: gateway logs it as lost */
+				n_resend_miss++; /* already overwritten: the gateway logs it as lost */
 				continue;
 			}
 			memcpy(tmp, h->buf, PKT_LEN);
@@ -168,8 +169,8 @@ static void serve_resends(void)
 	}
 }
 
-/* The packetiser. Loops forever: serve resends, take one frame, append it to the packet
- * being built; when the packet holds FRAMES frames, save it to history and send it. */
+/* The packet builder. Loops forever: handle resends -> take 1 frame -> add it to the packet.
+ * When the packet has FRAMES frames: copy it to history, send it, start the next one. */
 static void tx_thread(void *a, void *b, void *c)
 {
 	uint8_t pkt[PKT_LEN];
@@ -184,12 +185,12 @@ static void tx_thread(void *a, void *b, void *c)
 		if (k_msgq_get(&replay_ring, &f, K_MSEC(10)) != 0) {
 			continue;
 		}
-		if (f.frame_idx == 0) { /* frame 0 marks a new stream (START) */
+		if (f.frame_idx == 0) { /* frame 0 = new START: restart numbering */
 			seq = 0;
 			nf = 0;
 			memset(history, 0, sizeof(history));
 		}
-		if (nf == 0) { /* first frame of a new packet: header takes its index and timestamp */
+		if (nf == 0) { /* 1st frame of a new packet: header takes its frame number + clock tick */
 			*hdr = (struct ehg_pkt_hdr){
 				.version = EHG_PKT_VERSION,
 				.n_ch = REPLAY_N_CH,
@@ -229,8 +230,8 @@ static void tx_thread(void *a, void *b, void *c)
 
 K_THREAD_DEFINE(tx_tid, 2048, tx_thread, NULL, NULL, NULL, 5, 0, 0);
 
-/* Print health counters to the serial log: sent, resent, resends that came too late,
- * send errors, frames dropped at the ring buffer, and worst injection lateness. */
+/* Print counters to the serial log: sent, re-sent, resends too late, send errors,
+ * frames dropped at the queue, worst frame lateness. */
 void ehg_service_log_stats(void)
 {
 	LOG_INF("sent=%u resent=%u resend_miss=%u notify_err=%u ring_overflow=%u max_inject_late=%u us",
