@@ -1,232 +1,251 @@
-# nRF52840 DK + NCS v3.4.1 + Bleak: environment and BLE notes
+# nRF52840 board + Bluetooth: setup notes
 
-Researched 2026-09-29. NCS v3.4.1 = Zephyr 4.4.2 (`~/ncs/v3.4.1/zephyr/VERSION`).
-"Verified" = checked against the local tree or run on this Mac. Anything not checked is marked **UNVERIFIED**.
+Research notes from 2026-09-29, used to set up the firmware and the laptop Bluetooth code.
+Tool versions: Nordic SDK (NCS) v3.4.1, which contains Zephyr 4.4.2 (`~/ncs/v3.4.1/zephyr/VERSION`).
+
+- **Verified** = checked in the SDK files on this Mac, or actually run.
+- **UNVERIFIED** = from docs or forums, not checked yet.
+- File references like `host/Kconfig:414` point into `~/ncs/v3.4.1` (the SDK), for anyone who wants the source.
+
+For what each firmware file does, see [firmware.md](../firmware.md). Terms are explained in the glossary at the end.
+
+## In short
+
+| Topic | Takeaway |
+|---|---|
+| Build + flash | works; use [`firmware/build.sh`](../../firmware/build.sh) (it hides the details in §1) |
+| Bluetooth settings | biggest message 247 bytes, 2 Mbit/s radio, talk every 15–30 ms; already in [`prj.conf`](../../firmware/ehg_node/prj.conf) |
+| Sending | send from our own thread: if the radio is busy it waits instead of losing data |
+| Over-the-air loss | Bluetooth re-sends lost radio packets itself; real loss happens in queues on either end |
+| Board clock | 32768 ticks/s, never wraps; drifts up to ~180 ms per hour, so latency code must correct for drift |
+| macOS | the Mac decides speed + timing; the board can only ask. Max number of boards per Mac is unknown (test it) |
 
 ---
 
 ## 1. Build and flash (verified)
 
-- `~/ncs/v3.4.1` is a real west workspace (`.west/config`: manifest `nrf/west.yml`, zephyr base `zephyr`).
-- `nrfutil toolchain-manager launch --ncs-version v3.4.1 -- west --version` gives `West version: v1.5.0`.
-- **Gotcha:** outside the workspace, `west build` fails with `unknown command "build"; do you need to run this inside a workspace?`. To fix it, export `ZEPHYR_BASE`. The launcher passes the variable through.
+**Problem:** Nordic's build tool (`west`) only works inside the SDK folder, and isn't on the normal PATH.
+**Fix:** run it through Nordic's launcher (`nrfutil toolchain-manager launch`) and set `ZEPHYR_BASE` so it can find the SDK from anywhere. Without it you get: `unknown command "build"; do you need to run this inside a workspace?`
+
+`build.sh` does this for you. The raw commands, for reference:
 
 ```sh
-# Option A: one launcher call per command (non-interactive, works from any cwd)
+# Option A: launcher in front of every command (works from any folder)
 export ZEPHYR_BASE="$HOME/ncs/v3.4.1/zephyr"
 NCS="nrfutil toolchain-manager launch --ncs-version v3.4.1 --"
-$NCS west build -b nrf52840dk/nrf52840 -d build path/to/app          # add -p for pristine
-$NCS west flash -d build --dev-id 1050208294                          # runner = nrfutil (default)
-$NCS west flash -d build --dev-id 1050208294 --recover                # if AP-Protect is on (full erase)
+$NCS west build -b nrf52840dk/nrf52840 -d build path/to/app          # add -p for a clean build
+$NCS west flash -d build --dev-id 1050208294                          # copy onto the board
+$NCS west flash -d build --dev-id 1050208294 --recover                # if the board is locked: full erase first
 
-# Option B: load the toolchain env once into a sh/zsh script (verified: west ends up on PATH)
+# Option B: load the tools once into the shell, then use west directly
 eval "$(nrfutil toolchain-manager env --as-script sh --ncs-version v3.4.1)"
 export ZEPHYR_BASE="$HOME/ncs/v3.4.1/zephyr"
 west build -b nrf52840dk/nrf52840 -d build path/to/app && west flash -d build --dev-id 1050208294
 ```
 
-- Proof: I built `nrf/samples/bluetooth/peripheral_lbs` into `/tmp/lbs/build` with exit code 0.
-  - The cold build took 370 s. CMake configure took most of that (about 230 s). Incremental builds are fast (ccache is in the toolchain).
-  - Memory use: FLASH 193,908 B (18.5 %), RAM 30,360 B (11.6 %).
-- The build uses sysbuild. The output hex is at `build/<app_name>/zephyr/zephyr.hex`. No `merged.hex` is produced for a single image.
-- `west flash --dry-run` (verified; this path runs no device commands, see `zephyr/scripts/west_commands/runners/nrfutil.py:_exec`) shows that the flash runs:
-  ```
-  nrfutil --json device program --firmware build/peripheral_lbs/zephyr/zephyr.hex \
-     --options chip_erase_mode=ERASE_RANGES_TOUCHED_BY_FIRMWARE,verify=VERIFY_READ --x-family nrf52 ...
-  nrfutil --json device reset --reset-kind RESET_SYSTEM ...
-  nrfutil --json device ... x-execute-batch ... --serial-number 1050208294
-  ```
-  Runners are listed in `build/peripheral_lbs/zephyr/runners.yaml`: `nrfutil` is the default for flash, `jlink` for debug. `nrfjprog` is listed but not installed, so it is not needed. `--runner jlink` uses `/usr/local/bin/JLinkExe`.
-- `nrfutil` 8.2.1 is at `/opt/homebrew/bin/nrfutil`, with the `device` command at 2.21.0.
-- Standalone recover: `nrfutil device recover --serial-number 1050208294`.
-- AP-Protect: the default build sets `CONFIG_NRF_APPROTECT_USE_UICR=y` and leaves `CONFIG_NRF_APPROTECT_LOCK` unset (build `.config`; `zephyr/soc/nordic/Kconfig:151`). Debug access therefore stays open after a recover and reflash.
-- Serial log: VCOM0 `/dev/tty.usbmodem0010502082941` at 115200. Note that `peripheral_uart` sends logs to RTT (`CONFIG_LOG_BACKEND_RTT=y`, `CONFIG_LOG_BACKEND_UART=n`), not UART.
+What was checked:
+- **A Nordic example app built fine** (`peripheral_lbs`). The first build took 370 s, mostly set-up (~230 s); later builds are quick (results are cached). It used 18.5 % of flash, 11.6 % of RAM.
+- **The file that gets flashed** is `build/<app>/zephyr/zephyr.hex`. There's no `merged.hex`, because we only build one program.
+- **Flashing** uses `nrfutil` (installed: 8.2.1, at `/opt/homebrew/bin/nrfutil`). It erases only the parts of memory the new program needs, writes, checks, then resets the board. `nrfjprog` (an older tool) isn't installed and isn't needed. A J-Link debugger tool is also available (`/usr/local/bin/JLinkExe`).
+- **Unlocking a stuck board:** `nrfutil device recover --serial-number 1050208294` (erases everything).
+- **Read-out protection** ("AP-Protect", stops anyone reading the chip's memory): our builds don't lock it, so the board stays debuggable after a recover + reflash.
+- **Serial log:** USB port `/dev/tty.usbmodem0010502082941`, 115200 baud. (Some Nordic examples send logs to a debugger channel called RTT instead; ours uses the USB serial port.)
 
-## 2. BLE Kconfig and API (grepped in the v3.4.1 tree)
+## 2. Bluetooth settings and functions (checked in the SDK)
 
-### Recommended [`prj.conf`](../../firmware/ehg_node/prj.conf) (peripheral, streaming)
+### Settings ([`prj.conf`](../../firmware/ehg_node/prj.conf))
+
+What each group does, in plain words. The real file has the final values.
 
 ```conf
+# --- Board is a Bluetooth "peripheral" (waits to be connected), 1 connection at a time
 CONFIG_BT=y
 CONFIG_BT_PERIPHERAL=y
 CONFIG_BT_DEVICE_NAME="EHG_00"
-CONFIG_BT_MAX_CONN=1                       # per peripheral; SDC range 1..20 (nrf/subsys/bluetooth/Kconfig:23)
+CONFIG_BT_MAX_CONN=1                       # Nordic's radio software allows 1..20
 
-# ATT MTU 247 / DLE 251
-CONFIG_BT_L2CAP_TX_MTU=247                 # zephyr/subsys/bluetooth/host/Kconfig.l2cap:28 (default 23, 65 if SMP)
-CONFIG_BT_BUF_ACL_RX_SIZE=251              # common/Kconfig:51 ; RX MTU = ACL_RX_SIZE-4 (include/zephyr/bluetooth/l2cap.h:45)
-CONFIG_BT_BUF_ACL_TX_SIZE=251              # common/Kconfig:9
-CONFIG_BT_CTLR_DATA_LENGTH_MAX=251         # controller/Kconfig:611 (defaults to ACL_RX_SIZE if <=251)
-# local ATT MTU = MIN(BT_L2CAP_RX_MTU, BT_L2CAP_TX_MTU)  (host/att_internal.h:38)
+# --- Bigger messages: up to 247 bytes per message (MTU), 251 per radio packet
+CONFIG_BT_L2CAP_TX_MTU=247                 # default is only 23
+CONFIG_BT_BUF_ACL_RX_SIZE=251
+CONFIG_BT_BUF_ACL_TX_SIZE=251
+CONFIG_BT_CTLR_DATA_LENGTH_MAX=251
+# the message size used = the smaller of what each side allows
 
-# PHY / DLE
-CONFIG_BT_USER_PHY_UPDATE=y                # host/Kconfig:414 -> bt_conn_le_phy_update()
-CONFIG_BT_USER_DATA_LEN_UPDATE=y           # host/Kconfig:475 -> bt_conn_le_data_len_update()
-CONFIG_BT_CTLR_PHY_2M=y                    # already y by default (build .config)
-# or no-code alternative:
-# CONFIG_BT_AUTO_PHY_PERIPHERAL_2M=y       # choice, host/Kconfig (replaces deprecated BT_AUTO_PHY_UPDATE)
-# CONFIG_BT_AUTO_DATA_LEN_UPDATE=y         # default y only if !BT_USER_DATA_LEN_UPDATE
+# --- Let our code ask for the fast radio mode (2M) and big radio packets
+CONFIG_BT_USER_PHY_UPDATE=y                # enables bt_conn_le_phy_update()
+CONFIG_BT_USER_DATA_LEN_UPDATE=y           # enables bt_conn_le_data_len_update()
+CONFIG_BT_CTLR_PHY_2M=y                    # already on by default
+# alternative with no code: CONFIG_BT_AUTO_PHY_PERIPHERAL_2M=y / CONFIG_BT_AUTO_DATA_LEN_UPDATE=y
 
-# TX buffering (notification flow control)
-CONFIG_BT_BUF_ACL_TX_COUNT=10              # common/Kconfig:34 (default 3)
-CONFIG_BT_ATT_TX_COUNT=10                  # host/Kconfig.gatt:16 (default = ACL_TX_COUNT)
-CONFIG_BT_L2CAP_TX_BUF_COUNT=10            # host/Kconfig.l2cap:9 (default = ACL_TX_COUNT)
-CONFIG_BT_CTLR_SDC_TX_PACKET_COUNT=3       # nrf/subsys/bluetooth/controller/Kconfig:221 (per-conn LL buffers, 1..20)
-CONFIG_BT_BUF_EVT_RX_COUNT=11              # throughput sample value
+# --- Send buffers: how many messages can wait to go out (default 3)
+CONFIG_BT_BUF_ACL_TX_COUNT=10
+CONFIG_BT_ATT_TX_COUNT=10
+CONFIG_BT_L2CAP_TX_BUF_COUNT=10
+CONFIG_BT_CTLR_SDC_TX_PACKET_COUNT=3       # radio-side buffers. Our prj.conf uses 10 (matches the above, avoids a start-up warning)
+CONFIG_BT_BUF_EVT_RX_COUNT=11              # must be more than the send-buffer count
 
-# Connection-parameter preference (PPCP + auto L2CAP conn-param request 5 s after connect)
-CONFIG_BT_GAP_AUTO_UPDATE_CONN_PARAMS=y    # Kconfig.gatt:226, default y
-CONFIG_BT_GAP_PERIPHERAL_PREF_PARAMS=y     # Kconfig.gatt:235, default y
-CONFIG_BT_PERIPHERAL_PREF_MIN_INT=12       # units 1.25 ms -> 15 ms  (default 24 = 30 ms)
-CONFIG_BT_PERIPHERAL_PREF_MAX_INT=24       # 30 ms (Apple: max >= min+15 ms) (default 40 = 50 ms)
-CONFIG_BT_PERIPHERAL_PREF_LATENCY=0
-CONFIG_BT_PERIPHERAL_PREF_TIMEOUT=600      # 6 s, units 10 ms (default 42 = 420 ms). Satisfies both Apple ADG versions (sec. 4)
+# --- Preferred timing, sent to the laptop 5 s after connecting
+CONFIG_BT_GAP_AUTO_UPDATE_CONN_PARAMS=y    # on by default
+CONFIG_BT_GAP_PERIPHERAL_PREF_PARAMS=y     # on by default
+CONFIG_BT_PERIPHERAL_PREF_MIN_INT=12       # talk at least every 15 ms (units of 1.25 ms)
+CONFIG_BT_PERIPHERAL_PREF_MAX_INT=24       # ... at most every 30 ms (Apple: max must be >= min + 15 ms)
+CONFIG_BT_PERIPHERAL_PREF_LATENCY=0        # board may not skip turns
+CONFIG_BT_PERIPHERAL_PREF_TIMEOUT=600      # link lost after 6 s of silence (units of 10 ms); fits both Apple rule versions (§4)
 ```
 
-- Reference config: `nrf/samples/bluetooth/throughput/prj.conf`. It uses ACL 502, L2CAP_TX_MTU 498, ATT/ACL_TX 10, `CONFIG_BT_CTLR_SDC_MAX_CONN_EVENT_LEN_DEFAULT=4000000`, and `CONFIG_BT_GAP_AUTO_UPDATE_CONN_PARAMS=n`, and calls the APIs directly (`src/main.c:144,504,518,538`).
-- Connection event length: `CONFIG_BT_CTLR_SDC_MAX_CONN_EVENT_LEN_DEFAULT` defaults to 7500 µs, and `CONFIG_BT_CTLR_SDC_CONN_EVENT_EXTEND_DEFAULT=y` by default (`nrf/subsys/bluetooth/controller/Kconfig:143,159`). The defaults are fine at our data rates.
-- `CONFIG_BT_GATT_AUTO_UPDATE_MTU` exists (`Kconfig.gatt:219`), but it `depends on BT_GATT_CLIENT`, so it only matters on a Zephyr **central**. A peripheral just responds to the central's MTU exchange. macOS and BlueZ always start the exchange themselves.
+Notes:
+- **Comparison:** Nordic's "throughput" example (`nrf/samples/bluetooth/throughput/prj.conf`) uses even bigger messages (498 bytes) and sets the timing itself in code. We don't need that much.
+- **Time per radio turn:** default 7.5 ms, and it stretches when there's more to send. Fine at our data rates.
+- **`CONFIG_BT_GATT_AUTO_UPDATE_MTU`** only matters when the board is the one connecting (a "central"). As a peripheral, the board just answers the laptop's size request. macOS and Linux always ask.
 
-### APIs (`zephyr/include/zephyr/bluetooth/conn.h`, `gatt.h`)
+### Functions our code uses
 
 ```c
-bt_conn_le_phy_update(conn, BT_CONN_LE_PHY_PARAM_2M);          // conn.h:1709, macro :141
-bt_conn_le_data_len_update(conn, BT_LE_DATA_LEN_PARAM_MAX);    // conn.h:1695, macro :203 (251 B / max time)
-bt_conn_le_param_update(conn, BT_LE_CONN_PARAM(12, 24, 0, 600)); // conn.h:1684
-bt_gatt_get_mtu(conn);                                         // gatt.h:1661 ; payload = mtu-3
-bt_gatt_cb_register(&(struct bt_gatt_cb){ .att_mtu_updated = ... });  // gatt.h:382,625
-BT_CONN_CB_DEFINE(cb) = { .le_phy_updated, .le_data_len_updated, .le_param_updated, ... }; // conn.h:2230-2314
-bt_gatt_is_subscribed(conn, attr, BT_GATT_CCC_NOTIFY);          // gatt.h:1649
+bt_conn_le_phy_update(conn, BT_CONN_LE_PHY_PARAM_2M);          // ask for 2 Mbit/s radio
+bt_conn_le_data_len_update(conn, BT_LE_DATA_LEN_PARAM_MAX);    // ask for 251-byte radio packets
+bt_conn_le_param_update(conn, BT_LE_CONN_PARAM(12, 24, 0, 600)); // ask for 15-30 ms timing, 6 s timeout
+bt_gatt_get_mtu(conn);                                         // agreed message size; usable = mtu - 3
+bt_gatt_cb_register(&(struct bt_gatt_cb){ .att_mtu_updated = ... });  // get told when size is agreed
+BT_CONN_CB_DEFINE(cb) = { .le_phy_updated, .le_data_len_updated, .le_param_updated, ... }; // get told what was granted
+bt_gatt_is_subscribed(conn, attr, BT_GATT_CCC_NOTIFY);          // is the laptop listening?
 
 struct bt_gatt_notify_params p = { .attr = attr, .data = buf, .len = n,
                                    .func = sent_cb, .user_data = NULL };
-bt_gatt_notify_cb(conn, &p);                                   // gatt.h:1410
+bt_gatt_notify_cb(conn, &p);                                   // send + get a callback when sent
 ```
+(Declared in `zephyr/include/zephyr/bluetooth/conn.h` and `gatt.h`.)
 
-Flow-control semantics (verified in `zephyr/subsys/bluetooth/host/att.c:808-826`):
-- A notify issued from **an app thread** blocks with `K_FOREVER` until a buffer from `BT_ATT_TX_COUNT` frees up. This gives natural backpressure.
-- A notify issued from **the system workqueue**, or from a BT callback context, uses `K_NO_WAIT`. It returns an error (`-ENOMEM`) when no buffer is free.
-- Recommendation: send from a dedicated thread, and pace it with a `k_sem` that the `.func` completion callback gives (the callback runs on the system workqueue, `gatt.h:1396`). Put a sequence number in every packet.
-- The link layer is reliable: packets are ACKed and retransmitted. Notifications are therefore not lost over the air unless the link drops. In practice, loss means a TX queue overflow in the app, or host-side drops.
+### What happens when the send buffers are full (verified in `host/att.c:808-826`)
 
-### Renamed or deprecated in Zephyr 4.x (as shipped in NCS 3.4)
+- **Sending from our own thread:** it **waits** until a buffer frees up. Data backs up, nothing is lost. ← what [`ehg_service.c`](../../firmware/ehg_node/src/ehg_service.c) does.
+- **Sending from a Bluetooth callback or the system's shared job queue:** it **fails straight away** (`-ENOMEM`) instead of waiting.
+- So: send from a dedicated thread, and put a packet number (seq) in every packet.
+- **Bluetooth fixes radio errors itself:** each radio packet is acknowledged and re-sent if needed. So data isn't lost "in the air" unless the whole link drops. Real loss = a queue overflowing in our code, or drops on the laptop side. That's why we count queue overflows and track seq gaps.
 
-| Item | Status | Source |
+### Renamed or retired settings in Zephyr 4.x (avoid these)
+
+| Old | Use instead | Source |
 |---|---|---|
-| `CONFIG_BT_CONN_TX_MAX` | **Deprecated** in 4.2; now tied to `BT_BUF_ACL_TX_COUNT`. Do not set it. | `doc/releases/release-notes-4.2.rst:153`, `host/Kconfig:380` |
-| `CONFIG_BT_AUTO_PHY_UPDATE` | **Deprecated**; use the choices `BT_AUTO_PHY_PERIPHERAL_2M` / `BT_AUTO_PHY_CENTRAL_2M` (central defaults to 2M) | `host/Kconfig:422` |
-| `CONFIG_BT_BUF_ACL_RX_COUNT` | **Deprecated** in 4.1; count is now `BT_MAX_CONN+1`; use `CONFIG_BT_BUF_ACL_RX_COUNT_EXTRA` | `doc/releases/migration-guide-4.1.rst:614` |
-| `bt_conn_le_info.interval` (1.25 ms units) | **Deprecated** in 4.4; use `interval_us` | `migration-guide-4.4.rst:1149`, `conn.h:1085-1092` |
-| `BT_GATT_CCC_INITIALIZER` / `struct _bt_gatt_ccc` | Renamed to `BT_GATT_CCC_MANAGED_USER_DATA_INIT` / `bt_gatt_ccc_managed_user_data` (4.2) | `migration-guide-4.2.rst:551-555` |
-| Host no longer selects `CONFIG_POLL` | Enable it yourself if you use `k_poll` | `migration-guide-4.4.rst` |
-| NCS Partition Manager | Marked `[DEPRECATED]` in sysbuild | `nrf/sysbuild/Kconfig.sysbuild:9` |
+| `CONFIG_BT_CONN_TX_MAX` | nothing: now follows `BT_BUF_ACL_TX_COUNT` | release notes 4.2 |
+| `CONFIG_BT_AUTO_PHY_UPDATE` | `BT_AUTO_PHY_PERIPHERAL_2M` / `BT_AUTO_PHY_CENTRAL_2M` | `host/Kconfig:422` |
+| `CONFIG_BT_BUF_ACL_RX_COUNT` | `CONFIG_BT_BUF_ACL_RX_COUNT_EXTRA` (count is now max connections + 1) | migration guide 4.1 |
+| `bt_conn_le_info.interval` (1.25 ms units) | `interval_us` | migration guide 4.4 |
+| `BT_GATT_CCC_INITIALIZER` / `struct _bt_gatt_ccc` | `BT_GATT_CCC_MANAGED_USER_DATA_INIT` / `bt_gatt_ccc_managed_user_data` | migration guide 4.2 |
+| Bluetooth no longer turns on `CONFIG_POLL` | turn it on yourself if you use `k_poll` | migration guide 4.4 |
+| Nordic "Partition Manager" | don't use (marked deprecated) | `nrf/sysbuild/Kconfig.sysbuild:9` |
 
-### Multiple connections
-- **Peripheral side:** each DK accepts one central, so `CONFIG_BT_MAX_CONN=1` is enough.
-- **Using a DK as central** (fallback if macOS cannot handle 8):
-  - SoftDevice Controller supports up to 20 links (`BT_MAX_CONN range 1 20`).
-  - Set central links as `BT_MAX_CONN - BT_CTLR_SDC_PERIPHERAL_COUNT` (`nrf/subsys/bluetooth/controller/Kconfig:128`).
-  - Space the links with `CONFIG_BT_CTLR_SDC_CENTRAL_ACL_EVENT_SPACING_DEFAULT`, and set `CONFIG_BT_GATT_CLIENT=y` and `CONFIG_BT_GATT_AUTO_UPDATE_MTU=y`.
-  - Reference samples: `nrf/samples/bluetooth/central_uart`, `zephyr/samples/bluetooth/central_multilink`.
+### Many boards at once (H3)
 
-### Payload budget
-- Main stream: 3 ch × 20 Hz × 2 B = 120 B/s, i.e. 6 B per frame. Send one notification per frame (header plus 6 B) at 20 notif/s. This is trivial.
-- Stretch stream: 16 ch × 200 Hz × 2 B = 6400 B/s (51.2 kbit/s), i.e. 32 B per frame.
-  - With MTU 247 there are 244 B of payload. That fits a header (u32 seq + u32 ts = 8 B) plus 7 frames (224 B). Batching adds 35 ms of latency.
-  - About 29 notif/s, or fewer than 1 packet per 30 ms event. 1M PHY is enough for one link.
-  - 8 links × 51 kbit/s = 410 kbit/s aggregate into one Mac. **UNVERIFIED** whether macOS can sustain this.
+- **Each board** accepts 1 laptop, so `CONFIG_BT_MAX_CONN=1` is enough.
+- **Backup plan if a Mac can't handle 8 boards:** use one nRF board as the "central" that connects to all of them and passes data to Python over USB. Nordic's radio software supports up to 20 links. Settings to look at: `BT_MAX_CONN`, `CONFIG_BT_CTLR_SDC_CENTRAL_ACL_EVENT_SPACING_DEFAULT`, `CONFIG_BT_GATT_CLIENT=y`, `CONFIG_BT_GATT_AUTO_UPDATE_MTU=y`. Examples: `nrf/samples/bluetooth/central_uart`, `zephyr/samples/bluetooth/central_multilink`.
 
-## 3. Device timestamps and host/device clock alignment
+### How much data (payload budget)
 
-- nRF52 system timer = RTC1 on LFCLK:
-  - `CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC=32768` and `CONFIG_SYS_CLOCK_TICKS_PER_SEC=32768` (build `.config`; `soc/nordic/nrf52/Kconfig.defconfig:10`, `soc/nordic/Kconfig.defconfig:13`).
-  - The RTC counter is 24 bits (`NRF_RTC_COUNTER_BIT_WIDTH=24`), and the kernel extends it in software.
-- Therefore:
-  - `k_cycle_get_32()` has **30.52 µs** resolution, not CPU cycles, and wraps after 2^32/32768 ≈ 36.4 h.
-  - `k_uptime_ticks()` returns int64 at the same resolution and never wraps. Convert with `k_ticks_to_us_floor64()`. **Use this.** The resolution is far finer than the 5 ms (200 Hz) to 50 ms (20 Hz) sample period and the ms-scale BLE jitter.
-  - True µs or cycle counters (optional, not recommended):
-    - DWT CYCCNT (`CONFIG_CORTEX_M_DWT`, 64 MHz): stops when the CPU sleeps. Its HFCLK source is HFINT RC unless HFXO is requested.
-    - nrfx TIMER at 1 MHz: needs an HFXO request, which costs current (**UNVERIFIED** figure: a few hundred µA).
-- LFCLK source on the DK is `CONFIG_CLOCK_CONTROL_NRF_K32SRC_XTAL=y`, with declared accuracy `CONFIG_CLOCK_CONTROL_NRF_K32SRC_50PPM=y` (the default, `zephyr/drivers/clock_control/Kconfig.nrf:164-204`). That setting is the budget declared to the BLE stack, not a measurement.
-  - The PCA10056 crystal is probably ±20 ppm initial tolerance (**UNVERIFIED**: check the nRF52840 DK hardware guide / BOM). Temperature adds more.
-  - Scale of the problem: 20 ppm = 72 ms/h and 50 ppm = 180 ms/h. That is significant against a 1-2 s p95 budget over long runs, so **fit drift; don't assume zero**.
-- Alignment method (one-way timestamps):
-  1. Each packet carries `seq` and `t_dev` (the device time of the first sample, or of enqueue). The host records `t_host = time.monotonic_ns()` in the Bleak callback.
-  2. Compute `d_i = t_host_i − t_dev_i`. This equals the true offset + drift·t + the latency (≥ 0).
-  3. Fit the **lower envelope** of `d_i` against `t_dev` with a linear function (skew + offset). Use the lower convex hull or LP method: Moon, Skelly & Towsley, "Estimation and removal of clock skew from network delay measurements", IEEE INFOCOM 1999. See also Paxson, "On calibrating measurements of packet transit times", SIGMETRICS 1998.
-     - A simple version: take the minimum of `d` per 10-60 s window, then run `numpy.polyfit(t, mins, 1)`.
-  4. Latency_i = `d_i − envelope(t_dev_i)`. The result is **relative to the minimum-latency packet**, so the one-way floor is unknown.
-     - To bound the floor, add a round-trip "ping" characteristic. The host writes `t_host` without response; the device notifies back `t_host` + `t_dev`. That gives an NTP-style offset and RTT, and RTT/2 bounds the floor. With a 30 ms interval, RTT is about 1-2 connection intervals (**UNVERIFIED**, measure it).
-  5. Report p50/p95/p99 end-to-end (sample time to host callback). Loss = gaps in `seq`.
-- Host clock: use `time.monotonic_ns()` or `time.perf_counter_ns()`, not `time.time()`, because the latter jumps with NTP.
+| Stream | Data rate | Fits easily? |
+|---|---|---|
+| TPEHG (main): 3 ch × 20 Hz × 2 bytes | 120 bytes/s | yes, trivially |
+| Icelandic (stretch): 16 ch × 200 Hz × 2 bytes | 6400 bytes/s (51 kbit/s) | yes: 7 frames (224 B) + header fit in 244 bytes, ~29 messages/s |
+| 8 Icelandic boards into 1 Mac | 410 kbit/s | **UNVERIFIED** whether macOS keeps up |
 
-## 4. macOS CoreBluetooth + Bleak; BlueZ
+(These notes assumed 1 frame per message for TPEHG. The firmware now batches 10 frames per packet: see [firmware.md](../firmware.md).)
 
-- **Bleak to pin: `bleak==3.0.2`** (latest on PyPI, uploaded 2026-05-02, requires Python ≥ 3.10; source: https://pypi.org/pypi/bleak/json).
-  - 3.0.0 breaking changes: the `adapter` kwarg is deprecated; GATT errors now raise `BleakGATTProtocolError`; writing the CCCD 0x2902 directly raises `ValueError`.
-  - 3.0.0 also fixed `start_notify()` after reconnect and CoreBluetooth memory leaks.
-  - Changelog: https://github.com/hbldh/bleak/blob/develop/CHANGELOG.rst
-- `BleakClient.mtu_size` on macOS returns `peripheral.maximumWriteValueLengthForType_(CBCharacteristicWriteWithoutResponse) + 3` (`bleak/backends/corebluetooth/client.py:186`).
-  - The value is negotiated asynchronously and can read low right after connect. Read it after service discovery, or just size payloads from the firmware side using `bt_gatt_get_mtu()`.
-- MTU macOS negotiates: modern Apple centrals request a large ATT MTU (commonly 517/527). The result is min(central, peripheral), so our peripheral set to 247 should yield **247** (payload 244).
-  - The often-quoted 185 comes from older iOS versions and devices.
-  - **UNVERIFIED** on macOS 26 / Apple Silicon: log `att_mtu_updated` on the DK to confirm.
-- PHY, DLE and connection interval: CoreBluetooth has **no API** for any of these; the central decides.
-  - The peripheral can request 2M PHY and DLE; Apple Silicon Macs generally accept them (**UNVERIFIED**; log `le_phy_updated` and `le_data_len_updated`).
-  - Connection interval: macOS picks it, typically 15 ms or 30 ms.
-    - Peripheral requests must follow Apple's Accessory Design Guidelines: Interval Min ≥ 15 ms and a multiple of 15 ms; Interval Max ≥ Min + 15 ms (or both = 15 ms); latency ≤ 30; Interval Max × (latency+1) ≤ 6 s; supervision timeout > Interval Max × (latency+1) × 3.
-    - Timeout range: the Silabs summary says 6-18 s; older ADG revisions said 2-6 s, **UNVERIFIED** which applies to macOS 26.
-    - Sources: https://docs.silabs.com/bluetooth/7.2.0/bluetooth-mobile-applications/suitable-connection-parameters , https://developer.apple.com/library/archive/qa/qa1931/_index.html , Punch Through (iOS minimum 15 ms): https://punchthrough.com/ble-throughput-part-4/
-    - The prj.conf above (15-30 ms) complies. **Set `PREF_TIMEOUT` to about 600 (6 s) to be safe for both versions of the rule.**
-- Max simultaneous connections on macOS: not documented by Apple. **UNVERIFIED**; community reports are in the 5-10+ range depending on the controller.
-  - Test it empirically with 8 DKs or dongles. Fallback: a DK or nRF52840 dongle as a multi-link central, bridged over USB-CDC to Python (sec. 2).
-- Notification behaviour: CoreBluetooth delivers `didUpdateValueForCharacteristic` callbacks, and Bleak forwards each one to the asyncio loop with `call_soon_threadsafe`.
-  - A slow callback makes the queue grow; it does not drop packets (**UNVERIFIED** at high rates).
-  - Keep callbacks minimal: append `(monotonic_ns, bytes)` to a list or queue and parse later.
-  - Known issue: macOS identifies devices by per-host UUID, not MAC address (Bleak macOS backend doc: https://bleak.readthedocs.io/en/latest/backends/macos.html).
-  - The terminal or Python needs the Bluetooth privacy permission (System Settings → Privacy & Security → Bluetooth).
-- BlueZ / Raspberry Pi:
-  - `mtu_size` comes from `AcquireWrite`/`AcquireNotify` (`bluezdbus/client.py:598 _acquire_mtu`). Bleak 3.0.2 reverts to `StartNotify` by default; pass `bluez={"use_start_notify": False}` to use `AcquireNotify` (Bleak `docs/backends/linux.rst`).
-  - The kernel's default LE connection interval is 30-50 ms (`/sys/kernel/debug/bluetooth/hci0/conn_min_interval` = 24, `conn_max_interval` = 40), and it accepts the peripheral's conn-param request (**UNVERIFIED** on current Pi OS).
-  - BlueZ requests MTU 517.
-  - The Pi's on-board CYW43455 limits concurrent links (**UNVERIFIED**, reportedly fewer than 8 in practice). Plan on a USB dongle or an nRF central for 8 links.
+## 3. Board clock and lining it up with the laptop clock
 
-## 5. Tooling automation
+**The board's clock:**
+- Runs at **32768 ticks per second** (1 tick ≈ 30.5 µs), from a small crystal. Plenty fine compared with the 5–50 ms between samples and the ms-scale Bluetooth timing.
+- Use `k_uptime_ticks()`: a 64-bit count that never wraps. (`k_cycle_get_32()` has the same resolution but wraps after ~36 hours.)
+- Faster counters exist (CPU cycle counter, 1 MHz timer) but they stop when the CPU sleeps or cost extra power. Not needed.
 
-- **nRF Connect for Desktop** (Electron GUI apps: Bluetooth Low Energy, Serial Terminal, Power Profiler): no CLI, API or MCP for driving these apps was found. The launcher is open source (https://github.com/NordicSemiconductor/pc-nrfconnect-launcher). Use scripts instead:
-  - BLE central: Bleak.
-  - Serial: `pyserial` / `screen /dev/tty.usbmodem0010502082941 115200`.
-  - Device ops: `nrfutil device {program,reset,recover,erase,list}`.
-  - Other installable nrfutil commands: `ble-sniffer` 0.21.0 (needs a sniffer-firmware dongle or DK), `trace`, `mcu-manager`, `sdk-manager` (from `nrfutil search`).
-  - `pc-ble-driver-py` is dead for this use (0.17.0, 2022, Python < 3.11).
-- **PPK2 without the GUI:** `ppk2-api` on PyPI, v0.9.2 (release 2023-06-09; repo last commit 2026-05-19), https://github.com/IRNAS/ppk2-api-python, GPL-2.0.
-  - API: `PPK2_API.list_devices()`, `PPK2_API(port)`, `get_modifiers()`, `use_source_meter()` / `use_ampere_meter()`, `set_source_voltage(mV)`, `toggle_DUT_power("ON")`, `start_measuring()`, `get_data()`, `get_samples(data)`. `PPK2_MP` is a multiprocessing variant with a background buffer.
-  - Pure serial, so it should work on macOS (**UNVERIFIED** on this Mac).
-  - The official Power Profiler app is alive: https://github.com/NordicSemiconductor/pc-nrfconnect-ppk (pushed 2026-09-24).
-- **MCP servers:**
-  - Nordic official: "Nordic MCP" (semantic search over NCS docs, DevAcademy, DevZone) and "nRF Cloud MCP". Both need a myNordic / nRF Cloud login.
-    - Info: https://www.nordicsemi.com/Products/Technologies/AI-assisted-development/Get-started
-    - Docs: https://docs.nordicsemi.com/r/bundle/nordic-mcp/page/index.html (the fetch failed, so the endpoint URL is **UNVERIFIED**).
-    - This is the only one worth considering; it is docs-only, with no device control.
-  - Community: `pshanesmith/nrf-mcp` (docs via the GitHub API, 0 stars) and `Aarav-J/zephyr-mcp-server` (Kconfig/DT/API docs, 3 stars). Not recommended; grepping the local `~/ncs/v3.4.1` is authoritative for this exact version.
-  - No MCP was found for nrfutil or device control.
+**Drift:** no two clocks run at exactly the same speed.
+- The board's crystal is rated ±50 ppm (parts per million) to the Bluetooth software. The real crystal is probably ±20 ppm (**UNVERIFIED**: check the DK hardware guide). Temperature adds more.
+- 20 ppm = 72 ms per hour; 50 ppm = 180 ms per hour. Against a 1–2 s latency target over a 6 h test, that matters. So **correct for drift; don't assume it's zero**.
 
-## 6. Project layout and sysbuild
+**How to line the clocks up** (what [`eval/latency.py`](../../eval/latency.py) does):
+1. Every packet carries its board time (`t_inject`). The laptop notes its own time on arrival.
+2. Difference = laptop time − board time = (clock offset) + (drift × time) + (travel delay, never negative).
+3. The packets with the **smallest** differences had the least delay. Fit a straight line through those lowest points (e.g. lowest value per 10–60 s window, then a line fit). That line = offset + drift. Method: Moon, Skelly & Towsley, IEEE INFOCOM 1999; also Paxson, SIGMETRICS 1998.
+4. Delay of each packet = its difference − the line.
+   - Catch: this measures delay **relative to the fastest packet**, so the minimum delay itself is unknown. Bounding it would need a "ping" round trip: laptop sends its time, board sends it back; half the round trip bounds the minimum (~1–2 radio turns, **UNVERIFIED**).
+5. Report median / 95th / 99th percentile delay. Lost packets = gaps in seq.
 
-- **Recommended: a freestanding app in the thesis repo**, e.g. `firmware/ehg_ble/{CMakeLists.txt, prj.conf, src/main.c, boards/nrf52840dk_nrf52840.overlay?}`, using the installed v3.4.1 workspace via `ZEPHYR_BASE` (sec. 1).
-  - It needs no west manifest of its own and no second SDK copy.
-  - A "workspace app" (own `west.yml` importing sdk-nrf) is only worth it for pinning or CI. It would duplicate a multi-GB checkout.
-  - Minimal [`CMakeLists.txt`](../../firmware/ehg_node/CMakeLists.txt):
-    ```cmake
-    cmake_minimum_required(VERSION 3.20.0)
-    find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
-    project(ehg_ble)
-    target_sources(app PRIVATE src/main.c)
-    ```
-- **Sysbuild:** it is the default (the build log shows `sysbuild_default`), and for a single image it is harmless. Keep it; `--no-sysbuild` exists, but NCS expects sysbuild. Gotchas:
-  - Output path is `build/<app>/zephyr/zephyr.hex`, not `build/zephyr/zephyr.hex`. The app's `.config` is at `build/<app>/zephyr/.config`.
-  - Image-level Kconfig goes in [`prj.conf`](../../firmware/ehg_node/prj.conf). Sysbuild-level options (`SB_CONFIG_*`, e.g. MCUboot) go in `sysbuild.conf` or `Kconfig.sysbuild`.
-  - `-DEXTRA_CONF_FILE=...` on the command line applies to the main app. For a specific image, prefix it: `-D<image>_EXTRA_CONF_FILE`.
-  - Partition Manager is off for this board by default and is marked DEPRECATED in NCS 3.4, so don't enable it. There's no need for MCUboot/DFU.
-  - Change the board or sysbuild config and rebuild with `-p` (pristine) if configure errors appear.
-  - `west build` outside the workspace needs `ZEPHYR_BASE` (sec. 1).
+**Laptop clock:** for measuring durations, a steady clock (`time.monotonic_ns()`) is safest; `time.time()` can jump when the Mac syncs its clock over the internet.
+
+## 4. macOS (and Linux) Bluetooth from Python (Bleak)
+
+**Library:** Bleak, version **3.0.2** (newest on PyPI as of 2026-05-02; needs Python ≥ 3.10).
+- Version 3.0.0 changed some things: the `adapter` option is retired; Bluetooth errors raise `BleakGATTProtocolError`; you can't write the "start notifications" switch (CCCD 0x2902) directly any more.
+- It also fixed notifications after reconnecting and memory leaks on macOS. Changelog: https://github.com/hbldh/bleak/blob/develop/CHANGELOG.rst
+
+**Message size (MTU):**
+- Macs ask for a large size (usually 517 or 527 bytes). The size used is the smaller of the two sides, so with our board at 247 we should get **247** (244 usable). The often-quoted 185 is from older iPhones. **UNVERIFIED** on this Mac: the board logs `att_mtu_updated` to confirm.
+- Bleak's `mtu_size` on macOS can read too low right after connecting. Read it after setup, or just size packets on the board side (`bt_gatt_get_mtu()`), which is what we do.
+
+**Radio speed and timing:**
+- macOS has **no way for apps to set** radio speed (PHY), radio packet size or timing. The Mac decides.
+- The board can ask for 2 Mbit/s and big radio packets; Apple Silicon Macs usually say yes (**UNVERIFIED**; the board logs what was granted).
+- Timing: macOS usually picks every 15 or 30 ms. The board's request must follow Apple's accessory rules:
+  - minimum interval ≥ 15 ms and a multiple of 15 ms; maximum ≥ minimum + 15 ms (or both 15 ms)
+  - latency (turns the board may skip) ≤ 30
+  - maximum × (latency + 1) ≤ 6 s
+  - timeout > maximum × (latency + 1) × 3
+  - Allowed timeout: 6–18 s (Silabs summary) vs 2–6 s (older Apple rules); **UNVERIFIED** which applies to current macOS. 6 s fits both, so that's what we use.
+  - Sources: https://docs.silabs.com/bluetooth/7.2.0/bluetooth-mobile-applications/suitable-connection-parameters , https://developer.apple.com/library/archive/qa/qa1931/_index.html , https://punchthrough.com/ble-throughput-part-4/
+
+**How many boards per Mac:** Apple doesn't say. Forum reports: 5–10+, depends on the Bluetooth chip (**UNVERIFIED**). Test with 8 boards; backup plan in §2.
+
+**Receiving notifications:**
+- macOS hands each message to Bleak, which passes it to Python's event loop. A slow handler makes a queue grow; it doesn't drop messages (**UNVERIFIED** at high rates).
+- Keep the handler tiny: note the time + bytes, process later.
+- macOS gives each board its own made-up ID per Mac, not the board's real hardware address. See https://bleak.readthedocs.io/en/latest/backends/macos.html
+- The terminal app running Python needs Bluetooth permission: System Settings → Privacy & Security → Bluetooth.
+
+**Linux / Raspberry Pi (BlueZ), if used instead of a Mac:**
+- Asks for message size 517. Default timing 30–50 ms; accepts the board's timing request (**UNVERIFIED** on current Pi OS).
+- Bleak 3.0.2 uses `StartNotify` by default; pass `bluez={"use_start_notify": False}` for the other method (`AcquireNotify`).
+- The Pi's built-in Bluetooth chip reportedly handles fewer than 8 links (**UNVERIFIED**); plan on a USB dongle or an nRF central.
+
+## 5. Tools that can be scripted
+
+- **nRF Connect for Desktop** (Nordic's point-and-click apps): no way to drive them from scripts. Use these instead:
+  - Bluetooth from Python: Bleak.
+  - Serial log: `pyserial`, or `screen /dev/tty.usbmodem0010502082941 115200`.
+  - Board actions: `nrfutil device {program,reset,recover,erase,list}`.
+  - Other `nrfutil` add-ons: `ble-sniffer` (needs a sniffer board), `trace`, `mcu-manager`, `sdk-manager`.
+  - `pc-ble-driver-py`: abandoned (2022, Python < 3.11). Don't use.
+- **Power measurement (PPK2) without the app:** `ppk2-api` on PyPI (v0.9.2), https://github.com/IRNAS/ppk2-api-python. Main calls: `PPK2_API.list_devices()`, `use_ampere_meter()`, `set_source_voltage(mV)`, `toggle_DUT_power("ON")`, `start_measuring()`, `get_data()`. Talks over plain serial, so it should work on macOS (**UNVERIFIED** here). The official Power Profiler app is still maintained: https://github.com/NordicSemiconductor/pc-nrfconnect-ppk
+- **AI assistant plug-ins (MCP servers):** Nordic's own "Nordic MCP" searches their docs (needs a myNordic login; https://www.nordicsemi.com/Products/Technologies/AI-assisted-development/Get-started). Docs only, no board control. Community ones aren't worth it: searching the local `~/ncs/v3.4.1` is more exact for this version.
+
+## 6. Folder layout and the build system
+
+- **Our firmware is a standalone app inside the thesis repo** ([`firmware/ehg_node/`](../../firmware/ehg_node)), built against the installed SDK via `ZEPHYR_BASE` (§1). No second multi-GB SDK copy needed.
+- Minimal [`CMakeLists.txt`](../../firmware/ehg_node/CMakeLists.txt) for such an app:
+  ```cmake
+  cmake_minimum_required(VERSION 3.20.0)
+  find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
+  project(ehg_ble)
+  target_sources(app PRIVATE src/main.c)
+  ```
+- **"Sysbuild"** = Nordic's wrapper that can build several programs together (e.g. a bootloader + app). On by default; with one program it's harmless, so we keep it. Things to know:
+  - The output is at `build/<app>/zephyr/zephyr.hex` (not `build/zephyr/`), and the final settings at `build/<app>/zephyr/.config`.
+  - App settings go in [`prj.conf`](../../firmware/ehg_node/prj.conf); wrapper settings (`SB_CONFIG_*`) would go in `sysbuild.conf`. We have none.
+  - No bootloader (MCUboot) or over-the-air updates needed.
+  - If the build complains after changing the board or settings, do a clean build (`build.sh pristine`).
+
+## Glossary
+
+| Term | Meaning |
+|---|---|
+| NCS / Zephyr | Nordic's SDK / the small operating system inside it |
+| west / nrfutil | Nordic's build tool / Nordic's flashing + toolchain tool |
+| Kconfig / `prj.conf` | build-time settings (`CONFIG_…=value`) |
+| peripheral / central | board (advertises, waits) / laptop (connects) |
+| MTU | biggest Bluetooth message; 247 bytes here, 244 usable |
+| DLE (data length) | bigger radio packets (251 bytes) |
+| PHY | radio speed mode: 1M or 2M (Mbit/s) |
+| connection interval | how often board and laptop talk (15–30 ms) |
+| supervision timeout | silence after which the link counts as lost (6 s) |
+| notify / CCCD | board pushes data / switch the laptop flips to receive it |
+| ppm | parts per million: clock speed error (20 ppm = 72 ms/hour) |
+| SoftDevice Controller (SDC) | Nordic's low-level radio software |
+| sysbuild | Nordic's wrapper for building several programs at once |
+| AP-Protect | chip read-out protection |
