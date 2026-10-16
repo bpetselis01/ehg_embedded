@@ -44,7 +44,7 @@ west build -b nrf52840dk/nrf52840 -d build path/to/app && west flash -d build --
 
 ## 2. BLE Kconfig and API (grepped in the v3.4.1 tree)
 
-### Recommended `prj.conf` (peripheral, streaming)
+### Recommended [`prj.conf`](../../firmware/ehg_node/prj.conf) (peripheral, streaming)
 
 ```conf
 CONFIG_BT=y
@@ -216,7 +216,7 @@ Flow-control semantics (verified in `zephyr/subsys/bluetooth/host/att.c:808-826`
 - **Recommended: a freestanding app in the thesis repo**, e.g. `firmware/ehg_ble/{CMakeLists.txt, prj.conf, src/main.c, boards/nrf52840dk_nrf52840.overlay?}`, using the installed v3.4.1 workspace via `ZEPHYR_BASE` (sec. 1).
   - It needs no west manifest of its own and no second SDK copy.
   - A "workspace app" (own `west.yml` importing sdk-nrf) is only worth it for pinning or CI. It would duplicate a multi-GB checkout.
-  - Minimal `CMakeLists.txt`:
+  - Minimal [`CMakeLists.txt`](../../firmware/ehg_node/CMakeLists.txt):
     ```cmake
     cmake_minimum_required(VERSION 3.20.0)
     find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
@@ -225,7 +225,7 @@ Flow-control semantics (verified in `zephyr/subsys/bluetooth/host/att.c:808-826`
     ```
 - **Sysbuild:** it is the default (the build log shows `sysbuild_default`), and for a single image it is harmless. Keep it; `--no-sysbuild` exists, but NCS expects sysbuild. Gotchas:
   - Output path is `build/<app>/zephyr/zephyr.hex`, not `build/zephyr/zephyr.hex`. The app's `.config` is at `build/<app>/zephyr/.config`.
-  - Image-level Kconfig goes in `prj.conf`. Sysbuild-level options (`SB_CONFIG_*`, e.g. MCUboot) go in `sysbuild.conf` or `Kconfig.sysbuild`.
+  - Image-level Kconfig goes in [`prj.conf`](../../firmware/ehg_node/prj.conf). Sysbuild-level options (`SB_CONFIG_*`, e.g. MCUboot) go in `sysbuild.conf` or `Kconfig.sysbuild`.
   - `-DEXTRA_CONF_FILE=...` on the command line applies to the main app. For a specific image, prefix it: `-D<image>_EXTRA_CONF_FILE`.
   - Partition Manager is off for this board by default and is marked DEPRECATED in NCS 3.4, so don't enable it. There's no need for MCUboot/DFU.
   - Change the board or sysbuild config and rebuild with `-p` (pristine) if configure errors appear.
