@@ -92,7 +92,7 @@ gateway/gateway.py <──── BLE notify (wire v2, CRC) ──── ehg_serv
 
 ## Implementation units
 
-### Unit 0: Spike: UART RX coexists with the log backend (blocker)
+### Unit 0: Check: UART RX coexists with the log backend (hardware check)
 
 **Goal:** prove interrupt-driven RX on `uart0` works while `LOG_BACKEND_UART` writes on the same UART, at 1 Mbaud.
 **Requirements trace:** R1
@@ -105,7 +105,11 @@ gateway/gateway.py <──── BLE notify (wire v2, CRC) ──── ehg_serv
 - [ ] The log keeps working with no host attached (no RX)
 
 **Verification:** a counter match plus intact log lines. **If it fails, stop and switch the link to native USB before Unit 3.**
-**Planning-time unknowns:** *Resolve before Unit 3:* whether NCS 3.4.1's UART log backend uses the async API on uart0 (that would conflict with the IRQ API). The fallback is RX with the async API too.
+**Planning-time unknowns:** ~~whether NCS 3.4.1's UART log backend uses the async API on uart0~~ **Resolved
+2026-10-20 (Phase 6):** `zephyr/subsys/logging/backends/log_backend_uart.c` writes with `uart_poll_out` unless
+`CONFIG_LOG_BACKEND_UART_ASYNC` is set. Our `.config` has it unset (`LOG_BACKEND_UART=y`, `LOG_MODE_DEFERRED=y`),
+and the backend registers no UART callback, so `uart_irq_callback_set` for RX is free. Unit 0 drops from a design
+blocker to a hardware check (1 Mbaud stability + no lost log lines).
 
 ### Unit 1: Wire format v2: CRC-16
 
@@ -255,7 +259,7 @@ gateway/gateway.py <──── BLE notify (wire v2, CRC) ──── ehg_serv
 - [x] 3 or more test scenarios per unit
 - [x] At most 8 files per unit (Unit 3 is at 8: watch it)
 - [x] At most 2 new abstractions per unit (Unit 3: serial parser + frame buffer; Unit 7: fault stage)
-- [x] Unknowns classified: Unit 0 is a *resolve-before* blocker; the rest are deferred
+- [x] Unknowns classified: the Unit 0 design question was resolved in Phase 6; the rest are deferred
 - [x] Handoff: the behaviour for underrun, stale frames, reconnect, CRC fail, START-while-running and START-before-CONFIG is all specified
 
 ## Review (Phase 5)
