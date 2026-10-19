@@ -36,7 +36,7 @@ WHY .npz: numbers + labels in 1 file, 1-line NumPy load, later steps all Python.
 ROLE IN THESIS: "Ground truth" the transmitted data is compared against. Raw numbers kept
   -> bit-exact checks (H2/H4) possible.
 BEFORE -> AFTER: Before: data/raw/ (README step 0). After: data/converted/, read by
-  tools/make_replay.py, gateway.py --simulate, eval/integrity.py (answer key).
+  tools/feed.py (streams it into the board), gateway.py --simulate, eval/integrity.py (answer key).
   Tested by tests/test_convert.py.
 """
 

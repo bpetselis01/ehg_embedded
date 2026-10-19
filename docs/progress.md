@@ -1,5 +1,38 @@
 # Progress log
 
+## 2026-10-20: realistic injection, continuous acquisition, fault injection (plan: [plans/realistic-injection-plan.md](plans/realistic-injection-plan.md))
+
+What changed (details: [firmware.md](firmware.md), [interface-spec.md](interface-spec.md) §3/§3b, [fault-injection.md](fault-injection.md)):
+- **The recording is streamed, not built in.** [`tools/feed.py`](../tools/feed.py) sends it over the J-Link serial port
+  (460800 baud, RTS/CTS) about 2 s ahead; the board's timer still decides each sampling instant (H1 start unchanged).
+  `make_replay.py` / `replay_data.h` are gone. Any record, any length, 16 ch × 200 Hz possible.
+- **Wire v2:** CRC-16 trailer on every BLE packet. **Acquisition continues through disconnects**; the gateway keeps one
+  gap tracker per board and re-asks for lost re-sends (1 s, up to 5 times).
+- **H1 clock offset from serial pings** (`eval/results/sync_<node>.csv`, ±1.8 ms) instead of the BLE lower envelope.
+- **Fault injection** (`feed.py --faults`): Gilbert burst loss, bit corruption, forced disconnects; seeded, logged.
+- **Button 1** starts/stops; LED1 connected, LED2 sampling. **MCUboot + MCUmgr/SMP** for updates over Bluetooth.
+
+Hardware results (DK EHG-93C0, macOS gateway, Docker backend, TPEHG tpehg1007, 7 min each):
+
+| Run | Faults | Delivery | Bit-exact | H1 median / p95 | Notes |
+|---|---|---|---|---|---|
+| Unit 3 (no backend) | none | 474/474 packets first frame checked | 0 mismatches | – | `starved=0`, `rx_bad=0`, max_inject_late 397 µs |
+| run 2 | drop 5 % (burst 3), corrupt 1 %, disc 120 s | 98.76 % | 0 | 257 / 474 ms | exposed: serial line errors (fixed: RTS/CTS) and single-shot resend requests (fixed: retries) |
+| run 3 | same, seed 3 | **100.0000 %** (8410/8410) | **0** | **259 / 478 ms** | 69 drops, 8 corruptions, 4 disconnects all recovered; `streams=1`; sync ±1.8 ms; envelope bias measured 0.1–3 ms |
+
+Engineering notes from this session:
+- **1 Mbaud loses board→laptop bytes on the J-Link VCOM** (≈0.1 % of log lines); 460800 is clean without Bluetooth.
+  With Bluetooth busy a few log lines still lose bytes, so machine lines (`@…`) carry a CRC.
+- **Zephyr deferred logging batches lines for up to 1 s** (`LOG_PROCESS_THREAD_SLEEP_MS`); `LOG_PROCESS_TRIGGER_THRESHOLD=1`
+  makes each line go out at once. Without it the feeder's queue reports arrived in late pairs and the board ran dry.
+- **Without RTS/CTS the UART dropped ~1 serial message a minute** while Bluetooth was busy (UART line errors).
+- **pyserial `read(4096)` with a timeout waits the full timeout**: it put 50 ms into every clock ping; `read(in_waiting)` fixed it (RTT 3.5 ms).
+- `nrfutil mcu-manager ble` needs a second Nordic board as its radio; the phone app is the one-board update route.
+- A reset makes the serial line emit a burst of junk bytes; harmless (only CRC-checked `@` lines are acted on).
+
+Not verified on hardware: pressing Button 1 / the LEDs (no one at the board); an actual over-the-air image upload
+(the update service answered an image-list request: slot 0, confirmed, active).
+
 ## 2026-09-29: autonomous setup session (while Byron was away)
 
 ### Gantt status

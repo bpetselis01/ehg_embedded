@@ -1,0 +1,10 @@
+/* Serial port for the J-Link VCOM, shared by the log and the sample stream (tools/feed.py).
+ * 460800, not 1000000: at 1 Mbaud the VCOM lost board->laptop bytes (Unit 0 check, 2026-10-20).
+ * hw-flow-control: the board's RTS line (P0.05, wired to the J-Link chip on the DK) tells the J-Link
+ * to pause when the board can't take bytes, instead of the UART overflowing. Without it, ~1 serial
+ * message a minute was cut short ("line errors") while Bluetooth was busy (2026-10-20).
+ * Zephyr applies this file automatically when building for nrf52840dk/nrf52840. */
+&uart0 {
+	current-speed = <460800>;
+	hw-flow-control;
+};

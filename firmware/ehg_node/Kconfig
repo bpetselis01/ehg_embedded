@@ -1,7 +1,7 @@
 # PURPOSE: Our own build settings (with defaults), next to Zephyr's.
 # HOW: Each "config" becomes a CONFIG_EHG_* constant in the C code. Change a value in prj.conf.
 # ROLE IN THESIS: The experiment knobs: latency vs efficiency (H1), how much loss can be recovered (H2).
-# BEFORE -> AFTER: Read at build time. Used in replay.c (queue size) and ehg_service.c
+# BEFORE -> AFTER: Read at build time. Used in replay.c (queue sizes) and ehg_service.c
 #   (frames per packet, history size).
 source "Kconfig.zephyr"
 
@@ -20,6 +20,14 @@ config EHG_RING_FRAMES
 	help
 	  How many frames can wait if sending falls behind (256 = 12.8 s at 20 Hz).
 	  When full, new frames are dropped and counted as ring_overflow (replay.c).
+
+config EHG_FEED_BUFFER_FRAMES
+	int "Frames the laptop can send ahead (tools/feed.py)"
+	default 512
+	help
+	  Queue between the serial parser and the replay timer (replay.c). tools/feed.py keeps
+	  about 2 s queued, so this must hold 2 s at the highest rate: 400 frames at 200 Hz.
+	  64 B of RAM per frame (16 channels x int32 + frame number).
 
 config EHG_HISTORY_PACKETS
 	int "Sent packets kept for gateway re-requests"

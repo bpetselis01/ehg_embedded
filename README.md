@@ -13,7 +13,7 @@ Plain-language code walkthrough: [`docs/codebase-guide.md`](docs/codebase-guide.
 
 | Path | What |
 |---|---|
-| [`tools/`](tools) | [`convert.py`](tools/convert.py) (WFDB → int16 `.npz`), [`make_replay.py`](tools/make_replay.py) (`.npz` → firmware replay header) |
+| [`tools/`](tools) | [`convert.py`](tools/convert.py) (WFDB → int16 `.npz`), [`feed.py`](tools/feed.py) (streams a `.npz` into the board over serial) |
 | [`firmware/ehg_node/`](firmware/ehg_node) | Zephyr app for `nrf52840dk/nrf52840`, NCS v3.4.1. [`firmware/build.sh`](firmware/build.sh) builds and flashes it |
 | [`gateway/`](gateway) | Bleak central → MQTT; `--simulate N` software nodes use the same wire format |
 | [`backend/`](backend) | docker compose: Mosquitto, InfluxDB 2.7, ingest, Grafana (provisioned dashboard) |
@@ -34,9 +34,12 @@ aws s3 sync --no-sign-request s3://physionet-open/icehg-ds/1.0.1/ data/raw/icehg
 (cd data/raw/tpehgdb && sed -E 's/^([0-9a-f]{64}) +/\1  /' SHA256SUMS.txt | shasum -a 256 -c --quiet)   # silent = every file intact; repeat per folder
 uv run python tools/convert.py tpehgdb        # also: tpehgt | icehg | ehgdb; --bits 24 for >16-bit sources
 
-# 1. firmware: bake one record into flash, build, flash the DK
-uv run python tools/make_replay.py data/converted/tpehgdb/tpehg1007.npz --record-id 0
+# 1. firmware: build + flash the DK once (no recording inside), then stream a recording into it
 firmware/build.sh flash                       # uses ~/thesisb symlink: NCS can't build from paths with spaces
+uv run python tools/feed.py data/converted/tpehgdb/tpehg1007.npz   # leave running; prints the board log
+#    optional: --faults drop=0.05,burst=3,corrupt=0.01,disc=120 (docs/fault-injection.md)
+#    sampling starts when the gateway connects (START) or with DK Button 1; firmware updates over
+#    Bluetooth: build/dfu_application.zip via the nRF Device Manager app (docs/firmware.md Stage F)
 
 # 2. backend
 cp backend/.env.example backend/.env && (cd backend && docker compose up -d)
@@ -55,4 +58,4 @@ uv run python tools/fhir_export.py --node EHG-93C0 --since 10m -o window.json   
 uv run pytest -q
 ```
 
-The DK serial log is on VCOM0 (`/dev/cu.usbmodem0010502082941`, 115200). It prints link parameters and, every 10 s, `sent / resent / ring_overflow / max_inject_late`.
+The DK serial port is VCOM0 (`/dev/cu.usbmodem0010502082941`, 460800 baud). It carries the recording in (from `tools/feed.py`) and the board's log out, so `feed.py` prints the log: link parameters and, every 10 s, `sent / resent / ring_overflow / starved / max_inject_late`. Only one program can open the port.

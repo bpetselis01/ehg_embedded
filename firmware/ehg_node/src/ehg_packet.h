@@ -6,7 +6,8 @@
  *   header = version, n_ch, fs_hz, seq, frame_idx, t_inject, n_frames, flags, record_id
  *     seq = packet number, t_inject = board clock tick when the packet's 1st frame was sampled
  *   samples = 2 bytes each (default), or 3 bytes when flags bit1 is set (24-bit option)
- *   e.g. 3 channels x 10 frames = 20 + 60 = 80 bytes (24-bit: 110)
+ *   then a 2-byte CRC-16 of everything before it (v2)
+ *   e.g. 3 channels x 10 frames = 20 + 60 + 2 = 82 bytes (24-bit: 112)
  *   Numbers go low byte first ("little-endian"). Full table: docs/interface-spec.md 3.
  * ROLE IN THESIS: The contract the whole pipeline shares. seq -> losses countable (H2);
  *   t_inject -> latency measurable (H1); raw samples -> bit-for-bit comparison (H2/H4).
@@ -14,27 +15,16 @@
  *   struct ehg_pkt_hdr + samples, sends over Bluetooth -> gateway/packet.py decodes it.
   */
 #pragma once
+#include <stdbool.h>
 #include <stdint.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/toolchain.h>
 
-#include "replay_data.h" /* REPLAY_SAMPLE_BITS: 16 or 24, set by make_replay.py for the baked-in record */
-
-#define EHG_PKT_VERSION 1
+#define EHG_PKT_VERSION 2 /* v2 = v1 + CRC-16 trailer */
+#define EHG_CRC_BYTES 2   /* CRC-16/CCITT-FALSE (crc16_itu_t, seed 0xFFFF) of all bytes before it, low byte first */
 #define EHG_FLAG_RETRANS BIT(0)
-#define EHG_FLAG_24BIT BIT(1) /* samples are 3 bytes each (make_replay.py --bits 24) */
-
-#if REPLAY_SAMPLE_BITS == 24
-typedef int32_t ehg_sample_t;
-#define EHG_SAMPLE_BYTES 3
-#define EHG_SAMPLE_FLAGS EHG_FLAG_24BIT
-#elif REPLAY_SAMPLE_BITS == 16
-typedef int16_t ehg_sample_t;
-#define EHG_SAMPLE_BYTES 2
-#define EHG_SAMPLE_FLAGS 0
-#else
-#error "REPLAY_SAMPLE_BITS must be 16 or 24 - regenerate replay_data.h with tools/make_replay.py"
-#endif
+#define EHG_FLAG_24BIT BIT(1) /* samples are 3 bytes each (the record is 24-bit, tools/feed.py CONFIG) */
+#define EHG_MAX_PKT 244       /* MTU 247 - 3 bytes of ATT header */
 
 /* Most channels any recording has (Icelandic ehgdb: 16). Sets the size of each queued frame. */
 #define EHG_MAX_CH 16
@@ -45,7 +35,7 @@ struct ehg_pkt_hdr {
 	uint8_t n_ch;
 	uint16_t fs_hz;
 	uint32_t seq;       /* packet number, from 0 at START */
-	uint32_t frame_idx; /* frame number of the 1st frame, from 0 at START; recording row = frame_idx % length */
+	uint32_t frame_idx; /* frame number of the 1st frame, as numbered by tools/feed.py; recording row = frame_idx % length */
 	uint32_t t_inject;  /* board clock (32768 ticks/s) when the 1st frame was released */
 	uint8_t n_frames;
 	uint8_t flags;
@@ -58,7 +48,8 @@ BUILD_ASSERT(sizeof(struct ehg_pkt_hdr) == 20, "wire header must be 20 bytes");
 struct ehg_frame {
 	uint32_t tick;
 	uint32_t frame_idx;
-	ehg_sample_t s[EHG_MAX_CH];
+	bool start; /* first frame of a session: ehg_service.c restarts seq and clears history */
+	int32_t s[EHG_MAX_CH];
 };
 
 /* The 1-byte commands the laptop can send to the board. Sent by gateway/gateway.py,
