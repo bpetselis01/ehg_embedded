@@ -24,6 +24,17 @@ For what each firmware file does, see [firmware.md](../firmware.md). Terms are e
 
 ## 1. Build and flash (verified)
 
+**Terms used below, in plain words:**
+
+| Term | Meaning |
+|---|---|
+| SDK | Here: Nordic's nRF Connect SDK (NCS) at `~/ncs/v3.4.1`: Zephyr (the board's operating system), Nordic's Bluetooth radio software, examples, build scripts. Our firmware is a small app that sits on top of it |
+| where the SDK lives | **outside this repo**: a separate 2.9 GB folder in your home directory, installed by Nordic's tooling, not tracked in git. Our firmware (`firmware/ehg_node/`) is compiled against it. A new computer needs the same SDK version installed first. `~/thesisb` is a shortcut to this repo with no spaces in the path (Nordic's build breaks on spaces) |
+| `west` | Zephyr's build + flash command (`west build`, `west flash`). It only works when it can find the SDK: automatic inside the SDK folder, elsewhere via `ZEPHYR_BASE` |
+| toolchain vs SDK | two separate installs. SDK (`~/ncs/v3.4.1`) = source code + west's recipes. **Toolchain** (`/opt/nordic/ncs/toolchains/<id>/bin`) = the programs: `west` itself, compiler, cmake, Python. So `west` isn't inside the SDK; PATH can't point there |
+| PATH | the list of folders the terminal searches when you type a command. Nordic's tools (west, compiler) live in a folder that isn't on it, so typing `west` gives "command not found" |
+| `nrfutil toolchain-manager launch` | runs a command with the toolchain folders added to PATH for that run only, which is how `build.sh` gets around the PATH problem. Adding the toolchain to PATH permanently is possible but its folder name changes with each SDK version, so the launcher is safer |
+
 **Problem:** Nordic's build tool (`west`) only works inside the SDK folder, and isn't on the normal PATH.
 **Fix:** run it through Nordic's launcher (`nrfutil toolchain-manager launch`) and set `ZEPHYR_BASE` so it can find the SDK from anywhere. Without it you get: `unknown command "build"; do you need to run this inside a workspace?`
 

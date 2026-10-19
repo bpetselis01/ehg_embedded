@@ -1,0 +1,7 @@
+/* MCUboot (the bootloader, sysbuild.conf) is a separate program with its own devicetree: give its
+ * boot message the same serial speed as the app (boards/nrf52840dk_nrf52840.overlay), so it reads
+ * as text instead of junk in tools/feed.py. */
+&uart0 {
+	current-speed = <460800>;
+	hw-flow-control;
+};

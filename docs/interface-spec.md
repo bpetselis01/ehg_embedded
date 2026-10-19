@@ -26,7 +26,7 @@ Produced by [`tools/convert.py`](../tools/convert.py). Keys: `samples` int16 `[n
 
 | off | type | field |
 |---|---|---|
-| 0 | u8 | version = 1 |
+| 0 | u8 | version = 2 (v2 added the CRC trailer; v1 packets are rejected) |
 | 1 | u8 | n_ch |
 | 2 | u16 | fs_hz |
 | 4 | u32 | seq: packet counter from stream start |
@@ -35,9 +35,39 @@ Produced by [`tools/convert.py`](../tools/convert.py). Keys: `samples` int16 `[n
 | 16 | u8 | n_frames |
 | 17 | u8 | flags (bit0 = retransmission, bit1 = 24-bit samples) |
 | 18 | u16 | record_id |
-| 20 | i16 × n_frames × n_ch | samples, frame-major. If flags bit1: 3-byte signed little-endian each instead (opt-in: `make_replay.py --bits 24`; for 24-bit front ends such as ADS129x) |
+| 20 | i16 × n_frames × n_ch | samples, frame-major. If flags bit1: 3-byte signed little-endian each instead (opt-in: a record converted with `convert.py --bits 24`, streamed by `feed.py`; for 24-bit front ends such as ADS129x) |
+| end − 2 | u16 | CRC-16/CCITT-FALSE (poly 0x1021, init 0xFFFF; Zephyr `crc16_itu_t(0xFFFF, …)`, Python `binascii.crc_hqx(…, 0xFFFF)`) of every byte before it. Check value: `"123456789"` → `0x29B1`. A mismatch is dropped by the gateway and recovered like a missing packet |
+
+Size = 20 + n_frames × n_ch × (2 or 3) + 2, e.g. 3 ch × 10 frames 16-bit = 82 bytes; must be ≤ 244 (MTU 247 − 3).
 
 Implemented in [`firmware/ehg_node/src/ehg_packet.h`](../firmware/ehg_node/src/ehg_packet.h) and [`gateway/packet.py`](../gateway/packet.py). The BLE service is `4e480001-a0e1-4c3b-8747-9a1b2c3d4e5f`. Data characteristic `…0002` (notify). Control characteristic `…0003` (write): `01` start, `02` stop, `03 <u32 seq> <u16 count>` resend.
+
+## 3b. Serial injection link (laptop → board, J-Link VCOM, 460800 baud 8N1)
+
+The laptop ([`tools/feed.py`](../tools/feed.py)) streams the recording into the board; the board's timer
+([`replay.c`](../firmware/ehg_node/src/replay.c)) decides when each frame is sampled. Same port as the board's log, so:
+
+**Laptop → board: binary only.** Each message = COBS-encoded `type | payload | CRC-16`, then one `0x00`.
+CRC as in §3 (CCITT-FALSE, over type + payload). Malformed, wrong-CRC or wrong-length messages are dropped and counted (`rx_bad` in the 10 s log line).
+
+| type | name | payload (little-endian) |
+|---|---|---|
+| `0x10` | CONFIG | u8 n_ch (1–16), u16 fs_hz, u16 record_id, u8 bits (16/24), u16 feeder session (random per feeder start). Same session again = a repeat: answered, queue kept. New session = queue emptied. Ignored while a session runs |
+| `0x11` | DATA | u32 frame_idx of the 1st frame, u8 n (≤ 10), then n × n_ch samples (2 or 3 bytes, signed) |
+| `0x12` | SYNC | u32 ping id. Board answers `@SYNC <id> <tick>` at once; feeder logs `eval/results/sync_<node>.csv` for `eval/latency.py` |
+
+**Board → laptop: text lines only**, through Zephyr's log (so a line is never split). Lines containing `@WORD … #xxxx` are for the feeder, where `xxxx` = CRC-16 (hex) of the text between `@` and ` #`: the VCOM loses a few board→laptop bytes per 10,000 lines while the radio is busy, so damaged lines are ignored. Everything else is the normal log.
+
+| line | meaning |
+|---|---|
+| `@HELLO <name> <n_ch> <fs> <record_id>` | CONFIG accepted |
+| `@LVL <frames>` | frames queued on the board, once a second, only after CONFIG. The feeder tops up to `--lead` seconds; 3 s without one = board reset, so the feeder sends CONFIG again |
+| `@SYNC <id> <tick>` | board clock (u32, 32768/s) when ping `id` was parsed |
+| `@ERR <text>` | refused command (e.g. START before CONFIG, CONFIG while running) |
+
+`frame_idx` is set by the feeder: from 0, continuing when the record loops (row = `frame_idx % n_frames`).
+At START the board takes the oldest queued frame as the session's first and then expects consecutive numbers:
+older frames are dropped (`late`), a missing one is skipped (`starved`, frame_idx gap in the DB, source-side, not radio loss).
 
 ## 4. MQTT message (`ehg/<node_id>/pkt`, QoS 1, JSON)
 

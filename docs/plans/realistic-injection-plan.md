@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-20
 **Mode:** New Feature, Deep
-**Status:** Plan, not started
+**Status:** Implemented 2026-10-20 (results and deviations: [progress.md](../progress.md), section 2026-10-20)
 **Replaces:** design-spec assumption A5 (the recording is compiled into flash)
 
 ## Problem frame
@@ -282,3 +282,13 @@ Not covered automatically: the firmware parser against fuzzed serial input beyon
 
 **Out of scope:** DAC/AFE replay (needs Zicheng's AFE); MQTT-hop impairment with Toxiproxy (optional later: TCP
 turns loss into stalls, and ingest already dedups QoS 1 duplicates); per-channel threads (rejected above).
+
+## Deviations found during implementation (2026-10-20)
+
+- **Baud 460800, not 1 Mbaud**, plus **RTS/CTS flow control** (Unit 0 + run 2 findings).
+- **`@` lines carry a CRC**; **CONFIG carries a feeder session number** (repeat CONFIGs no longer purge the queue);
+  the board reports `@LVL` only after CONFIG, and the feeder re-sends CONFIG after 3 s of silence (board reset).
+- **Gateway re-requests** still-missing packets (1 s, up to 5 times): a single request lost about 5 % of re-sends under 5 % injected loss.
+- **Unit 5's hardware test** used the forced-disconnect fault (Unit 7) instead of killing the gateway: a restarted gateway
+  is a new process with no memory of earlier seqs, so it could not test recovery.
+- **Unit 9 upload** not tested: `nrfutil mcu-manager ble` needs a second Nordic board; use the nRF Device Manager phone app.

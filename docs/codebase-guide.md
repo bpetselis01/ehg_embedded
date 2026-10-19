@@ -29,7 +29,7 @@ so we can measure **how fast** it arrived (H1), **whether** it arrived (H2), and
 flowchart TD
     subgraph PREP["1. Prepare data (laptop, offline)"]
         A["PhysioNet files"] -->|tools/convert.py| B["data/converted/*.npz<br/>+ manifest.json"]
-        B -->|tools/make_replay.py| C["replay_data.h"]
+        B -->|tools/feed.py, serial| C["board queue"]
     end
 
     subgraph BOARD["2. nRF52840 board (firmware/)"]
@@ -68,8 +68,8 @@ Step by step:
 
 1. **Prepare the data** ([`tools/convert.py`](../tools/convert.py)). Turns downloaded recordings into simple `.npz` files of untouched
    whole numbers, plus a `manifest.json` that gives each recording a number (`record_id`).
-2. **Load one recording into the board** ([`tools/make_replay.py`](../tools/make_replay.py)). Writes the samples out as a C file
-   (`replay_data.h`), which [`firmware/build.sh`](../firmware/build.sh) compiles into the firmware.
+2. **Stream one recording into the board** ([`tools/feed.py`](../tools/feed.py)). Sends the samples over the serial port a
+   couple of seconds ahead; the firmware is built once ([`firmware/build.sh`](../firmware/build.sh)) and never contains a recording.
 3. **Play it like a sensor** ([`firmware/ehg_node/src/replay.c`](../firmware/ehg_node/src/replay.c)). Releases one frame at a time at the original rate
    (for example 20 per second) and stamps each frame with the board's clock. A *frame* is one sample from every channel at one instant.
 4. **Pack and send** ([`firmware/ehg_node/src/ehg_service.c`](../firmware/ehg_node/src/ehg_service.c)). Groups 10 frames into one numbered packet,
@@ -110,7 +110,7 @@ Step by step:
 | File | One-line role |
 |---|---|
 | [`tools/convert.py`](../tools/convert.py) | downloaded recordings → `.npz` + `manifest.json` (the answer key) |
-| [`tools/make_replay.py`](../tools/make_replay.py) | one `.npz` → `replay_data.h` for the firmware |
+| [`tools/feed.py`](../tools/feed.py) | streams one `.npz` into the board over the serial port (digital injection) |
 | [`tools/fhir_export.py`](../tools/fhir_export.py) | stored window → HL7 FHIR R5 Bundle (clinical hand-off) |
 | [`firmware/build.sh`](../firmware/build.sh) | build and flash the board (works around spaces in this folder's path). Overview of all firmware: [firmware.md](firmware.md) |
 | [`firmware/ehg_node/CMakeLists.txt`](../firmware/ehg_node/CMakeLists.txt) | which C files to compile |

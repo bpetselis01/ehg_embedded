@@ -19,6 +19,7 @@
  *     [00:00:10.000,000] <inf> ehg_svc: sent=11 resent=0 resend_miss=0 notify_err=0 ring_overflow=0 max_inject_late=31 us
  *     [00:05:00.000,000] <inf> main: disconnected (0x13)   (0x13 = laptop closed it; 0x08 = link timed out)
  * HOW: name from chip ID -> Bluetooth on -> advertise ("I'm here, connect to me").
+ *   Button 1 starts/stops a session (as the laptop's START/STOP does). LED1 = connected, LED2 = sampling.
  *   On connect: hand the connection to ehg_service.c, ask for the fastest radio settings.
  *   The laptop decides what it actually grants; the callbacks below only log it.
  *   Streaming starts later, when the laptop sends START.
@@ -33,7 +34,10 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
+#include <dk_buttons_and_leds.h>
+
 #include "ehg_service.h"
+#include "replay.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
@@ -75,7 +79,8 @@ static void connected(struct bt_conn *conn, uint8_t err)
 	bt_conn_le_data_len_update(conn, BT_LE_DATA_LEN_PARAM_MAX);
 }
 
-/* Connection lost: forget it (this also stops the replay) and print the final counters. */
+/* Connection lost: forget it and print the counters. Sampling carries on (like a real sensor):
+ * packets made while offline wait in history and are re-sent when the gateway asks after reconnecting. */
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	LOG_INF("disconnected (0x%02x)", reason);
@@ -124,8 +129,24 @@ static void mtu_updated(struct bt_conn *conn, uint16_t tx, uint16_t rx)
 
 static struct bt_gatt_cb gatt_cb = {.att_mtu_updated = mtu_updated};
 
-/* Start here: name from the last 2 bytes of the chip ID, Bluetooth on, advertise, then print
- * counters every 10 s forever. The real work runs in other threads (replay.c, ehg_service.c). */
+/* Button 1 starts or stops a session, like the button on a Zio or Faros patch. The laptop's START
+ * over Bluetooth does the same; a START while running is ignored, so the two never fight. */
+static void button_changed(uint32_t state, uint32_t has_changed)
+{
+	if (has_changed & state & DK_BTN1_MSK) {
+		if (replay_running()) {
+			LOG_INF("button: stop");
+			replay_stop();
+		} else {
+			LOG_INF("button: start");
+			replay_start();
+		}
+	}
+}
+
+/* Start here: name from the last 2 bytes of the chip ID, Bluetooth on, advertise, then show the
+ * state on the LEDs (LED1 = laptop connected, LED2 = sampling) and print counters every 10 s.
+ * The real work runs in other threads (replay.c, ehg_service.c). */
 int main(void)
 {
 	uint8_t id[8] = {0};
@@ -142,10 +163,17 @@ int main(void)
 	bt_set_name(name);
 	bt_gatt_cb_register(&gatt_cb);
 	k_work_submit(&adv_work);
+	if (dk_leds_init() || dk_buttons_init(button_changed)) {
+		LOG_WRN("buttons/LEDs unavailable");
+	}
 
-	for (;;) {
-		k_sleep(K_SECONDS(10));
-		ehg_service_log_stats();
+	for (int i = 1;; i++) {
+		k_sleep(K_MSEC(200));
+		dk_set_led(DK_LED1, ehg_service_connected());
+		dk_set_led(DK_LED2, replay_running());
+		if (i % 50 == 0) {
+			ehg_service_log_stats();
+		}
 	}
 	return 0;
 }

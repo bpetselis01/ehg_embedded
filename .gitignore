@@ -10,7 +10,6 @@ papers/*.pdf
 .env
 eval/results/
 backend/.env
-firmware/ehg_node/src/replay_data.h
 gateway/logs/
 .playwright-mcp/
 *.pdf
