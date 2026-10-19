@@ -6,8 +6,16 @@ PURPOSE: H1: time from "sample produced on the board" to "sample available in th
   Target: 95 % of samples under 2 s (stretch: under 1 s).
 INPUT: ehg_pkt rows (1 per packet; timestamps t_inject_dev, t_gw_rx, t_mqtt_pub, t_ingest_rx, t_db_ack)
   from eval/backend_client.py:query_pkts. Fields: docs/interface-spec.md 5.
+  e.g. 1 row: t_inject_dev 98304, t_inject_host 1791243068.0187, t_gw_rx 1791243068.4687,
+       t_mqtt_pub 1791243068.4691, t_ingest_rx ..., t_db_ack ...  (full row: eval/backend_client.py)
 OUTPUT: printed median / p95 / p99 / max, overall and per stage (radio, MQTT, ingest, database);
   eval/results/latency_cdf_<node>.png (CDF = "fraction of samples arrived within X ms").
+  e.g. (median/p95 from the 2026-10-06 OTA run; n, p99, max and stage numbers shown as x):
+    H1 per-sample end-to-end: n=x median=255.0 ms p95=472.0 ms p99=x ms max=x ms
+       target p95 < 2000 ms: PASS; stretch p95 < 1000 ms: PASS
+      inject->gateway rx (incl. batching)    n=x median=x ms p95=x ms p99=x ms max=x ms
+      gateway rx->mqtt publish               ...  (same for mqtt->ingest, ingest->db ack)
+    saved eval/results/latency_cdf_EHG-93C0.png
 HOW: Per sample: latency = t_db_ack - (t_inject_host + i/fs) for frame i of its packet, so batching delay counts.
   Re-converts board clock to laptop time offline: linear fit of the lower envelope of (t_gw_rx - t_dev)
   removes crystal drift (20-50 ppm = 72-180 ms/h; Moon, Skelly & Towsley, INFOCOM 1999). The live

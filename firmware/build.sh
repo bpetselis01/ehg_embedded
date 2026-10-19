@@ -3,6 +3,9 @@
 #   firmware/build.sh                 build
 #   firmware/build.sh flash           build + flash the DK
 #   firmware/build.sh pristine flash  clean build + flash
+# After compiling, every run also writes build/compile_commands.json: the compiler's list of
+#   flags per file, with file paths swapped from ~/thesisb to the real folder so VS Code
+#   (.vscode/settings.json) matches the files you open and stops showing false red errors.
 # Nordic's build breaks on folder names with spaces ("2026 Term 3/Thesis B"), so everything
 # is built through a space-free shortcut: ~/thesisb -> this repo.
 #
@@ -13,7 +16,7 @@
 # BEFORE -> AFTER: Needs ehg_node/src/replay_data.h (tools/make_replay.py). Makes ehg_node/build/;
 #   with "flash", programs the nRF52840 DK. SEE: docs/firmware.md
 set -e
-REPO="$(cd "$(dirname "$0")/.." && pwd)"
+REPO="$(cd "$(dirname "$0")/.." && pwd -P)"   # -P: real folder, even if run via ~/thesisb
 LINK="$HOME/thesisb"
 [ -L "$LINK" ] || ln -s "$REPO" "$LINK"
 export ZEPHYR_BASE="$HOME/ncs/v3.4.1/zephyr"
@@ -23,5 +26,7 @@ APP="$LINK/firmware/ehg_node"
 [ -f "$APP/src/replay_data.h" ] || { echo "run first: uv run python tools/make_replay.py data/converted/tpehgdb/tpehg1007.npz --record-id 0"; exit 1; }
 P=""; [ "$1" = pristine ] && { P="-p"; shift; }
 $WEST build $P -b nrf52840dk/nrf52840 -d "$APP/build" "$APP"
+# only "file" lines: the "command" lines must keep space-free paths
+sed '/"file":/s#'"$LINK"'#'"$REPO"'#' "$APP/build/ehg_node/compile_commands.json" > "$APP/build/compile_commands.json"
 [ "$1" = flash ] && $WEST flash -d "$APP/build" --dev-id "$DEV_ID"
 exit 0

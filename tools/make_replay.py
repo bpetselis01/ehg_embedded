@@ -6,6 +6,8 @@ record_id = that record's id in the DB's manifest.json. Backend uses it to find 
 PURPOSE: Puts 1 recording inside the firmware so the board can "play" it as a fake sensor.
 INPUT: data/converted/<db>/<record>.npz from tools/convert.py (arrays: docs/data/tpehgdb.md)
   uses `samples` int16 [n_frames, n_ch] and `fs`; plus --record-id N from the manifest.
+  e.g. tpehg1007.npz: samples int16 (35180, 3), first rows [[1093, 171, -748], [1145, 180, -790]];
+       fs 20.0; --record-id 0
 OUTPUT: firmware/ehg_node/src/replay_data.h (generated C text, not committed):
     #define REPLAY_N_CH 3 / REPLAY_N_FRAMES 35180 / REPLAY_FS_HZ 20 / REPLAY_RECORD_ID 0 / REPLAY_SAMPLE_BITS 16
     static const int16_t replay_samples[] = { 1093, 171, -748,  1145, 180, -790, ... }  (1 line per frame)

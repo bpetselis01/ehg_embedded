@@ -50,7 +50,80 @@ Threads (jobs that run side by side; lower number = more urgent):
 |---|---|---|
 | replay thread ([`replay.c`](../firmware/ehg_node/src/replay.c)) | 2 | timing-critical: releases frames on time |
 | tx_thread ([`ehg_service.c`](../firmware/ehg_node/src/ehg_service.c)) | 5 | builds and sends packets, handles resends |
-| main ([`main.c`](../firmware/ehg_node/src/main.c)) | default | start-up, then prints counters every 10 s |
+| main ([`main.c`](../firmware/ehg_node/src/main.c)) | 0 (Zephyr's default) | start-up, then prints counters every 10 s. Most urgent, but asleep almost all the time |
+
+## What happens, in order
+
+From an empty board to packets arriving on the laptop, then on to a reconnect. **Who** acts at each step:
+💻 a tool on the laptop, 🔧 Nordic/Zephyr, ✍️ our code. **You see** = where to look to check it happened.
+
+One correction to a common reading of `main.c`: **the board never starts the Bluetooth connection.**
+`main.c` turns Bluetooth on and *advertises* ("I'm here"). The laptop's `gateway/gateway.py` finds it and *connects*.
+`main.c` only accepts the connection and reacts to it in callbacks. Data flows only after the laptop sends START.
+
+### Stage A: prepare the recording (once per recording)
+
+| # | Who | What happens | You see |
+|---|---|---|---|
+| A1 | 💻 [`tools/convert.py`](../tools/convert.py) | PhysioNet `.hea/.dat` → `data/converted/tpehgdb/tpehg1007.npz` (raw counts, row 0 = `1093 171 -748`) | the `.npz` file + `manifest.json` |
+| A2 | 💻 [`tools/make_replay.py`](../tools/make_replay.py) | `.npz` → `src/replay_data.h`: `#define REPLAY_N_CH 3 … replay_samples[] = { 1093, 171, -748, …` | the `.h` file (35,000 lines) |
+
+### Stage B: build (`firmware/build.sh`)
+
+| # | Who | What happens | You see |
+|---|---|---|---|
+| B1 | ✍️ [`build.sh`](../firmware/build.sh) | makes the `~/thesisb` shortcut if missing, stops if `replay_data.h` is missing | `run first: uv run python tools/make_replay.py …` if missing |
+| B2 | 🔧 `nrfutil toolchain-manager launch -- west build` | starts Nordic's build tool inside Nordic's toolchain (`west` is not on PATH) | build log scrolling |
+| B3 | 🔧 sysbuild + CMake read [`CMakeLists.txt`](../firmware/ehg_node/CMakeLists.txt) | finds Zephyr, checks `replay_data.h`, gets the file list `main.c replay.c ehg_service.c` | `-- Found Zephyr` … |
+| B4 | 🔧 Kconfig | merges Zephyr defaults + [`prj.conf`](../firmware/ehg_node/prj.conf) + our [`Kconfig`](../firmware/ehg_node/Kconfig) → `build/ehg_node/zephyr/.config` | e.g. `CONFIG_EHG_FRAMES_PER_PACKET=10` in `.config` |
+| B5 | 🔧 devicetree | board file for `nrf52840dk/nrf52840` → `zephyr.dts` (pins, radio, 1 MB flash, 256 KB RAM) | `zephyr.dts` |
+| B6 | 🔧 GCC (`arm-zephyr-eabi-gcc`) | compiles our 3 `.c` files + Zephyr + the Bluetooth stack, then links them into one program | `Memory region … FLASH: 348300 B 33.22%` |
+| B7 | 🔧 | writes the image | `build/ehg_node/zephyr/zephyr.hex` |
+| B8 | ✍️ `build.sh` | copies `compile_commands.json` with real paths for VS Code (see build/ table) | `build/compile_commands.json` |
+
+### Stage C: flash + boot (`firmware/build.sh flash`)
+
+| # | Who | What happens | You see |
+|---|---|---|---|
+| C1 | 🔧 `west flash --dev-id 1050208294` → `nrfutil` | writes `zephyr.hex` into the nRF52840's flash through the DK's on-board USB debugger, then resets the chip | `Programming …`, `Reset` |
+| C2 | 🔧 Zephyr boot | sets up memory, clock (32768 ticks/s), drivers, logging | serial: a `*** Booting nRF Connect SDK … ***` banner |
+| C3 | 🔧 Zephyr | creates our 2 threads (`K_THREAD_DEFINE`) **before `main()` runs**: [`replay_thread`](../firmware/ehg_node/src/replay.c:81) (priority 2) and [`tx_thread`](../firmware/ehg_node/src/ehg_service.c:186) (priority 5). They run whenever `main` is waiting | nothing yet |
+| C4 | ✍️ `replay_thread` | waits on `start_sem` until START. Nothing is sampled before START | nothing |
+| C5 | ✍️ `tx_thread` | loop: check for RESEND requests, wait up to 10 ms for a frame in `replay_ring` (empty for now) | nothing |
+| C6 | 🔧 Zephyr | registers our Bluetooth service (`BT_GATT_SERVICE_DEFINE`) and the connection callbacks (`BT_CONN_CB_DEFINE`); both are built in at compile time | nothing |
+
+### Stage D: `main()` → connect → stream
+
+| # | Who | What happens | You see (serial log / laptop) |
+|---|---|---|---|
+| D1 | ✍️ [`main()`](../firmware/ehg_node/src/main.c:129) | reads the chip ID, names the board from its last 2 bytes | name `EHG-93C0` |
+| D2 | ✍️ → 🔧 `bt_enable(NULL)` | turns the radio and Bluetooth stack on (waits until ready) | `<inf> bt_hci_core: …` lines |
+| D3 | ✍️ `bt_set_name`, `bt_gatt_cb_register`, `k_work_submit(&adv_work)` | sets the name, asks to be told about MTU changes, queues "start advertising" | |
+| D4 | ✍️ [`adv_work_handler`](../firmware/ehg_node/src/main.c:52) → 🔧 `bt_le_adv_start` | board broadcasts its name + EHG service ID every 100–150 ms (`BT_LE_ADV_CONN_FAST_2`) | `<inf> main: advertising as EHG-93C0` |
+| D5 | ✍️ `main()` | enters its forever loop: sleep 10 s, print counters | every 10 s: `<inf> ehg_svc: sent=0 resent=0 …` |
+| D6 | 💻 [`gateway.py`](../gateway/gateway.py) `ble_main` | `BleakScanner` lists nearby devices, picks names starting `EHG-` | laptop: `scanning for up to 1 node(s) named EHG-* ...` |
+| D7 | 💻 `run_ble_node` → 🔧 | **the laptop connects** to the board | laptop: `[EHG-93C0] connected, mtu=247` |
+| D8 | ✍️ [`connected()`](../firmware/ehg_node/src/main.c:65) | stores the connection (`ehg_service_set_conn`), asks for 2M PHY + max data length (requests only) | `<inf> main: connected` |
+| D9 | 🔧 → ✍️ `phy_updated`, `data_len_updated`, `mtu_updated` | the laptop answers; the callbacks only log what it granted | `PHY: tx 2 rx 2`, `data length: tx 251 B rx 251 B`, `ATT MTU: tx 247 rx 247` |
+| D10 | 🔧 Zephyr (auto, ~5 s after connecting) | asks for the `prj.conf` connection interval (15–30 ms); macOS picks | `conn params: interval 30.00 ms, latency 0, timeout 6000 ms` |
+| D11 | 💻 `start_notify(DATA_UUID)` | laptop flips the CCC switch: "send me notifications" | |
+| D12 | 💻 writes `01` to the command slot → ✍️ [`ctrl_write`](../firmware/ehg_node/src/ehg_service.c:78) → [`replay_start`](../firmware/ehg_node/src/replay.c:55) | resets counters, notes `t0`, wakes `replay_thread` | `<inf> replay: replay start: record 0, 3 ch @ 20 Hz, 35180 frames` |
+| D13 | ✍️ `replay_thread` | every 50 ms: sleep until due, stamp tick, put `{tick, frame_idx, 1093 171 -748}` in `replay_ring` | |
+| D14 | ✍️ `tx_thread` | after 10 frames: 20-byte header + 60 bytes samples, copy into history, [`send()`](../firmware/ehg_node/src/ehg_service.c:136) → `bt_gatt_notify` | `sent=` climbs by 2 per second |
+| D15 | 💻 `Node.on_bytes` | decode, CSV line, gap check, publish JSON to MQTT `ehg/EHG-93C0/pkt` | `gateway/logs/EHG-93C0.csv` grows |
+| D16 | 💻 → ✍️ (only on a gap) | laptop writes `03 <seq> <count>`; `ctrl_write` queues it, `serve_resends` re-sends from history with flags bit0 = 1 | `resent=` / `resend_miss=` |
+
+### Stage E: stop / disconnect / reconnect
+
+| # | Who | What happens | You see |
+|---|---|---|---|
+| E1 | 💻 Ctrl-C on the gateway | writes `02` (STOP) → `replay_stop`, then disconnects | |
+| E2 | ✍️ [`disconnected()`](../firmware/ehg_node/src/main.c:79) | forgets the connection (also stops replay), prints final counters | `<inf> main: disconnected (0x13)` + a `sent=…` line |
+| E3 | ✍️ [`recycled()`](../firmware/ehg_node/src/main.c:87) | once Zephyr has freed the connection: advertise again (back to D4) | `<inf> main: advertising as EHG-93C0` |
+| E4 | 💻 gateway (if still running) | reconnects automatically after 2 s, sends START again → `frame_idx` and `seq` restart at 0 | laptop: `… reconnecting in 2 s` |
+
+The board keeps its program after power-off. Unplug/replug = start again from C2 (no rebuild, no reflash).
+
 
 ## Settings (Kconfig, change in prj.conf)
 
@@ -89,7 +162,8 @@ Most of it is build-tool internals. The parts worth knowing:
 | `build/ehg_node/zephyr/.config` | every final setting (Zephyr defaults + prj.conf + Kconfig), e.g. `CONFIG_EHG_FRAMES_PER_PACKET=10` |
 | `build/ehg_node/zephyr/zephyr.dts` | the board's hardware description (pins, radio, memory) used for this build |
 | `build/ehg_node/zephyr/runners.yaml` | which tool flashes the board (`nrfutil`) |
-| `build/ehg_node/compile_commands.json` | lets editors (VS Code) understand the code |
+| `build/ehg_node/compile_commands.json` | the compiler's exact flags for every file (include folders, `CONFIG_…` values), with `~/thesisb` paths |
+| `build/compile_commands.json` | **ours**, written by `build.sh` after each build: same file with the real folder path in `"file"`, so VS Code (`.vscode/settings.json`) matches the files you open. Without it every Zephyr macro shows red even though the build is fine |
 | `build/_sysbuild/`, `build/ehg_node/CMakeFiles/`, `*.ninja`, `CMakeCache.txt`, `modules/` | build-tool internals; ignore |
 
 Last build (16-bit, tpehg1007): 33 % of flash, 28 % of RAM used.

@@ -6,6 +6,8 @@ PURPOSE: The clinical-boundary hand-off. Lets any FHIR system read what the pipe
   without changing the custom transport (firmware -> BLE -> MQTT -> InfluxDB stays as is).
 INPUT: stored frames + record_id + first-frame time from eval/backend_client.py:query_frames;
   gain / baseline / channel names / fs from the source .npz (tools/convert.py:source_file).
+  e.g. frames {0: [1093, 171, -748], 1: [1145, 180, -790], 2: [1078, 213, -761]}, record_id 0,
+       start 2026-10-06T02:31:08Z; tpehg1007.npz: gain 13107, baseline 0, channels "1" "2" "3", fs 20
 OUTPUT: FHIR R5 Bundle (type "collection"), JSON:
     Device       identifier = node id (e.g. EHG-0001)
     Observation  code "EHG waveform", effectivePeriod, device -> the Device,
@@ -14,6 +16,11 @@ OUTPUT: FHIR R5 Bundle (type "collection"), JSON:
                    interval 1000/fs ms            dimensions 1
                    data     "1093 1145 ..."  raw counts, unchanged; "E" = frame never arrived
   value in mV = origin + factor * count = (count - baseline) / gain, same formula as convert.py.
+  e.g. for the input above: effectivePeriod 2026-10-06T02:31:08+00:00 .. 02:31:08.100000+00:00,
+       Device fullUrl urn:uuid:05460793-8dee-5d58-888e-eb4867a863e3, channel 1 component:
+       {"code": {"coding": [{"system": "urn:thesisb:ehg", "code": "channel-1"}], "text": "EHG channel 1"},
+        "valueSampledData": {"origin": {"value": 0.0, "unit": "mV", ...}, "interval": 50.0,
+          "intervalUnit": "ms", "factor": 7.629510948348211e-05, "dimensions": 1, "data": "1093 1145 1078"}}
 HOW: Frames lo..hi of the window become one time series per channel. Raw counts go in `data`
   so the export is still bit-exact (H4); FHIR's own origin + factor do the mV conversion.
   No standard LOINC/SNOMED code for EHG was found, so codes use a local system (CODE_SYSTEM).

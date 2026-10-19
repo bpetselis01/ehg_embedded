@@ -3,8 +3,12 @@
 PURPOSE: 2 helpers per board: spot missing packets; turn the board's clock into real time.
 INPUT: GapTracker.observe(seq): packet number of each arrival.
   ClockMap.update(ticks, t_host): board clock ticks (32768/s, 32-bit, wraps) + laptop time at arrival.
+  e.g. observe(0), observe(1), observe(2), observe(5), observe(3)
+  e.g. update(113049, 1791243068.468658)  (tick of the packet's last frame, laptop time it arrived)
 OUTPUT: observe() -> list of newly missing seq numbers (e.g. 5 arrives after 2 -> [3, 4]).
+  e.g. the 5 calls above return [], [], [], [3, 4], []   (3 arriving late fills its gap)
   ClockMap.to_host(ticks) -> laptop epoch seconds.
+  e.g. after that update, to_host(98304) -> 1791243068.0187 (frame 0, 0.45 s before arrival)
 HOW: GapTracker watches seq. ClockMap compares "board time at sampling" with "laptop time at
   receipt" and keeps the smallest difference = best estimate of how the clocks line up.
 ROLE IN THESIS: GapTracker makes every loss identifiable, triggers re-requests (H2).

@@ -9,12 +9,24 @@ PURPOSE: Laptop-side bridge. Packets from the board (Bluetooth) -> database side
 INPUT: 1 BLE notification per packet = bytes in the wire format (header + int16 samples;
   docs/interface-spec.md 3, code gateway/packet.py). --simulate builds the same bytes from
   data/converted/tpehgdb/tpehg1007.npz (--sim-record).
+  e.g. 80 bytes: 01 03 14 00 00 00 00 00 00 00 00 00 00 80 01 00 0a 00 00 00 | 45 04 ab 00 14 fd ...
+       = header (seq 0, frame_idx 0, t_inject 98304, 10 frames) | samples 1093 171 -748 ...
+       (byte-by-byte breakdown: firmware/ehg_node/src/ehg_service.c header)
 OUTPUT:
   MQTT topic ehg/<node>/pkt, QoS 1, 1 JSON per packet (docs/interface-spec.md 4):
     {node_id, seq, frame_idx, t_inject, t_inject_host, n_ch, fs_hz, record_id, flags,
      samples [[ch1, ch2, ch3], ...], t_gw_rx, t_mqtt_pub}
+    e.g. topic ehg/EHG-93C0/pkt, the packet above (made with Node.on_bytes):
+      {"node_id": "EHG-93C0", "seq": 0, "frame_idx": 0, "t_inject": 98304,
+       "t_inject_host": 1791243068.0186763, "n_ch": 3, "fs_hz": 20, "record_id": 0, "flags": 0,
+       "samples": [[1093, 171, -748], [1145, 180, -790], ... 10 frames ..., [748, -101, -897]],
+       "t_gw_rx": 1791243068.468658, "t_mqtt_pub": 1791243068.46912}
   gateway/logs/<node>.csv, 1 line per packet: seq, frame_idx, flags, t_gw_rx, bytes
     (splits loss into radio vs host stack, report 6.8/6.10)
+    e.g. seq,frame_idx,flags,t_gw_rx,bytes
+         0,0,0,1791243068.468658,80
+  RESEND to the board when a gap shows: e.g. seq 3 arrives after 0 -> bytes 03 01 00 00 00 02 00
+    (resend seq 1, count 2). --no-mqtt prints instead: EHG-93C0 seq=0 frame=0 first=[1093, 171, -748]
 HOW: Scan for "EHG-*", connect, subscribe to the data slot, send START. Per packet: decode, write
   CSV line, update loss tracker + clock map, ask board to re-send gaps, publish JSON.
   MQTT = post office: publishers drop messages on a topic, subscribers receive.
