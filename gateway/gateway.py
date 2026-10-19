@@ -5,24 +5,39 @@
   uv run python -m gateway.gateway --no-mqtt       # print instead of publishing
   uv run python -m gateway.gateway --simulate 3    # 3 software nodes, no BLE (backend tests, H3 load)
 
-Every notification is timestamped on arrival and logged to gateway/logs/<node>.csv
-(seq, frame_idx, flags, t_gw_rx, bytes) so loss can be attributed to the radio vs the
-host stack (report Section 6.8/6.10).
-
-PURPOSE: The laptop-side bridge. It receives packets from the board over Bluetooth and
-  forwards them to the database side over the network (MQTT).
-HOW: Scans for devices named "EHG-*", connects, subscribes to the data slot, and sends START.
-  For every packet: decode it, write an arrival line to a CSV log, update the loss tracker and
-  clock map, ask the board to re-send anything missing, and publish a JSON message on topic
-  ehg/<node>/pkt. MQTT is a "post office": publishers drop messages on a topic, subscribers
-  receive them. QoS 1 means the post office keeps a message until delivery is confirmed.
-  --simulate replaces the board with software nodes that send identical packets.
-ROLE IN THESIS: The gateway box in report Fig. 10 (Gantt Phase 2). It adds the arrival
-  timestamp t_gw_rx and t_mqtt_pub (H1 stage timing), drives loss recovery (H2), and handles
-  several nodes at once (H3).
-BEFORE -> AFTER: Before: firmware (ehg_service.c) or the simulator. Uses gateway/packet.py to
-  decode and gateway/tracking.py to track. After: the Mosquitto broker (backend/), whose
-  subscribers are backend/ingest/ingest.py (stores to InfluxDB) and viewer/server.py (live plot).
+PURPOSE: Laptop-side bridge. Packets from the board (Bluetooth) -> database side (MQTT).
+INPUT: 1 BLE notification per packet = bytes in the wire format (header + int16 samples + CRC;
+  docs/interface-spec.md 3, code gateway/packet.py). --simulate builds the same bytes from
+  data/converted/tpehgdb/tpehg1007.npz (--sim-record).
+  e.g. 82 bytes: 02 03 14 00 00 00 00 00 00 00 00 00 00 80 01 00 0a 00 00 00 | 45 04 ab 00 14 fd ... | 78 bb
+       = header (seq 0, frame_idx 0, t_inject 98304, 10 frames) | samples 1093 171 -748 ... | CRC
+       (byte-by-byte breakdown: firmware/ehg_node/src/ehg_service.c header)
+OUTPUT:
+  MQTT topic ehg/<node>/pkt, QoS 1, 1 JSON per packet (docs/interface-spec.md 4):
+    {node_id, seq, frame_idx, t_inject, t_inject_host, n_ch, fs_hz, record_id, flags,
+     samples [[ch1, ch2, ch3], ...], t_gw_rx, t_mqtt_pub}
+    e.g. topic ehg/EHG-93C0/pkt, the packet above (made with Node.on_bytes):
+      {"node_id": "EHG-93C0", "seq": 0, "frame_idx": 0, "t_inject": 98304,
+       "t_inject_host": 1791243068.0186763, "n_ch": 3, "fs_hz": 20, "record_id": 0, "flags": 0,
+       "samples": [[1093, 171, -748], [1145, 180, -790], ... 10 frames ..., [748, -101, -897]],
+       "t_gw_rx": 1791243068.468658, "t_mqtt_pub": 1791243068.46912}
+  gateway/logs/<node>.csv, 1 line per packet: seq, frame_idx, flags, t_gw_rx, bytes
+    (splits loss into radio vs host stack, report 6.8/6.10)
+    e.g. seq,frame_idx,flags,t_gw_rx,bytes
+         0,0,0,1791243068.468658,82
+  RESEND to the board when a gap shows: e.g. seq 3 arrives after 0 -> bytes 03 01 00 00 00 02 00
+    (resend seq 1, count 2). --no-mqtt prints instead: EHG-93C0 seq=0 frame=0 first=[1093, 171, -748]
+HOW: Scan for "EHG-*", connect, subscribe to the data slot, send START. Per packet: decode (CRC
+  checked), write CSV line, update loss tracker + clock map, ask board to re-send gaps (again after 1 s,
+  up to 5 times, if the re-sent copy is lost too), publish JSON. One tracker per board for the whole
+  run, so a reconnect recovers what the board made while the link was down.
+  MQTT = post office: publishers drop messages on a topic, subscribers receive.
+  QoS 1 = post office keeps a message until delivery confirmed.
+ROLE IN THESIS: Gateway box in report Fig. 10 (Gantt Phase 2). Adds t_gw_rx and t_mqtt_pub (H1 stage
+  timing), drives loss recovery (H2), handles several nodes (H3).
+BEFORE -> AFTER: Before: firmware/ehg_node/src/ehg_service.c (or the simulator). Decodes with
+  gateway/packet.py, tracks with gateway/tracking.py. After: Mosquitto broker (backend/), read by
+  backend/ingest/ingest.py (stores to InfluxDB) and viewer/server.py (live plot).
 """
 
 import argparse
@@ -36,7 +51,7 @@ from pathlib import Path
 
 import numpy as np
 
-from gateway.packet import FLAG_RETRANS, TICK_HZ, Packet, pack, parse
+from gateway.packet import FLAG_24BIT, FLAG_RETRANS, TICK_HZ, VERSION, Packet, pack, parse
 from gateway.tracking import ClockMap, GapTracker
 
 # Must match firmware/ehg_node/src/ehg_service.c
@@ -45,6 +60,7 @@ DATA_UUID = "4e480002-a0e1-4c3b-8747-9a1b2c3d4e5f"
 CTRL_UUID = "4e480003-a0e1-4c3b-8747-9a1b2c3d4e5f"
 OP_START, OP_STOP, OP_RESEND = 0x01, 0x02, 0x03
 NAME_PREFIX = "EHG-"
+RETRY_S, MAX_TRIES = 1.0, 5  # re-ask for a still-missing packet after 1 s, at most 5 times in all
 LOGS = Path("gateway/logs")
 
 
@@ -58,6 +74,9 @@ class Node:
     def __init__(self, node_id: str, publish, request_resend):
         self.id = node_id
         self.gaps, self.clock = GapTracker(), ClockMap()
+        self.bad = 0  # packets rejected by parse (wrong CRC, length or version)
+        self._asked: dict[int, tuple[float, int]] = {}  # missing seq -> (last request time, requests so far)
+        self._stream = 0
         self.publish, self.request_resend = publish, request_resend
         LOGS.mkdir(parents=True, exist_ok=True)
         self._log_file = open(LOGS / f"{node_id}.csv", "a", newline="")
@@ -69,7 +88,8 @@ class Node:
         """Handle one received packet: decode, log, track, request resends, publish."""
         try:
             p = parse(b)
-        except ValueError as e:
+        except ValueError as e:  # e.g. crc mismatch: dropped, so the next packet shows it as a gap
+            self.bad += 1
             print(f"[{self.id}] bad packet: {e}")
             return
         self._log.writerow([p.seq, p.frame_idx, p.flags, f"{t_rx:.6f}", len(b)])
@@ -78,17 +98,33 @@ class Node:
             # the batching delay is folded into the clock offset and latency reads ~0.
             t_last = p.t_inject + (p.n_frames - 1) * TICK_HZ // p.fs_hz
             self.clock.update(t_last & 0xFFFFFFFF, t_rx)
-        for start, count in ranges(self.gaps.observe(p.seq)):
-            self.request_resend(start, count)
+        self._request_missing(self.gaps.observe(p.seq), t_rx)
         msg = {"node_id": self.id, "seq": p.seq, "frame_idx": p.frame_idx, "t_inject": p.t_inject,
                "t_inject_host": self.clock.to_host(p.t_inject), "n_ch": p.n_ch, "fs_hz": p.fs_hz,
                "record_id": p.record_id, "flags": p.flags, "samples": p.samples, "t_gw_rx": t_rx}
         self.publish(self.id, msg)
 
+    def _request_missing(self, new_gaps: list[int], t: float):
+        """Ask the board for new gaps at once, and again (every RETRY_S, up to MAX_TRIES) for any
+        still missing: the re-sent copy can be lost on the air too, and one request is not enough."""
+        if self.gaps.streams != self._stream:  # board restarted numbering: old requests mean nothing
+            self._stream, self._asked = self.gaps.streams, {}
+        due = list(new_gaps)
+        for s in list(self._asked):
+            if s not in self.gaps.missing:
+                del self._asked[s]  # arrived
+            elif t - self._asked[s][0] >= RETRY_S and self._asked[s][1] < MAX_TRIES:
+                due.append(s)
+        for s in due:
+            self._asked[s] = (t, self._asked.get(s, (0, 0))[1] + 1)
+        for start, count in ranges(sorted(due)):
+            self.request_resend(start, count)
+
     def stats(self) -> str:
         """One-line summary printed every ~10 s."""
         g = self.gaps
-        return f"[{self.id}] rx={g.received} missing={len(g.missing)} dup={g.duplicates} streams={g.streams}"
+        return (f"[{self.id}] rx={g.received} missing={len(g.missing)} dup={g.duplicates} streams={g.streams}"
+                f" bad={self.bad}")
 
     def close(self):
         self._log_file.close()
@@ -131,6 +167,9 @@ async def run_ble_node(device, publish, stop: asyncio.Event):
     from bleak import BleakClient
 
     node_id = device.name
+    # One Node for the whole run: after a reconnect its gap tracker still knows the last seq, so the
+    # packets the board made while disconnected (it keeps sampling) are requested from its history.
+    node = Node(node_id, publish, lambda start, count: None)
     while not stop.is_set():
         try:
             async with BleakClient(device) as client:
@@ -138,19 +177,19 @@ async def run_ble_node(device, publish, stop: asyncio.Event):
                     asyncio.get_running_loop().create_task(
                         client.write_gatt_char(CTRL_UUID, struct.pack("<BIH", OP_RESEND, start, count), response=False))
 
-                node = Node(node_id, publish, resend)
+                node.request_resend = resend
                 print(f"[{node_id}] connected, mtu={client.mtu_size}")
                 await client.start_notify(DATA_UUID, lambda _, data: node.on_bytes(bytes(data), time.time()))
-                await client.write_gatt_char(CTRL_UUID, bytes([OP_START]), response=True)
+                await client.write_gatt_char(CTRL_UUID, bytes([OP_START]), response=True)  # no-op if already running
                 while client.is_connected and not stop.is_set():
                     await asyncio.sleep(10)
                     print(node.stats())
                 if client.is_connected:
                     await client.write_gatt_char(CTRL_UUID, bytes([OP_STOP]), response=True)
-                node.close()
         except Exception as e:  # BLE drops are expected; log and reconnect
             print(f"[{node_id}] {type(e).__name__}: {e}; reconnecting in 2 s")
             await asyncio.sleep(2)
+    node.close()
 
 
 async def ble_main(args, publish):
@@ -192,9 +231,10 @@ async def sim_node(i: int, args, publish):
         t_frame0 = t0 + frame0 / fs
         await asyncio.sleep(max(0.0, t_frame0 + (nf - 1) / fs - time.monotonic()))  # last frame injected
         samples = [src[(frame0 + k) % len(src)].tolist() for k in range(nf)]
-        p = Packet(1, n_ch, int(fs), seq, frame0, int(t_frame0 * TICK_HZ) & 0xFFFFFFFF, nf, 0, 0, samples)
+        flags = FLAG_24BIT if src.dtype == np.int32 else 0  # convert.py --bits 24 records
+        p = Packet(VERSION, n_ch, int(fs), seq, frame0, int(t_frame0 * TICK_HZ) & 0xFFFFFFFF, nf, flags, 0, samples)
         b = pack(p)
-        history[seq] = pack(Packet(**{**p.__dict__, "flags": FLAG_RETRANS}))
+        history[seq] = pack(Packet(**{**p.__dict__, "flags": flags | FLAG_RETRANS}))
         history.pop(seq - 1024, None)
         if random.random() >= args.sim_loss:
             node.on_bytes(b, time.time())

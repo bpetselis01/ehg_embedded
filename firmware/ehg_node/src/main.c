@@ -1,25 +1,31 @@
 /*
- * main.c - EHG sensor node for the nRF52840 DK.
+ * main.c - start-up + Bluetooth connection. The program starts here.
  *
- * Advertises as "EHG-XXXX" (XXXX from the chip's device ID, so several DKs get distinct
- * names for H3). On connect: requests 2M PHY and max data length, and logs what the
- * central actually granted (MTU, PHY, DLE, interval) because macOS decides these itself.
- * Streaming starts when the gateway writes START to the control characteristic.
- *
- * Logs on VCOM0 at 115200: link parameters on change, packet stats every 10 s.
- *
- * PURPOSE: Start-up and Bluetooth "front door" of the sensor board. It makes the board
- *   discoverable, accepts a connection from the laptop, and reports link quality.
- * HOW: Builds a unique name from the chip ID, turns Bluetooth on, and advertises (broadcasts
- *   "I'm here, connect to me"). When the laptop connects, it hands the connection to
- *   ehg_service.c and asks for the fastest radio settings. A set of callbacks print what was
- *   actually agreed. The main loop then just prints statistics every 10 s.
- * ROLE IN THESIS: The node side of the BLE link (report Fig. 10). The logged link settings
- *   explain latency (H1) and throughput limits. Distinct names allow several boards (H3).
- * BEFORE -> AFTER: Nothing runs before it (it is the program entry point). It calls into
- *   ehg_service.c (set_conn / log_stats). The gateway (gateway/gateway.py) finds the board by
- *   the "EHG-" name prefix and the service ID advertised here.
- */
+ * PURPOSE: Names the board, makes it findable over Bluetooth, accepts the laptop's connection,
+ *   prints link info + counters to the serial log.
+ * INPUT: chip ID (for the name); the connection from the laptop (gateway/gateway.py).
+ *   e.g. chip ID 8 bytes, last 2 = 93 C0 (our DK) -> name "EHG-93C0".
+ *   e.g. connection: the laptop connects and asks for its link settings; main.c only accepts.
+ * OUTPUT: Bluetooth adverts as "EHG-XXXX" (XXXX from the chip ID, so every board has its own name, H3).
+ *   Serial log (VCOM0, 115200 baud): link settings when they change, packet counters every 10 s.
+ *   e.g. advert: flags 06 + name "EHG-93C0"; scan response: service ID 4e480001-a0e1-...-9a1b2c3d4e5f
+ *   e.g. log of 1 connection (timestamps vary; values from the 2026-10-06 run):
+ *     [00:00:00.010,000] <inf> main: advertising as EHG-93C0
+ *     [00:00:04.120,000] <inf> main: connected
+ *     [00:00:04.300,000] <inf> main: PHY: tx 2 rx 2 (1=1M 2=2M)
+ *     [00:00:04.350,000] <inf> main: data length: tx 251 B rx 251 B
+ *     [00:00:04.400,000] <inf> main: ATT MTU: tx 247 rx 247
+ *     [00:00:04.900,000] <inf> main: conn params: interval 30.00 ms, latency 0, timeout 6000 ms
+ *     [00:00:10.000,000] <inf> ehg_svc: sent=11 resent=0 resend_miss=0 notify_err=0 ring_overflow=0 max_inject_late=31 us
+ *     [00:05:00.000,000] <inf> main: disconnected (0x13)   (0x13 = laptop closed it; 0x08 = link timed out)
+ * HOW: name from chip ID -> Bluetooth on -> advertise ("I'm here, connect to me").
+ *   Button 1 starts/stops a session (as the laptop's START/STOP does). LED1 = connected, LED2 = sampling.
+ *   On connect: hand the connection to ehg_service.c, ask for the fastest radio settings.
+ *   The laptop decides what it actually grants; the callbacks below only log it.
+ *   Streaming starts later, when the laptop sends START.
+ * ROLE IN THESIS: Board side of the Bluetooth link (report Fig. 10). Logged settings explain latency (H1).
+ * SEE: ehg_service.c (data + commands), docs/firmware.md (overview + glossary).
+  */
 #include <stdio.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
@@ -28,12 +34,15 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
+#include <dk_buttons_and_leds.h>
+
 #include "ehg_service.h"
+#include "replay.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
-/* Advertising data: what the board broadcasts so scanners can find it. `ad` carries the name,
- * `sd` (scan response) carries the EHG service ID that the gateway looks for. */
+/* What the board broadcasts so the laptop can find it.
+ * ad = flags + name. sd ("scan response", sent when asked) = the EHG service ID the gateway looks for. */
 static char name[9]; /* "EHG-XXXX" */
 static struct bt_data ad[] = {
 	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
@@ -43,7 +52,7 @@ static const struct bt_data sd[] = {
 	BT_DATA_BYTES(BT_DATA_UUID128_ALL, EHG_SVC_UUID_VAL),
 };
 
-/* Start broadcasting. Run as a queued job so it can be re-triggered after a disconnect. */
+/* Start advertising. Queued as a job so it can be restarted after a disconnect. */
 static void adv_work_handler(struct k_work *work)
 {
 	int err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_2, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
@@ -56,7 +65,7 @@ static void adv_work_handler(struct k_work *work)
 }
 static K_WORK_DEFINE(adv_work, adv_work_handler);
 
-/* Laptop connected: give the link to the EHG service and ask for faster radio settings. */
+/* Laptop connected: hand the connection to ehg_service.c, ask for faster radio settings. */
 static void connected(struct bt_conn *conn, uint8_t err)
 {
 	if (err) {
@@ -65,12 +74,13 @@ static void connected(struct bt_conn *conn, uint8_t err)
 	}
 	LOG_INF("connected");
 	ehg_service_set_conn(conn);
-	/* Requests only - the central decides. Results arrive in the callbacks below. */
+	/* Only requests: the laptop decides. 2M PHY = 2 Mbit/s radio mode; data length = bigger radio packets. */
 	bt_conn_le_phy_update(conn, BT_CONN_LE_PHY_PARAM_2M);
 	bt_conn_le_data_len_update(conn, BT_LE_DATA_LEN_PARAM_MAX);
 }
 
-/* Link lost: forget the connection (this also stops replay) and dump final stats. */
+/* Connection lost: forget it and print the counters. Sampling carries on (like a real sensor):
+ * packets made while offline wait in history and are re-sent when the gateway asks after reconnecting. */
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	LOG_INF("disconnected (0x%02x)", reason);
@@ -78,13 +88,13 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 	ehg_service_log_stats();
 }
 
-/* Connection fully cleaned up: safe to start advertising again so the gateway can reconnect. */
+/* Connection fully cleaned up: advertise again so the gateway can reconnect. */
 static void recycled(void)
 {
 	k_work_submit(&adv_work);
 }
 
-/* The next three only log what the laptop granted. Interval units are 1.25 ms, timeout 10 ms. */
+/* These 3 only log what the laptop granted. Units: interval x 1.25 ms, timeout x 10 ms. */
 static void param_updated(struct bt_conn *conn, uint16_t interval, uint16_t latency, uint16_t timeout)
 {
 	LOG_INF("conn params: interval %u.%02u ms, latency %u, timeout %u ms", interval * 125 / 100,
@@ -101,7 +111,7 @@ static void data_len_updated(struct bt_conn *conn, struct bt_conn_le_data_len_in
 	LOG_INF("data length: tx %u B rx %u B", i->tx_max_len, i->rx_max_len);
 }
 
-/* Register the callbacks above with the Bluetooth stack. */
+/* Tell the Bluetooth stack to call the functions above on these events. */
 BT_CONN_CB_DEFINE(conn_cb) = {
 	.connected = connected,
 	.disconnected = disconnected,
@@ -111,7 +121,7 @@ BT_CONN_CB_DEFINE(conn_cb) = {
 	.le_data_len_updated = data_len_updated,
 };
 
-/* MTU = largest packet the link allows. Our packets need at least 247 (see prj.conf). */
+/* MTU = biggest message the link allows. Ours need up to 247 bytes (see prj.conf). */
 static void mtu_updated(struct bt_conn *conn, uint16_t tx, uint16_t rx)
 {
 	LOG_INF("ATT MTU: tx %u rx %u", tx, rx);
@@ -119,8 +129,24 @@ static void mtu_updated(struct bt_conn *conn, uint16_t tx, uint16_t rx)
 
 static struct bt_gatt_cb gatt_cb = {.att_mtu_updated = mtu_updated};
 
-/* Entry point: name the board from the last 2 bytes of its chip ID, start Bluetooth,
- * advertise, then print stats every 10 s forever. Real work happens in other threads. */
+/* Button 1 starts or stops a session, like the button on a Zio or Faros patch. The laptop's START
+ * over Bluetooth does the same; a START while running is ignored, so the two never fight. */
+static void button_changed(uint32_t state, uint32_t has_changed)
+{
+	if (has_changed & state & DK_BTN1_MSK) {
+		if (replay_running()) {
+			LOG_INF("button: stop");
+			replay_stop();
+		} else {
+			LOG_INF("button: start");
+			replay_start();
+		}
+	}
+}
+
+/* Start here: name from the last 2 bytes of the chip ID, Bluetooth on, advertise, then show the
+ * state on the LEDs (LED1 = laptop connected, LED2 = sampling) and print counters every 10 s.
+ * The real work runs in other threads (replay.c, ehg_service.c). */
 int main(void)
 {
 	uint8_t id[8] = {0};
@@ -137,10 +163,17 @@ int main(void)
 	bt_set_name(name);
 	bt_gatt_cb_register(&gatt_cb);
 	k_work_submit(&adv_work);
+	if (dk_leds_init() || dk_buttons_init(button_changed)) {
+		LOG_WRN("buttons/LEDs unavailable");
+	}
 
-	for (;;) {
-		k_sleep(K_SECONDS(10));
-		ehg_service_log_stats();
+	for (int i = 1;; i++) {
+		k_sleep(K_MSEC(200));
+		dk_set_led(DK_LED1, ehg_service_connected());
+		dk_set_led(DK_LED2, replay_running());
+		if (i % 50 == 0) {
+			ehg_service_log_stats();
+		}
 	}
 	return 0;
 }

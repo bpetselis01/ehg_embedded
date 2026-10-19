@@ -1,22 +1,30 @@
 """MQTT -> InfluxDB ingestion service.
 
-Subscribes ehg/+/pkt (QoS 1, persistent session) and writes two measurements:
-  ehg_raw  one point per frame. time = injection time of that frame (host clock).
+PURPOSE: Stores every packet the gateway publishes into the time-series database (InfluxDB).
+INPUT: MQTT topic ehg/+/pkt (QoS 1, persistent session), 1 JSON per packet (docs/interface-spec.md 4):
+    {node_id, seq, frame_idx, t_inject, t_inject_host, n_ch, fs_hz, record_id, flags, samples, t_gw_rx, t_mqtt_pub}
+    e.g. the JSON example in gateway/gateway.py (EHG-93C0, seq 0, samples [[1093, 171, -748], ...])
+OUTPUT: InfluxDB bucket `ehg` (docs/interface-spec.md 5), 2 measurements:
+  ehg_raw  1 point per frame. time = injection time of that frame (host clock).
            tags node_id, record_id; fields c0..cN (int, raw ADC units), seq, frame_idx
-  ehg_pkt  one point per packet. time = injection time of frame 0.
-           fields seq, n_frames, retrans, t_inject_dev (raw ticks, for offline drift fit), t_inject_host, t_gw_rx, t_mqtt_pub, t_ingest_rx, t_db_ack
-           t_db_ack is stamped after the synchronous ehg_raw write returns, i.e. when the
-           samples are queryable - the H1 end point.
-
-PURPOSE: Stores every packet published by the gateway into the time-series database (InfluxDB).
-HOW: Subscribes to all ehg/<node>/pkt messages. For each one: drop it if already seen
-  (QoS 1 can deliver twice), write one row per frame of samples (ehg_raw), then one row of
-  timing info for the whole packet (ehg_pkt) including the moment the database confirmed it.
-  Waits ("SYNCHRONOUS") for each write, so that confirmation time is real.
-ROLE IN THESIS: The ingest box in report Fig. 10. Its timestamps t_ingest_rx and t_db_ack close
-  the latency chain (H1). Rows keyed by frame_idx let eval/integrity.py check delivery (H2/H4).
+  ehg_pkt  1 point per packet. time = injection time of frame 0.
+           fields seq, n_frames, retrans, t_inject_dev (raw ticks, offline drift fit), t_inject_host,
+           t_gw_rx, t_mqtt_pub, t_ingest_rx, t_db_ack
+           t_db_ack = stamped after the synchronous ehg_raw write returns = samples queryable = H1 end point.
+  e.g. that message as InfluxDB rows (line protocol: measurement,tags fields time-in-ns; i = integer).
+    Made with points_for(); t_ingest_rx / t_db_ack are illustrative (backend not running when written):
+    ehg_raw,node_id=EHG-93C0,record_id=0 c0=1093i,c1=171i,c2=-748i,frame_idx=0i,seq=0i 1791243068018676224
+    ehg_raw,node_id=EHG-93C0,record_id=0 c0=1145i,c1=180i,c2=-790i,frame_idx=1i,seq=0i 1791243068068676352
+    ... 10 ehg_raw rows, 50 ms apart ...
+    ehg_pkt,node_id=EHG-93C0 n_frames=10i,retrans=false,seq=0i,t_db_ack=1791243068.47498,
+      t_gw_rx=1791243068.468658,t_ingest_rx=1791243068.47101,t_inject_dev=98304i,
+      t_inject_host=1791243068.0186763,t_mqtt_pub=1791243068.46912 1791243068018676224
+HOW: Per message: drop if already seen (QoS 1 can deliver twice), write 1 row per frame (ehg_raw), then
+  1 timing row for the packet (ehg_pkt). Waits for each write ("SYNCHRONOUS") so the confirmation time is real.
+ROLE IN THESIS: Ingest box in report Fig. 10. t_ingest_rx and t_db_ack close the latency chain (H1).
+  Rows keyed by frame_idx let eval/integrity.py check delivery (H2/H4).
 BEFORE -> AFTER: Before: gateway/gateway.py via the Mosquitto broker. Runs in Docker
-  (backend/docker-compose.yml, ingest/Dockerfile). After: InfluxDB, read by Grafana
+  (backend/docker-compose.yml, backend/ingest/Dockerfile). After: InfluxDB, read by Grafana
   (backend/grafana/), eval/backend_client.py, and a future classifier (docs/interface-spec.md 5).
 """
 

@@ -1,18 +1,20 @@
 """Raw EHG waveform viewer (Gantt 3b): MQTT -> WebSocket bridge + static page.
 
-Grafana handles overview/alerts; raw multichannel traces go through this custom path,
-the split used by ICU Cockpit [8] and RHMS [14] (report 6.11).
-
   uv run python viewer/server.py            then open http://localhost:8765
 
 PURPOSE: Shows the raw EHG waves live in a browser, with less delay than Grafana.
-HOW: Listens to the same MQTT messages as the ingest service and passes a slimmed-down copy of
-  each to every open browser tab over a WebSocket (a connection that stays open so the server
-  can push data). The same small server also serves the page itself (index.html).
-ROLE IN THESIS: Gantt 3b, the clinician-style raw-trace view. It sits beside the database
-  path, so watching does not affect storage or the H1/H2 measurements.
-BEFORE -> AFTER: Before: gateway/gateway.py publishing via Mosquitto. After: viewer/index.html
-  draws the traces.
+INPUT: MQTT ehg/+/pkt (QoS 0, live only), same JSON the ingest service gets (docs/interface-spec.md 4).
+  e.g. the JSON example in gateway/gateway.py (EHG-93C0, seq 0, samples [[1093, 171, -748], ...])
+OUTPUT: WebSocket /ws, 1 slimmed JSON per packet: {node_id, fs_hz, frame_idx, flags, samples}.
+  e.g. {"node_id": "EHG-93C0", "fs_hz": 20, "frame_idx": 0, "flags": 0,
+        "samples": [[1093, 171, -748], [1145, 180, -790], ... 10 frames ...]}
+  Plus the page itself at / (viewer/index.html).
+HOW: Passes a copy of each message to every open browser tab. WebSocket = connection that stays open
+  so the server can push data. Grafana does overview/alerts; raw multichannel traces use this path
+  (as in ICU Cockpit [8] and RHMS [14], report 6.11).
+ROLE IN THESIS: Gantt 3b clinician-style raw-trace view. Sits beside the database path, so watching
+  does not affect storage or the H1/H2 measurements.
+BEFORE -> AFTER: Before: gateway/gateway.py publishing via Mosquitto. After: viewer/index.html draws the traces.
 """
 
 import asyncio
