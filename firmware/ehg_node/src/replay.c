@@ -6,8 +6,16 @@
  *   for TPEHG, as if a real sensor were measuring.
  * INPUT: replay_data.h = the recording baked into the firmware (N_CH, N_FRAMES, FS_HZ, RECORD_ID,
  *   replay_samples[]). Made by tools/make_replay.py from data/converted/<db>/<record>.npz.
+ *   e.g. (tpehg1007):  #define REPLAY_N_CH 3 / REPLAY_N_FRAMES 35180 / REPLAY_FS_HZ 20
+ *        static const int16_t replay_samples[] = { 1093, 171, -748,   1145, 180, -790, ... };
+ *   Plus START / STOP, which ehg_service.c passes on as replay_start() / replay_stop().
  * OUTPUT: frames {tick, frame_idx, samples} into the queue replay_ring (struct in ehg_packet.h).
  *   tick = board clock (32768 ticks/s) when the frame was released = t_inject (start of H1 timing).
+ *   e.g. START at tick 98304 (3 s after boot), then 1 frame every 1638.4 ticks (50 ms):
+ *     {tick=98304, frame_idx=0, s={1093, 171, -748}}
+ *     {tick=99942, frame_idx=1, s={1145, 180, -790}}
+ *     ... frame_idx 35180 restarts at row 0 (loop) but keeps counting up.
+ *   e.g. log: [00:00:03.000,000] <inf> replay: replay start: record 0, 3 ch @ 20 Hz, 35180 frames
  * HOW: A thread waits for START, then loops: work out when the next frame is due -> sleep until
  *   then -> copy that row of the recording -> stamp the clock -> put it in the queue.
  *   Queue full -> counted as overflow, never silently lost.

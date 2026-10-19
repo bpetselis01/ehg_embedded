@@ -7,6 +7,10 @@ INPUT (per recording, e.g. tpehg1007):
   data/raw/tpehgdb/tpehgdb/tpehg1007.hea  text labels (rate, gain, patient notes)
   data/raw/tpehgdb/tpehgdb/tpehg1007.dat  binary: 35180 rows x 12 signals, 16-bit whole numbers
   contents explained: docs/data/tpehgdb.md (same for other DBs)
+  e.g. .hea first lines:  tpehg1007 12 20.000000 35180          (name, 12 signals, 20 Hz, 35180 rows)
+                          tpehg1007.dat 16 13107/mV 16 0 1093 -7439 0 1   (signal "1": gain 13107/mV,
+                          first value 1093)
+  e.g. .dat first bytes:  45 04 20 00 0a 00 1d 00 ab 00 ...  = 1093, 32, 10, 29, 171, ... (row 0, 12 signals)
 OUTPUT:
   data/converted/tpehgdb/tpehg1007.npz    3 raw signals + labels to read them
   data/converted/tpehgdb/manifest.json    all records + their record_id (tracked in git)
@@ -17,7 +21,9 @@ OUTPUT:
     gain      float[n_ch]             units per mV (13107)
     baseline  int[n_ch]               stored value = 0 mV (0)
     units     str[n_ch]               "mV"
-    mV = (samples - baseline) / gain
+  e.g. manifest.json entry: {"record_id": 0, "record": "tpehg1007", "n_frames": 35180, "n_ch": 3,
+                             "fs": 20.0, "file": "tpehg1007.npz"}
+    mV = (samples - baseline) / gain     e.g. (1093 - 0) / 13107 = 0.0834 mV
     why: samples are ADC counts, gain/baseline differ per DB (13107 here, 131.068 in ehgdb), so
     counts alone aren't comparable; classifier + plots need mV. Kept as counts here so the
     bit-exact check (H2/H4) works; mV only downstream. More: docs/data/tpehgdb.md

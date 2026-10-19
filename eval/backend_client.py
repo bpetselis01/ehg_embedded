@@ -4,7 +4,14 @@ PURPOSE: One place that pulls stored EHG data back out of the database.
 INPUT: InfluxDB bucket `ehg` (schema: docs/interface-spec.md 5). Args: node id (e.g. EHG-0001),
   `since` window (e.g. 2h). Login from backend/.env.
 OUTPUT: query_frames(node, since) -> (record_id, {frame_idx: [ch1, ch2, ch3]} raw ADC numbers, time of first frame).
+  e.g. query_frames("EHG-93C0", "10m") ->
+       (0, {0: [1093, 171, -748], 1: [1145, 180, -790], ...}, datetime(2026, 10, 6, 2, 31, 8, 18676, tzinfo=utc))
+       no rows in the window -> exits with "no ehg_raw data for EHG-93C0 in last 10m"
   query_pkts(node, since) -> list of dicts, 1 per packet (seq, t_gw_rx, t_mqtt_pub, t_db_ack, ...).
+  e.g. [{"_time": ..., "node_id": "EHG-93C0", "seq": 0, "n_frames": 10, "retrans": False,
+         "t_inject_dev": 98304, "t_inject_host": 1791243068.0186763, "t_gw_rx": 1791243068.468658,
+         "t_mqtt_pub": 1791243068.46912, "t_ingest_rx": ..., "t_db_ack": ...}, ...]  (plus Influx's own
+       "result", "table", "_start", "_stop", "_measurement" keys); no rows -> []
 HOW: Flux queries (InfluxDB's query language), "pivoted" so each row = one moment with all fields side by side.
 ROLE IN THESIS: Read-back half of the pipeline. query_frames is also the proposed classifier hook
   (docs/interface-spec.md 5).

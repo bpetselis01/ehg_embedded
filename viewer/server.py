@@ -4,7 +4,10 @@
 
 PURPOSE: Shows the raw EHG waves live in a browser, with less delay than Grafana.
 INPUT: MQTT ehg/+/pkt (QoS 0, live only), same JSON the ingest service gets (docs/interface-spec.md 4).
+  e.g. the JSON example in gateway/gateway.py (EHG-93C0, seq 0, samples [[1093, 171, -748], ...])
 OUTPUT: WebSocket /ws, 1 slimmed JSON per packet: {node_id, fs_hz, frame_idx, flags, samples}.
+  e.g. {"node_id": "EHG-93C0", "fs_hz": 20, "frame_idx": 0, "flags": 0,
+        "samples": [[1093, 171, -748], [1145, 180, -790], ... 10 frames ...]}
   Plus the page itself at / (viewer/index.html).
 HOW: Passes a copy of each message to every open browser tab. WebSocket = connection that stays open
   so the server can push data. Grafana does overview/alerts; raw multichannel traces use this path
