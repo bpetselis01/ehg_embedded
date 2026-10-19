@@ -95,6 +95,14 @@ Two things that are easy to get wrong:
 - **`build.sh` installs the program; it does not start a recording.** The program is built and flashed once (like a
   factory install). A recording is then streamed in by `tools/feed.py`, and sampling starts with START (laptop) or Button 1.
 
+A normal run, in order (Stages B–C once; Stage D every run):
+
+```
+firmware/build.sh flash                                          # B + C: build, flash, board boots and advertises
+uv run python tools/feed.py data/converted/tpehgdb/tpehg1007.npz # D5-D7: stream the recording in (leave running)
+uv run python -m gateway.gateway                                 # D8-D19: connect, START, receive (Terminal.app: Bluetooth permission)
+```
+
 ### Stage A: prepare the recording (once per database)
 
 | # | Who | What happens | You see |
@@ -120,10 +128,10 @@ Two things that are easy to get wrong:
 | # | Who | What happens | You see |
 |---|---|---|---|
 | C1 | 🔧 `west flash --dev-id 1050208294` → `nrfutil` | writes the bootloader, then the signed app, into the nRF52840's flash through the DK's on-board USB debugger, then resets the chip | `Programming image` (twice), `Reset` |
-| C2 | 🔧 MCUboot | checks the app's signature, then starts it (or a newly uploaded one, Stage F) | serial: `*** Booting MCUboot … ***` |
+| C2 | 🔧 MCUboot | checks the app's signature, then starts it (or a newly uploaded one, Stage F) | a burst of unreadable bytes on the serial port while the chip resets (harmless) |
 | C3 | 🔧 Zephyr boot | sets up memory, clock (32768 ticks/s), drivers, logging | serial: `*** Booting nRF Connect SDK … ***` |
 | C4 | 🔧 Zephyr | creates our 3 threads (`K_THREAD_DEFINE`) **before `main()` runs**: replay (priority 2), serial parser (4), tx (5). They run whenever `main` is waiting | nothing yet |
-| C5 | ✍️ serial parser | starts DMA receive on the serial port; waits for the laptop's CONFIG | nothing (no `@LVL` before CONFIG) |
+| C5 | ✍️ serial parser | starts DMA receive on the serial port (RTS/CTS on: the board can pause the laptop instead of losing bytes); waits for the laptop's CONFIG | nothing (no `@LVL` before CONFIG) |
 | C6 | ✍️ replay thread / tx_thread | replay waits for START; tx checks for RESENDs and waits for frames | nothing |
 | C7 | 🔧 Zephyr | registers our Bluetooth service (`BT_GATT_SERVICE_DEFINE`), the update service (MCUmgr/SMP) and the connection callbacks; all built in at compile time | nothing |
 
@@ -135,19 +143,21 @@ Two things that are easy to get wrong:
 | D2 | ✍️ → 🔧 `bt_enable(NULL)` | turns the radio and Bluetooth stack on (waits until ready) | `<inf> bt_hci_core: …` lines |
 | D3 | ✍️ `adv_work_handler` → 🔧 `bt_le_adv_start` | board broadcasts its name + EHG service ID every 100–150 ms | `<inf> main: advertising as EHG-93C0` |
 | D4 | ✍️ `main()` | forever: LEDs every 200 ms, counters every 10 s | every 10 s: `<inf> ehg_svc: sent=0 offline=0 …` |
-| D5 | 💻 [`tools/feed.py`](../tools/feed.py) | opens the serial port, sends CONFIG (3 ch, 20 Hz, record 0, 16-bit, session no.) until answered | `board EHG-93C0 ready` (from `@HELLO`) |
-| D6 | 💻 feed.py → ✍️ serial parser | streams DATA (10 frames per message) until 2 s are queued; then tops up once a second from `@LVL`; pings the clock once a second (`@SYNC`) | `eval/results/sync_EHG-93C0.csv` grows |
-| D7 | 💻 [`gateway.py`](../gateway/gateway.py) `ble_main` | `BleakScanner` lists nearby devices, picks names starting `EHG-` | laptop: `scanning for up to 1 node(s) named EHG-* ...` |
-| D8 | 💻 `run_ble_node` → 🔧 | **the laptop connects** to the board | laptop: `[EHG-93C0] connected, mtu=247` |
-| D9 | ✍️ `connected()` | stores the connection, asks for 2M PHY + max data length (requests only); LED1 on | `<inf> main: connected` |
-| D10 | 🔧 → ✍️ `phy_updated`, `data_len_updated`, `mtu_updated` | the laptop answers; the callbacks only log what it granted | `PHY: tx 2 rx 2`, `data length: tx 251 B rx 251 B`, `ATT MTU: tx 247 rx 247` |
-| D11 | 🔧 Zephyr (auto, ~5 s after connecting) | asks for the `prj.conf` connection interval (15–30 ms); macOS picks | `conn params: interval 30.00 ms, latency 0, timeout 6000 ms` |
-| D12 | 💻 `start_notify(DATA_UUID)` | laptop flips the CCC switch: "send me notifications" | |
-| D13 | 💻 writes `01` (or Button 1) → ✍️ `ctrl_write` → `replay_start` | numbers the session from the oldest queued frame, notes `t0`, wakes the replay thread; LED2 on. Ignored if already running or before CONFIG | `<inf> replay: replay start: record 0, 3 ch @ 20 Hz, from frame 0` |
-| D14 | ✍️ replay thread | every 50 ms: sleep until due, stamp tick, take that frame from `feed_q`, put `{tick, frame_idx, 1093 171 -748}` in `replay_ring`. Missing → `starved` | |
-| D15 | ✍️ `tx_thread` | after 10 frames: 20-byte header + 60 bytes samples + 2-byte CRC, copy into history, `send()` → fault stage (off by default) → `bt_gatt_notify` | `sent=` climbs by 2 per second |
-| D16 | 💻 `Node.on_bytes` | check CRC, decode, CSV line, gap check, publish JSON to MQTT `ehg/EHG-93C0/pkt` | `gateway/logs/EHG-93C0.csv` grows |
-| D17 | 💻 → ✍️ (only on a gap) | laptop writes `03 <seq> <count>`; `ctrl_write` queues it, `serve_resends` re-sends from history with flags bit0 = 1 | `resent=` / `resend_miss=` |
+| D5 | 💻 [`tools/feed.py`](../tools/feed.py) → ✍️ `on_config` | opens the serial port, sends CONFIG (3 ch, 20 Hz, record 0, 16-bit, random session no.) every 0.5 s until answered. A repeat with the same session no. is only re-answered; a new feeder (new no.) empties the board's queue | `board EHG-93C0 ready` (from `@HELLO … #crc`) |
+| D6 | 💻 feed.py → ✍️ `ehg_service_set_faults` | sends FAULT: all zero = off, or the `--faults` settings (Gilbert loss, corruption, forced disconnects; [fault-injection.md](fault-injection.md)). Logs the run in `eval/results/runs_EHG-93C0.csv` | `<inf> ehg_svc: faults: seed 1, good->bad …` |
+| D7 | 💻 feed.py → ✍️ serial parser | streams DATA (10 frames per message) until 2 s are queued, then tops up once a second from `@LVL`; pings the clock once a second (`@SYNC`). Every `@` line carries a CRC, so a line damaged on the VCOM is ignored | `eval/results/sync_EHG-93C0.csv` grows |
+| D8 | 💻 [`gateway.py`](../gateway/gateway.py) `ble_main` | `BleakScanner` lists nearby devices, picks names starting `EHG-` | laptop: `scanning for up to 1 node(s) named EHG-* ...` |
+| D9 | 💻 `run_ble_node` → 🔧 | **the laptop connects** to the board | laptop: `[EHG-93C0] connected, mtu=247` |
+| D10 | ✍️ `connected()` | stores the connection, asks for 2M PHY + max data length (requests only); LED1 on | `<inf> main: connected` |
+| D11 | 🔧 → ✍️ `phy_updated`, `data_len_updated`, `mtu_updated` | the laptop answers; the callbacks only log what it granted | `PHY: tx 2 rx 2`, `data length: tx 251 B rx 251 B`, `ATT MTU: tx 247 rx 247` |
+| D12 | 🔧 Zephyr (auto, ~5 s after connecting) | asks for the `prj.conf` connection interval (15–30 ms); macOS picks | `conn params: interval 30.00 ms, latency 0, timeout 6000 ms` |
+| D13 | 💻 `start_notify(DATA_UUID)` | laptop flips the CCC switch: "send me notifications" | |
+| D14 | 💻 writes `01` (or Button 1) → ✍️ `ctrl_write` → `replay_start` | numbers the session from the oldest queued frame, notes `t0`, wakes the replay thread; LED2 on. Ignored if already running; refused before CONFIG (start feed.py first) | `<inf> replay: replay start: record 0, 3 ch @ 20 Hz, from frame 0` |
+| D15 | ✍️ replay thread | every 50 ms: sleep until due, **stamp the tick (= t_inject, where H1 latency starts)**, take that frame from `feed_q`, put `{tick, frame_idx, 1093 171 -748}` in `replay_ring`. Not there yet → skipped, `starved`; arrived too late → thrown away, `late` | `max_inject_late` in the 10 s line |
+| D16 | ✍️ `tx_thread` | after 10 frames (fewer if many channels; closed early if a frame was skipped): 20-byte header + 60 bytes samples + 2-byte CRC, copy into history, `send()` → fault stage (off by default) → `bt_gatt_notify` | `sent=` climbs by 2 per second |
+| D17 | 💻 `Node.on_bytes` | check CRC (mismatch → dropped, `bad=`; the next packet then shows it as a gap), decode, CSV line, gap check, publish JSON to MQTT `ehg/EHG-93C0/pkt` | `gateway/logs/EHG-93C0.csv` grows |
+| D18 | 💻 → ✍️ (only on a gap) | laptop writes `03 <seq> <count>`; `ctrl_write` queues it, `serve_resends` re-sends from history with flags bit0 = 1. Still missing 1 s later (the copy was lost too) → asked again, up to 5 times | `resent=` / `resend_miss=` |
+| D19 | 💻 backend → [`eval/`](../eval) | ingest stores each frame in InfluxDB (`t_db_ack` = H1 end point); `integrity.py` checks delivery + bit-exactness, `latency.py` maps board ticks to laptop time with the `@SYNC` pings | delivery %, mismatches, latency median/p95 |
 
 ### Stage E: disconnect / reconnect / stop
 
@@ -155,7 +165,7 @@ Two things that are easy to get wrong:
 |---|---|---|---|
 | E1 | 🔧 link lost (distance, `disc=` fault, laptop) | ✍️ `disconnected()` forgets the connection; **sampling continues**; packets made now go to history (`offline=`); LED1 off | `<inf> main: disconnected (0x08 / 0x13 / 0x16)` |
 | E2 | ✍️ `recycled()` | once Zephyr has freed the connection: advertise again (back to D3) | `<inf> main: advertising as EHG-93C0` |
-| E3 | 💻 gateway (still running) | reconnects after 2 s with the **same** gap tracker; START is a no-op; the first new packet shows the seq jump → one RESEND for the outage | laptop: `streams=1`; board: `resent=` jumps |
+| E3 | 💻 gateway (still running) | reconnects after 2 s with the **same** gap tracker; START is a no-op; the first new packet shows the seq jump → RESEND for the outage (re-asked if a copy is lost) | laptop: `streams=1`; board: `resent=` jumps |
 | E4 | 💻 Ctrl-C on the gateway, or Button 1 | STOP (`02`) → `replay_stop`; LED2 off. A later START begins a new session (seq from 0, history cleared) | |
 
 An outage longer than the history (256 packets = 128 s at 20 Hz) loses its oldest packets: counted `resend_miss`,
