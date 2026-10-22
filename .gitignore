@@ -22,3 +22,4 @@ CLAUDE.md
 .vscode/
 .superpowers/
 docs/superpowers/
+firmware/ehg_node/src/replay_data.h

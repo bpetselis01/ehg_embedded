@@ -21,6 +21,13 @@ config EHG_RING_FRAMES
 	  How many frames can wait if sending falls behind (256 = 12.8 s at 20 Hz).
 	  When full, new frames are dropped and counted as ring_overflow (replay.c).
 
+config EHG_BAKED_RECORD
+	bool "Built-in recording instead of the serial feed"
+	help
+	  y = the recording in src/replay_data.h (tools/make_replay.py) is compiled in and played on
+	  START, so the board runs stand-alone. n (default) = tools/feed.py streams it over serial.
+	  Set by firmware/build.sh: --record <npz> gives y, otherwise n.
+
 config EHG_FEED_BUFFER_FRAMES
 	int "Frames the laptop can send ahead (tools/feed.py)"
 	default 512

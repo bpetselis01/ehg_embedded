@@ -63,7 +63,10 @@ CRC as in §3 (CCITT-FALSE, over type + payload). Malformed, wrong-CRC or wrong-
 | `@HELLO <name> <n_ch> <fs> <record_id>` | CONFIG accepted |
 | `@LVL <frames>` | frames queued on the board, once a second, only after CONFIG. The feeder tops up to `--lead` seconds; 3 s without one = board reset, so the feeder sends CONFIG again |
 | `@SYNC <id> <tick>` | board clock (u32, 32768/s) when ping `id` was parsed |
-| `@ERR <text>` | refused command (e.g. START before CONFIG, CONFIG while running) |
+| `@ERR <text>` | refused command (e.g. START before CONFIG, CONFIG while running; any CONFIG/DATA/FAULT on a board built with a built-in recording: `ERR built-in record mode: rebuild without --record to stream`) |
+
+Built-in mode (`build.sh --record`): the board takes no CONFIG/DATA/FAULT and sends no `@LVL`; it still answers SYNC.
+`feed.py --sync-only --node <name>` sends only SYNC, so built-in runs also get `eval/results/sync_<name>.csv`.
 
 `frame_idx` is set by the feeder: from 0, continuing when the record loops (row = `frame_idx % n_frames`).
 At START the board takes the oldest queued frame as the session's first and then expects consecutive numbers:

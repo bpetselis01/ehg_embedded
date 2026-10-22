@@ -104,3 +104,26 @@ def test_fault_layout():
     body = unwrap(fault_msg(parse_faults("drop=0.05,burst=3,corrupt=0.01,disc=60,seed=1")))
     assert body[0] == 0x13 and len(body) == 13
     assert struct.unpack("<IHHHH", body[1:]) == (1, 1150, 21845, 655, 60)
+
+
+def test_record_id_comes_from_the_manifest(tmp_path):
+    import json
+    from pathlib import Path
+
+    from tools.feed import record_id_for
+    (tmp_path / "manifest.json").write_text(json.dumps([{"record_id": 4, "file": "rec4.npz"}]))
+    assert record_id_for(Path(tmp_path / "rec4.npz")) == 4
+    with pytest.raises(SystemExit, match="manifest.json"):
+        record_id_for(Path(tmp_path / "other.npz"))
+
+
+@pytest.mark.parametrize("args, msg", [
+    (["--sync-only"], "--node"),
+    (["--sync-only", "--node", "EHG-93C0", "x.npz"], "no recording"),
+    ([], "give a recording"),
+])
+def test_argument_rules(monkeypatch, args, msg):
+    import tools.feed as feed
+    monkeypatch.setattr("sys.argv", ["feed.py", *args])
+    with pytest.raises(SystemExit, match=msg):
+        feed.main()

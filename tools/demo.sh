@@ -2,6 +2,8 @@
 # Start the whole pipeline for a live demo, with one window per hop so packets can be watched moving.
 #   tools/demo.sh                                       normal run (TPEHG tpehg1007)
 #   tools/demo.sh --faults drop=0.05,burst=3,disc=60    same, with injected link faults (docs/fault-injection.md)
+#   tools/demo.sh --built-in                            board flashed with a built-in recording (build.sh flash --record ...):
+#                                                       window 1 only sends clock pings (feed.py --sync-only)
 #
 # PURPOSE: One command for a demo instead of 6 terminals started in the right order.
 # INPUT: a flashed DK on USB (firmware/build.sh flash), the backend up (cd backend && docker compose up -d),
@@ -34,7 +36,11 @@ win() {
 		return id of window 1
 	end tell"
 }
-IDS="$(win '1 BOARD + FEEDER: laptop streams frames in; board log every 10 s' "uv run python tools/feed.py data/converted/tpehgdb/tpehg1007.npz $*")"
+if [ "$1" = --built-in ]; then
+	IDS="$(win '1 BOARD: built-in recording; clock pings only; board log every 10 s' "uv run python tools/feed.py --sync-only --node $NODE")"
+else
+	IDS="$(win '1 BOARD + FEEDER: laptop streams frames in; board log every 10 s' "uv run python tools/feed.py data/converted/tpehgdb/tpehg1007.npz $*")"
+fi
 sleep 4
 IDS="$IDS $(win '2 BLUETOOTH: each packet received (seq, frame_idx, flags 1=re-sent)' "tail -n 0 -f gateway/logs/$NODE.csv")"
 IDS="$IDS $(win '3 GATEWAY: link status, missing / bad every 10 s' 'uv run python -m gateway.gateway')"

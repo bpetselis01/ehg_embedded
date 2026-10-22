@@ -110,7 +110,8 @@ Step by step:
 | File | One-line role |
 |---|---|
 | [`tools/convert.py`](../tools/convert.py) | downloaded recordings → `.npz` + `manifest.json` (the answer key) |
-| [`tools/feed.py`](../tools/feed.py) | streams one `.npz` into the board over the serial port (digital injection) |
+| [`tools/feed.py`](../tools/feed.py) | streams one `.npz` into the board over the serial port (digital injection); `--sync-only` = clock pings for a built-in board |
+| [`tools/make_replay.py`](../tools/make_replay.py) | one `.npz` → `replay_data.h`, compiled in by `firmware/build.sh --record` (built-in mode, stand-alone runs) |
 | [`tools/fhir_export.py`](../tools/fhir_export.py) | stored window → HL7 FHIR R5 Bundle (clinical hand-off) |
 | [`firmware/build.sh`](../firmware/build.sh) | build and flash the board (works around spaces in this folder's path). Overview of all firmware: [firmware.md](firmware.md) |
 | [`firmware/ehg_node/CMakeLists.txt`](../firmware/ehg_node/CMakeLists.txt) | which C files to compile |

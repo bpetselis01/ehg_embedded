@@ -93,14 +93,30 @@ Two things that are easy to get wrong:
 - **The board never starts the Bluetooth connection.** `main.c` turns Bluetooth on and *advertises* ("I'm here").
   The laptop's `gateway/gateway.py` finds it and *connects*. `main.c` only accepts and reacts in callbacks.
 - **`build.sh` installs the program; it does not start a recording.** The program is built and flashed once (like a
-  factory install). A recording is then streamed in by `tools/feed.py`, and sampling starts with START (laptop) or Button 1.
+  factory install), and sampling starts with START (laptop) or Button 1.
+
+**Two ways to give the board its recording, chosen when you build** ([plans/baked-or-streamed-plan.md](plans/baked-or-streamed-plan.md)):
+
+| Mode | Build | Use it for | Not available |
+|---|---|---|---|
+| **Serial feed** (default) | `firmware/build.sh flash` | any record or length, Icelandic 16 ch × 200 Hz, fault injection, the exact H1 clock offset | – |
+| **Built-in recording** | `firmware/build.sh flash --record data/converted/tpehgdb/tpehg1007.npz` | stand-alone runs: no laptop feeding the board (demos, soaks) | fault injection; records bigger than flash (16 ch × 200 Hz needs `--seconds`) |
+
+The boot log names the mode: `source: serial feed (run tools/feed.py)` or `source: built-in record 0 (3 ch @ 20 Hz, …)`.
+A plain `build.sh flash` always goes back to the serial feed. Switching = rebuild + flash (~20 s).
 
 A normal run, in order (Stages B–C once; Stage D every run):
 
 ```
+# serial feed
 firmware/build.sh flash                                          # B + C: build, flash, board boots and advertises
 uv run python tools/feed.py data/converted/tpehgdb/tpehg1007.npz # D5-D7: stream the recording in (leave running)
 uv run python -m gateway.gateway                                 # D8-D19: connect, START, receive (Terminal.app: Bluetooth permission)
+
+# built-in recording (stand-alone)
+firmware/build.sh flash --record data/converted/tpehgdb/tpehg1007.npz   # B + C, with the record compiled in
+uv run python -m gateway.gateway                                 # D8-D19: same as above (D5-D7 don't happen)
+uv run python tools/feed.py --sync-only --node EHG-93C0          # optional: clock pings only, for the exact H1 offset
 ```
 
 ### Stage A: prepare the recording (once per database)
@@ -108,12 +124,13 @@ uv run python -m gateway.gateway                                 # D8-D19: conne
 | # | Who | What happens | You see |
 |---|---|---|---|
 | A1 | 💻 [`tools/convert.py`](../tools/convert.py) | PhysioNet `.hea/.dat` → `data/converted/tpehgdb/tpehg1007.npz` (raw counts, row 0 = `1093 171 -748`) | the `.npz` file + `manifest.json` |
+| A2 | 💻 [`tools/make_replay.py`](../tools/make_replay.py) (built-in mode only; `build.sh --record` runs it) | `.npz` → `src/replay_data.h`: `#define REPLAY_N_CH 3 … replay_samples[] = { 1093, 171, -748, …`, record_id from the manifest | `wrote …/replay_data.h: 35180 frames x 3 ch @ 20.0 Hz, 16-bit, 206 KiB` |
 
 ### Stage B: build (`firmware/build.sh`, once per code change)
 
 | # | Who | What happens | You see |
 |---|---|---|---|
-| B1 | ✍️ [`build.sh`](../firmware/build.sh) | makes the `~/thesisb` shortcut if missing | |
+| B1 | ✍️ [`build.sh`](../firmware/build.sh) | makes the `~/thesisb` shortcut if missing; with `--record <npz>` runs A2 and sets `CONFIG_EHG_BAKED_RECORD=y`, otherwise `=n` (always explicit, so a built-in build never sticks) | at the end: `built: serial feed (tools/feed.py)` or `built: built-in tpehg1007` |
 | B2 | 🔧 `nrfutil toolchain-manager launch -- west build` | starts Nordic's build tool inside Nordic's toolchain (`west` is not on PATH) | build log scrolling |
 | B3 | 🔧 sysbuild reads [`sysbuild.conf`](../firmware/ehg_node/sysbuild.conf) | builds 2 programs: MCUboot (bootloader) and our app | `mcuboot` and `ehg_node` in the log |
 | B4 | 🔧 CMake reads [`CMakeLists.txt`](../firmware/ehg_node/CMakeLists.txt) | finds Zephyr, gets the file list `main.c replay.c ehg_service.c` | `-- Found Zephyr` … |
@@ -143,9 +160,9 @@ uv run python -m gateway.gateway                                 # D8-D19: conne
 | D2 | ✍️ → 🔧 `bt_enable(NULL)` | turns the radio and Bluetooth stack on (waits until ready) | `<inf> bt_hci_core: …` lines |
 | D3 | ✍️ `adv_work_handler` → 🔧 `bt_le_adv_start` | board broadcasts its name + EHG service ID every 100–150 ms | `<inf> main: advertising as EHG-93C0` |
 | D4 | ✍️ `main()` | forever: LEDs every 200 ms, counters every 10 s | every 10 s: `<inf> ehg_svc: sent=0 offline=0 …` |
-| D5 | 💻 [`tools/feed.py`](../tools/feed.py) → ✍️ `on_config` | opens the serial port, sends CONFIG (3 ch, 20 Hz, record 0, 16-bit, random session no.) every 0.5 s until answered. A repeat with the same session no. is only re-answered; a new feeder (new no.) empties the board's queue | `board EHG-93C0 ready` (from `@HELLO … #crc`) |
-| D6 | 💻 feed.py → ✍️ `ehg_service_set_faults` | sends FAULT: all zero = off, or the `--faults` settings (Gilbert loss, corruption, forced disconnects; [fault-injection.md](fault-injection.md)). Logs the run in `eval/results/runs_EHG-93C0.csv` | `<inf> ehg_svc: faults: seed 1, good->bad …` |
-| D7 | 💻 feed.py → ✍️ serial parser | streams DATA (10 frames per message) until 2 s are queued, then tops up once a second from `@LVL`; pings the clock once a second (`@SYNC`). Every `@` line carries a CRC, so a line damaged on the VCOM is ignored | `eval/results/sync_EHG-93C0.csv` grows |
+| D5 | *serial feed only* 💻 [`tools/feed.py`](../tools/feed.py) → ✍️ `on_config` | opens the serial port, sends CONFIG (3 ch, 20 Hz, record 0, 16-bit, random session no.) every 0.5 s until answered. A repeat with the same session no. is only re-answered; a new feeder (new no.) empties the board's queue | `board EHG-93C0 ready` (from `@HELLO … #crc`) |
+| D6 | *serial feed only* 💻 feed.py → ✍️ `ehg_service_set_faults` | sends FAULT: all zero = off, or the `--faults` settings (Gilbert loss, corruption, forced disconnects; [fault-injection.md](fault-injection.md)). Logs the run in `eval/results/runs_EHG-93C0.csv` | `<inf> ehg_svc: faults: seed 1, good->bad …` |
+| D7 | *serial feed only* 💻 feed.py → ✍️ serial parser | streams DATA (10 frames per message) until 2 s are queued, then tops up once a second from `@LVL`; pings the clock once a second (`@SYNC`). Every `@` line carries a CRC, so a line damaged on the VCOM is ignored | `eval/results/sync_EHG-93C0.csv` grows |
 | D8 | 💻 [`gateway.py`](../gateway/gateway.py) `ble_main` | `BleakScanner` lists nearby devices, picks names starting `EHG-` | laptop: `scanning for up to 1 node(s) named EHG-* ...` |
 | D9 | 💻 `run_ble_node` → 🔧 | **the laptop connects** to the board | laptop: `[EHG-93C0] connected, mtu=247` |
 | D10 | ✍️ `connected()` | stores the connection, asks for 2M PHY + max data length (requests only); LED1 on | `<inf> main: connected` |
@@ -192,7 +209,11 @@ the one-board route.
 | `CONFIG_EHG_FEED_BUFFER_FRAMES` | 512 | frames the laptop can send ahead (feed.py keeps ~2 s; 512 covers 2 s at 200 Hz) |
 | `CONFIG_EHG_HISTORY_PACKETS` | 256 | sent packets kept for resends (128 s at 20 Hz) |
 
-Channels, rate, record_id and sample width (16 or 24-bit) are not build settings: the laptop sends them in CONFIG.
+| `CONFIG_EHG_BAKED_RECORD` | n | y = built-in recording from `src/replay_data.h` (set by `build.sh --record`, don't set it by hand) |
+
+Channels, rate, record_id and sample width (16 or 24-bit): in serial-feed mode the laptop sends them in CONFIG; in
+built-in mode they come from `replay_data.h`. In built-in mode the board refuses CONFIG/DATA/FAULT
+(`@ERR built-in record mode …`, and `feed.py` stops with an explanation) but still answers clock pings.
 
 ## The serial port (VCOM0, 460800 baud)
 

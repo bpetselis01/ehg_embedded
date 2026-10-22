@@ -13,7 +13,7 @@ Plain-language code walkthrough: [`docs/codebase-guide.md`](docs/codebase-guide.
 
 | Path | What |
 |---|---|
-| [`tools/`](tools) | [`convert.py`](tools/convert.py) (WFDB → int16 `.npz`), [`feed.py`](tools/feed.py) (streams a `.npz` into the board over serial) |
+| [`tools/`](tools) | [`convert.py`](tools/convert.py) (WFDB → int16 `.npz`), [`feed.py`](tools/feed.py) (streams a `.npz` into the board over serial), [`make_replay.py`](tools/make_replay.py) (`.npz` → built-in firmware recording, via `build.sh --record`) |
 | [`firmware/ehg_node/`](firmware/ehg_node) | Zephyr app for `nrf52840dk/nrf52840`, NCS v3.4.1. [`firmware/build.sh`](firmware/build.sh) builds and flashes it |
 | [`gateway/`](gateway) | Bleak central → MQTT; `--simulate N` software nodes use the same wire format |
 | [`backend/`](backend) | docker compose: Mosquitto, InfluxDB 2.7, ingest, Grafana (provisioned dashboard) |
@@ -37,6 +37,8 @@ uv run python tools/convert.py tpehgdb        # also: tpehgt | icehg | ehgdb; --
 # 1. firmware: build + flash the DK once (no recording inside), then stream a recording into it
 firmware/build.sh flash                       # uses ~/thesisb symlink: NCS can't build from paths with spaces
 uv run python tools/feed.py data/converted/tpehgdb/tpehg1007.npz   # leave running; prints the board log
+#    or stand-alone, no laptop feed: firmware/build.sh flash --record data/converted/tpehgdb/tpehg1007.npz
+#    (recording compiled in; optional clock pings: tools/feed.py --sync-only --node EHG-93C0) — docs/firmware.md
 #    optional: --faults drop=0.05,burst=3,corrupt=0.01,disc=120 (docs/fault-injection.md)
 #    sampling starts when the gateway connects (START) or with DK Button 1; firmware updates over
 #    Bluetooth: build/dfu_application.zip via the nRF Device Manager app (docs/firmware.md Stage F)

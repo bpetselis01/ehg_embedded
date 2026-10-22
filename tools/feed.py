@@ -28,6 +28,8 @@ OUTPUT: binary messages to the board, each COBS-encoded and ended by a 0x00 byte
        7,1791243069.10012,1791243069.10498,81920
   eval/latency.py uses it to pin the board->laptop clock offset independently of Bluetooth (H1).
   eval/results/runs_<node>.csv, 1 line per feeder start: t_start, record, record_id, "--faults" text.
+--sync-only --node EHG-93C0: for a board built with a built-in recording (firmware/build.sh --record): sends
+  only the once-a-second clock pings below and logs them, so eval/latency.py still gets the exact offset.
 HOW: Send CONFIG until the board answers @HELLO. Then keep about --lead seconds of frames waiting on the
   board: on each @LVL (once a second) top the queue back up to the target. --lead must be over 1 s so
   the queue never runs dry between reports.
@@ -184,19 +186,70 @@ class Feeder:
         return first, self.src[rows]
 
 
+def open_sync_log(node: str):
+    """Append-mode eval/results/sync_<node>.csv, with the header line if the file is new."""
+    RESULTS.mkdir(parents=True, exist_ok=True)
+    path = RESULTS / f"sync_{node}.csv"
+    new = not path.exists()
+    f = path.open("a")
+    if new:
+        f.write("ping,t_send,t_recv,tick\n")
+    return f
+
+
+def sync_only(a):
+    """Clock pings only, for a board playing its built-in recording: log them, print the board log."""
+    import serial
+
+    port, log, buf, pings, ping_id, t_ping = serial.Serial(a.port, a.baud, timeout=0.05), open_sync_log(a.node), b"", {}, 0, 0.0
+    print(f"clock pings only for {a.node} -> {log.name}")
+    try:
+        while True:
+            t = time.monotonic()
+            if t - t_ping >= 1:
+                ping_id, t_ping = ping_id + 1, t
+                pings = {k: v for k, v in pings.items() if k > ping_id - 10}
+                pings[ping_id] = time.time()
+                port.write(sync_msg(ping_id))
+            buf += port.read(max(1, port.in_waiting))
+            *lines, buf = buf.split(b"\n")
+            for raw in lines:
+                line = raw.decode(errors="replace").replace("\x1b[0m", "").rstrip("\r")
+                at = parse_at(line)
+                if at and at[0] == "SYNC" and len(at[1]) == 2 and int(at[1][0]) in pings:
+                    log.write(f"{at[1][0]},{pings.pop(int(at[1][0])):.6f},{time.time():.6f},{at[1][1]}\n")
+                    log.flush()
+                elif at is None:
+                    print(line)
+    except KeyboardInterrupt:
+        print(f"stopped after {ping_id} pings")
+    finally:
+        port.close()
+        log.close()
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("npz", type=Path)
+    ap.add_argument("npz", type=Path, nargs="?", help="recording to stream (not with --sync-only)")
     ap.add_argument("--port", default=PORT)
     ap.add_argument("--baud", type=int, default=BAUD)
     ap.add_argument("--lead", type=float, default=2.0, help="seconds of frames kept queued on the board (> 1)")
     ap.add_argument("--faults", default="", help="e.g. drop=0.02,burst=4,corrupt=0.001,disc=60,seed=1 "
                     "(docs/fault-injection.md); default: none")
     ap.add_argument("--verbose", action="store_true", help="also print the board's @ lines and what was sent")
+    ap.add_argument("--sync-only", action="store_true", help="only clock pings, no samples: for a board built with "
+                    "build.sh --record (built-in recording); needs --node")
+    ap.add_argument("--node", help="board name for --sync-only, e.g. EHG-93C0 (normally learnt from @HELLO)")
     ap.add_argument("--dry-run", action="store_true", help="print the CONFIG and first DATA message, send nothing")
     a = ap.parse_args()
     if a.lead <= 1:
         raise SystemExit("--lead must be over 1 s (the board reports its queue once a second)")
+    if a.sync_only:
+        if not a.node or a.npz or a.faults:
+            raise SystemExit("--sync-only needs --node <name> and takes no recording or --faults")
+        return sync_only(a)
+    if not a.npz:
+        raise SystemExit("give a recording to stream, e.g. data/converted/tpehgdb/tpehg1007.npz (or --sync-only)")
 
     rec = np.load(a.npz)
     samples, fs = rec["samples"], float(rec["fs"])
@@ -242,12 +295,7 @@ def main():
                     hello, t_lvl = (at[1][0] if at[1] else "?"), t
                     print(f"board {hello} ready")
                     if sync_log is None:
-                        RESULTS.mkdir(parents=True, exist_ok=True)
-                        path = RESULTS / f"sync_{hello}.csv"
-                        new = not path.exists()
-                        sync_log = path.open("a")
-                        if new:
-                            sync_log.write("ping,t_send,t_recv,tick\n")
+                        sync_log = open_sync_log(hello)
                         runs = RESULTS / f"runs_{hello}.csv"
                         new = not runs.exists()
                         with runs.open("a") as f:  # what was injected, for the results table
@@ -266,6 +314,9 @@ def main():
                     t_lvl = t
                 elif at[0] == "ERR":
                     print(line, file=sys.stderr)
+                    if "built-in record mode" in line:
+                        raise SystemExit("this board was built with a built-in recording (build.sh --record): "
+                                         "rebuild without --record to stream, or use --sync-only --node <name>")
             if hello is not None and t - t_ping >= 1:
                 ping_id, t_ping = ping_id + 1, t
                 pings = {k: v for k, v in pings.items() if k > ping_id - 10}  # forget unanswered ones

@@ -1,5 +1,19 @@
 # Progress log
 
+## 2026-10-22: choose built-in or streamed recording at build time ([plans/baked-or-streamed-plan.md](plans/baked-or-streamed-plan.md))
+
+- `firmware/build.sh flash --record <npz> [--seconds S]` compiles the recording in (`tools/make_replay.py` restored,
+  `CONFIG_EHG_BAKED_RECORD`): the board runs **stand-alone**. A plain `build.sh flash` is the serial feed as before.
+- `tools/feed.py --sync-only --node EHG-93C0`: clock pings only, so built-in runs keep the exact H1 offset.
+- Built-in mode refuses CONFIG/DATA/FAULT (`@ERR built-in record mode`), so no fault injection in that mode.
+
+| Run (DK EHG-93C0, TPEHG tpehg1007) | Delivery | Bit-exact | H1 median / p95 | Notes |
+|---|---|---|---|---|
+| built-in, 4 min, gateway + `--sync-only` | 100 % (4780/4780) | 0 | 268 / 485 ms | sync ±1.8 ms; BLE envelope would read 11.3 ms low |
+| serial feed, 3 min (after switching back) | 100 % (3620/3620) | 0 | – | `starved=0`, `rx_bad=0` |
+
+Flash: built-in app 377 KB (79 % of the 464 KB slot) vs 167 KB streamed.
+
 ## 2026-10-20: realistic injection, continuous acquisition, fault injection (plan: [plans/realistic-injection-plan.md](plans/realistic-injection-plan.md))
 
 What changed (details: [firmware.md](firmware.md), [interface-spec.md](interface-spec.md) §3/§3b, [fault-injection.md](fault-injection.md)):
