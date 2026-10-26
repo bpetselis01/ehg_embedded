@@ -1,5 +1,16 @@
 # Progress log
 
+## 2026-10-26: documentation made correct, traceable and checked ([plans/codebase-docs-plan.md](plans/codebase-docs-plan.md))
+
+- **Stale facts fixed:** `main.c` header gave the old serial speed (it is 460800), the codebase guide said the firmware never holds
+  a recording, the design spec gave wire v1; README/guide file lists completed. Historical docs now carry a banner.
+- **Drift is now a test failure:** [`tests/test_docs.py`](../tests/test_docs.py) checks the two wire-format copies (version,
+  header layout, flags), GATT UUIDs and commands, every Markdown link, `docs/…` paths in code comments, the file index,
+  one baud rate everywhere, and that every CLI's `--help` prints its header. CI: [`.github/workflows/tests.yml`](../.github/workflows/tests.yml) (not yet run on GitHub).
+- **New:** README "Reproducing the results" (command + expected output per hypothesis, incl. a no-hardware row),
+  [troubleshooting.md](troubleshooting.md), [decisions/](decisions/) (6 records), `CITATION.cff`.
+- **Open:** licence (asking the supervisor); `xiao_blinky` symlink no longer tracked (still on disk).
+
 ## 2026-10-22: choose built-in or streamed recording at build time ([plans/baked-or-streamed-plan.md](plans/baked-or-streamed-plan.md))
 
 - `firmware/build.sh flash --record <npz> [--seconds S]` compiles the recording in (`tools/make_replay.py` restored,

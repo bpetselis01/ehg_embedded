@@ -6,16 +6,23 @@ first for the big picture, then open any file.
 
 ## Other docs
 
-| Doc | Read it for |
-|---|---|
-| [README.md](../README.md) | setup + the commands to run everything |
-| [data/tpehgdb.md](data/tpehgdb.md), [tpehgt](data/tpehgt.md), [ehgdb](data/ehgdb.md), [icehg](data/icehg.md) | what is inside the data folders (`.hea`, `.dat`, `.npz`, `manifest.json`), with example records |
-| [firmware.md](firmware.md) | the board's code: role of each file, threads, settings, serial log, `build/` output, glossary |
-| [interface-spec.md](interface-spec.md) | exact formats: `.npz`, packet bytes, MQTT message, database schema, FHIR export |
-| [research/nrf-ble-environment.md](research/nrf-ble-environment.md) | nRF / Bluetooth / macOS setup notes with sources |
-| [progress.md](progress.md) | status log, blockers, next steps |
-| [design/codebase-design.md](design/codebase-design.md) | design notes behind this layout |
-| [../papers/INDEX.md](../papers/INDEX.md) | the papers cited in the report |
+Current reference docs describe the code as it is now and are kept in step with it (`tests/test_docs.py` checks links,
+the file index and the duplicated facts). Historical records are dated and describe what was planned or found at the time.
+
+| Doc | Read it for | Status |
+|---|---|---|
+| [README.md](../README.md) | setup, the commands to run everything, reproducing the results | current |
+| [data/tpehgdb.md](data/tpehgdb.md), [tpehgt](data/tpehgt.md), [ehgdb](data/ehgdb.md), [icehg](data/icehg.md) | what is inside the data folders (`.hea`, `.dat`, `.npz`, `manifest.json`), with example records | current |
+| [firmware.md](firmware.md) | the board's code: role of each file, threads, settings, serial log, `build/` output, glossary | current |
+| [interface-spec.md](interface-spec.md) | exact formats: `.npz`, packet bytes, MQTT message, database schema, FHIR export | current |
+| [fault-injection.md](fault-injection.md) | the `--faults` options and what each one simulates | current |
+| [troubleshooting.md](troubleshooting.md) | known failures: symptom, cause, fix | current |
+| [decisions/](decisions/) | why the main design choices were made (one short record each) | current |
+| [progress.md](progress.md) | status log, results per run, blockers, next steps | dated log |
+| [research/nrf-ble-environment.md](research/nrf-ble-environment.md) | nRF / Bluetooth / macOS setup notes with sources | historical (2026-09/10) |
+| [design/codebase-design.md](design/codebase-design.md) | the original design behind this layout | historical (2026-09-29) |
+| [plans/](plans/), [sessions/](sessions/) | the plan and the Q&A record for each piece of work | historical |
+| [../papers/INDEX.md](../papers/INDEX.md) | the papers cited in the report | current |
 
 ## The one-sentence version
 
@@ -69,7 +76,9 @@ Step by step:
 1. **Prepare the data** ([`tools/convert.py`](../tools/convert.py)). Turns downloaded recordings into simple `.npz` files of untouched
    whole numbers, plus a `manifest.json` that gives each recording a number (`record_id`).
 2. **Stream one recording into the board** ([`tools/feed.py`](../tools/feed.py)). Sends the samples over the serial port a
-   couple of seconds ahead; the firmware is built once ([`firmware/build.sh`](../firmware/build.sh)) and never contains a recording.
+   couple of seconds ahead; the firmware is built once ([`firmware/build.sh`](../firmware/build.sh)) and holds no recording.
+   Alternative for stand-alone runs: `firmware/build.sh flash --record <npz>` compiles one recording in
+   ([`tools/make_replay.py`](../tools/make_replay.py)), so no laptop feed is needed ([decision 0003](decisions/0003-built-in-recording-build-time-option.md)).
 3. **Play it like a sensor** ([`firmware/ehg_node/src/replay.c`](../firmware/ehg_node/src/replay.c)). Releases one frame at a time at the original rate
    (for example 20 per second) and stamps each frame with the board's clock. A *frame* is one sample from every channel at one instant.
 4. **Pack and send** ([`firmware/ehg_node/src/ehg_service.c`](../firmware/ehg_node/src/ehg_service.c)). Groups 10 frames into one numbered packet,
@@ -113,6 +122,8 @@ Step by step:
 | [`tools/feed.py`](../tools/feed.py) | streams one `.npz` into the board over the serial port (digital injection); `--sync-only` = clock pings for a built-in board |
 | [`tools/make_replay.py`](../tools/make_replay.py) | one `.npz` → `replay_data.h`, compiled in by `firmware/build.sh --record` (built-in mode, stand-alone runs) |
 | [`tools/fhir_export.py`](../tools/fhir_export.py) | stored window → HL7 FHIR R5 Bundle (clinical hand-off) |
+| [`tools/watch_db.py`](../tools/watch_db.py) | live list of packets as InfluxDB stores them, with end-to-end time (demos) |
+| [`tools/demo.sh`](../tools/demo.sh) | starts the whole pipeline in 6 tiled windows, one per hop (demos) |
 | [`firmware/build.sh`](../firmware/build.sh) | build and flash the board (works around spaces in this folder's path). Overview of all firmware: [firmware.md](firmware.md) |
 | [`firmware/ehg_node/CMakeLists.txt`](../firmware/ehg_node/CMakeLists.txt) | which C files to compile |
 | [`firmware/ehg_node/Kconfig`](../firmware/ehg_node/Kconfig) | our tunable settings (frames per packet, buffer sizes) |
@@ -134,7 +145,7 @@ Step by step:
 | [`eval/backend_client.py`](../eval/backend_client.py) | shared database queries |
 | [`eval/latency.py`](../eval/latency.py) | H1 numbers and CDF plot |
 | [`eval/integrity.py`](../eval/integrity.py) | H2 delivery and H4 bit-exact numbers |
-| `tests/*.py` | automatic checks for the pure-logic parts (`uv run pytest -q`) |
+| `tests/*.py` | automatic checks for the pure-logic parts, and [`test_docs.py`](../tests/test_docs.py): the docs and the two wire-format copies still match the code (`uv run pytest -q`, also on every push: [`.github/workflows/tests.yml`](../.github/workflows/tests.yml)) |
 
 ## The Grafana dashboard ([`ehg-overview.json`](../backend/grafana/dashboards/ehg-overview.json))
 

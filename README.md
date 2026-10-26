@@ -7,19 +7,24 @@ public EHG record ─▶ nRF52840 DK (Zephyr, digital injection) ─BLE GATT not
                                                                                                     └─────▶ WebSocket raw viewer
 ```
 
-Plain-language code walkthrough: [`docs/codebase-guide.md`](docs/codebase-guide.md). Design: [`docs/design/codebase-design.md`](docs/design/codebase-design.md). Wire format: [`docs/interface-spec.md`](docs/interface-spec.md). Progress and open items: [`docs/progress.md`](docs/progress.md).
+**Reading path:** [codebase guide](docs/codebase-guide.md) (how it fits together) → [reproducing the results](#reproducing-the-results)
+(each thesis number, with the output to expect) → [decisions](docs/decisions) (why it is built this way) →
+[troubleshooting](docs/troubleshooting.md) (when something fails). Exact formats: [`docs/interface-spec.md`](docs/interface-spec.md).
+Status, run results and open items: [`docs/progress.md`](docs/progress.md).
 
 ## Layout
 
 | Path | What |
 |---|---|
-| [`tools/`](tools) | [`convert.py`](tools/convert.py) (WFDB → int16 `.npz`), [`feed.py`](tools/feed.py) (streams a `.npz` into the board over serial), [`make_replay.py`](tools/make_replay.py) (`.npz` → built-in firmware recording, via `build.sh --record`) |
+| [`tools/`](tools) | [`convert.py`](tools/convert.py) (WFDB → int16 `.npz`), [`feed.py`](tools/feed.py) (streams a `.npz` into the board over serial), [`make_replay.py`](tools/make_replay.py) (`.npz` → built-in firmware recording, via `build.sh --record`), [`fhir_export.py`](tools/fhir_export.py) (stored window → FHIR R5), [`watch_db.py`](tools/watch_db.py) + [`demo.sh`](tools/demo.sh) (live demo) |
 | [`firmware/ehg_node/`](firmware/ehg_node) | Zephyr app for `nrf52840dk/nrf52840`, NCS v3.4.1. [`firmware/build.sh`](firmware/build.sh) builds and flashes it |
 | [`gateway/`](gateway) | Bleak central → MQTT; `--simulate N` software nodes use the same wire format |
 | [`backend/`](backend) | docker compose: Mosquitto, InfluxDB 2.7, ingest, Grafana (provisioned dashboard) |
 | [`viewer/`](viewer) | WebSocket raw multichannel viewer |
 | [`eval/`](eval) | [`latency.py`](eval/latency.py) (H1), [`integrity.py`](eval/integrity.py) (H2 + H4 bit-exact) |
 | [`papers/`](papers) | [`INDEX.md`](papers/INDEX.md) (tracked) + open-access PDFs (not tracked) |
+| [`tests/`](tests) | pytest for the host code, plus [`test_docs.py`](tests/test_docs.py) (docs and wire-format copies match the code) |
+| [`docs/decisions/`](docs/decisions) | why the main design choices were made |
 | [`docs/research/`](docs/research) | nRF / BLE / macOS environment notes with sources |
 
 ## Quickstart
@@ -56,8 +61,28 @@ uv run python eval/latency.py --node EHG-93C0 --since 1h
 uv run python eval/integrity.py --node EHG-93C0 --since 1h
 uv run python tools/fhir_export.py --node EHG-93C0 --since 10m -o window.json   # FHIR R5 export
 
-# tests
+# tests (also run on every push: .github/workflows/tests.yml)
 uv run pytest -q
 ```
 
 The DK serial port is VCOM0 (`/dev/cu.usbmodem0010502082941`, 460800 baud). It carries the recording in (from `tools/feed.py`) and the board's log out, so `feed.py` prints the log: link parameters and, every 10 s, `sent / resent / ring_overflow / starved / max_inject_late`. Only one program can open the port.
+
+## Reproducing the results
+
+Each row: what to run (after Quickstart steps 0 and 2: data converted, backend up), and what the reader should see.
+`eval/*.py` print the lines quoted below; `--since` must cover the run.
+
+| Claim | Setup | Commands | Expected output (recorded run) |
+|---|---|---|---|
+| Tooling works, **no hardware** | 1 simulated node, 1 % packet loss, ~5 min | `uv run python -m gateway.gateway --simulate 1 --sim-loss 0.01`, then `eval/integrity.py --node SIM-0000 --since 10m` and `eval/latency.py --node SIM-0000 --since 10m` | `delivery … = 100.0000 %`, `bit-exact mismatches: 0`, median ≈ 252 ms, p95 ≈ 459 ms (2026-09-29, before wire v2). Not an H1/H2 result: there is no Bluetooth hop, and ≈ 450 ms of it is batching |
+| **H2** delivery > 99 %, every loss identified | DK EHG-93C0 serial feed, TPEHG tpehg1007, 7 min, faults `drop=0.05,burst=3,corrupt=0.01,disc=120,seed=3` | `tools/feed.py data/converted/tpehgdb/tpehg1007.npz --faults …` + `gateway.gateway`, then `eval/integrity.py --node EHG-93C0 --since 15m` | `delivery 8410/8410 = 100.0000 %`, `missing ranges (first 20): []` (run 3, 2026-10-20; 69 drops, 8 corruptions, 4 disconnects all recovered) |
+| **H4** bit-exact at the interface | same run | same `eval/integrity.py` | `bit-exact mismatches: 0` |
+| **H1** p95 < 2 s (stretch < 1 s) | same run; `feed.py` writes the clock pings `eval/results/sync_EHG-93C0.csv` | `eval/latency.py --node EHG-93C0 --since 15m` | `offset method: serial sync …`, `H1 per-sample end-to-end: … median=259 ms p95=478 ms …`, `target p95 < 2000 ms: PASS; stretch p95 < 1000 ms: PASS`, plus `eval/results/latency_cdf_EHG-93C0.png` |
+| **H3** ≥ 8 boards at once | needs 8 boards (one DK here) | `gateway.gateway --nodes 8`; code path exercised by `--simulate 8` | not measured yet ([progress.md](docs/progress.md)) |
+
+All results per run: [`docs/progress.md`](docs/progress.md). When a step fails: [`docs/troubleshooting.md`](docs/troubleshooting.md).
+
+## Licence and citing
+
+Licence: **pending** (awaiting supervisor confirmation); until a `LICENSE` file is added, default copyright applies.
+To cite this software, use [`CITATION.cff`](CITATION.cff) (GitHub shows it as "Cite this repository").

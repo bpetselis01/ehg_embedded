@@ -1,0 +1,17 @@
+# PURPOSE: How to cite this software (Citation File Format). GitHub shows it as "Cite this repository".
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "EHG telemetry pipeline: open, reproducible wireless telemetry and cloud monitoring for electrohysterography"
+authors:
+  - family-names: Petselis
+    given-names: Byron
+    affiliation: "UNSW Sydney (BIOM4951 Thesis B)"
+repository-code: "https://github.com/bpetselis01/ehg_embedded"
+date-released: "2026-10-26"
+keywords:
+  - electrohysterography
+  - Bluetooth Low Energy
+  - Zephyr
+  - telemetry
+  - reproducibility

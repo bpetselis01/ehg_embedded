@@ -7,7 +7,7 @@
  *   e.g. chip ID 8 bytes, last 2 = 93 C0 (our DK) -> name "EHG-93C0".
  *   e.g. connection: the laptop connects and asks for its link settings; main.c only accepts.
  * OUTPUT: Bluetooth adverts as "EHG-XXXX" (XXXX from the chip ID, so every board has its own name, H3).
- *   Serial log (VCOM0, 115200 baud): link settings when they change, packet counters every 10 s.
+ *   Serial log (VCOM0, 460800 baud): link settings when they change, packet counters every 10 s.
  *   e.g. advert: flags 06 + name "EHG-93C0"; scan response: service ID 4e480001-a0e1-...-9a1b2c3d4e5f
  *   e.g. log of 1 connection (timestamps vary; values from the 2026-10-06 run):
  *     [00:00:00.010,000] <inf> main: advertising as EHG-93C0

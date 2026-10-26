@@ -121,7 +121,7 @@ def source_file(db_dir: Path, record_id: int) -> Path:
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("db", choices=DATABASES)
     ap.add_argument("--bits", type=int, choices=DTYPES, default=16)
     a = ap.parse_args()

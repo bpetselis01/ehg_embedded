@@ -120,7 +120,7 @@ def main():
     """Query, compute, print PASS/FAIL against the H1 targets, and save the CDF plot."""
     from backend_client import query_pkts
 
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--node", required=True)
     ap.add_argument("--since", default="1h")
     ap.add_argument("--fs", type=float, default=20.0)

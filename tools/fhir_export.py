@@ -95,7 +95,7 @@ def main():
     from backend_client import query_frames  # local import: keeps bundle() testable without Influx
     from tools.convert import source_file
 
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--node", required=True)
     ap.add_argument("--since", default="10m")
     ap.add_argument("--db", default="tpehgdb")

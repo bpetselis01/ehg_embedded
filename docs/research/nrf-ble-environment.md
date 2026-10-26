@@ -60,7 +60,7 @@ What was checked:
 - **Flashing** uses `nrfutil` (installed: 8.2.1, at `/opt/homebrew/bin/nrfutil`). It erases only the parts of memory the new program needs, writes, checks, then resets the board. `nrfjprog` (an older tool) isn't installed and isn't needed. A J-Link debugger tool is also available (`/usr/local/bin/JLinkExe`).
 - **Unlocking a stuck board:** `nrfutil device recover --serial-number 1050208294` (erases everything).
 - **Read-out protection** ("AP-Protect", stops anyone reading the chip's memory): our builds don't lock it, so the board stays debuggable after a recover + reflash.
-- **Serial log:** USB port `/dev/tty.usbmodem0010502082941`, 115200 baud. (Some Nordic examples send logs to a debugger channel called RTT instead; ours uses the USB serial port.)
+- **Serial log:** USB port `/dev/tty.usbmodem0010502082941`, 115200 baud by default. *(This project now runs it at 460800: [`boards/nrf52840dk_nrf52840.overlay`](../../firmware/ehg_node/boards/nrf52840dk_nrf52840.overlay).)* (Some Nordic examples send logs to a debugger channel called RTT instead; ours uses the USB serial port.)
 
 ## 2. Bluetooth settings and functions (checked in the SDK)
 
@@ -219,7 +219,7 @@ bt_gatt_notify_cb(conn, &p);                                   // send + get a c
 
 - **nRF Connect for Desktop** (Nordic's point-and-click apps): no way to drive them from scripts. Use these instead:
   - Bluetooth from Python: Bleak.
-  - Serial log: `pyserial`, or `screen /dev/tty.usbmodem0010502082941 115200`.
+  - Serial log: `pyserial`, or `screen /dev/tty.usbmodem0010502082941 460800` (this project's rate).
   - Board actions: `nrfutil device {program,reset,recover,erase,list}`.
   - Other `nrfutil` add-ons: `ble-sniffer` (needs a sniffer board), `trace`, `mcu-manager`, `sdk-manager`.
   - `pc-ble-driver-py`: abandoned (2022, Python < 3.11). Don't use.

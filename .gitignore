@@ -23,3 +23,6 @@ CLAUDE.md
 .superpowers/
 docs/superpowers/
 firmware/ehg_node/src/replay_data.h
+
+# local symlink to the XIAO blinky test project outside this repo
+xiao_blinky

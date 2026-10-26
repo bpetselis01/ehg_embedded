@@ -62,7 +62,7 @@ static const {ctype} replay_samples[REPLAY_N_FRAMES * REPLAY_N_CH] = {{
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("npz")
     ap.add_argument("--record-id", type=int, help="default: looked up in the manifest.json next to the npz")
     ap.add_argument("--seconds", type=float, help="truncate (needed for 16 ch x 200 Hz: flash holds ~2 min)")

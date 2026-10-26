@@ -53,7 +53,7 @@ class GapTracker:
         gap = list(range(self.last + 1, seq))
         self.missing.update(gap)
         self.last = seq
-        # ponytail: dedup window is unbounded per stream (~4 bytes*seq); prune if soaks exceed days
+        # shortcut: dedup window is unbounded per stream (~4 bytes*seq); prune if soaks exceed days
         return gap
 
 
@@ -64,7 +64,7 @@ class ClockMap:
     queueing delay bounds the true offset from above. Latencies computed with this
     offset are therefore lower bounds shifted by the (unknown, constant) minimum link
     delay - report that caveat with H1.
-    # ponytail: no drift correction; DK crystal is +-20 ppm (~0.4 s over 6 h).
+    # shortcut: no drift correction; DK crystal is +-20 ppm (~0.4 s over 6 h).
     # Add a linear fit of the min-offset envelope if soak results show drift.
     """
 

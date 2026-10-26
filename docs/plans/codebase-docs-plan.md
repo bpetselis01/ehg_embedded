@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-26
 **Mode:** New Feature (Standard)
-**Status:** Plan, not started
+**Status:** Units 1–6 implemented 2026-10-26; Unit 7 (LICENSE) waits on the supervisor
 
 ## Problem
 
