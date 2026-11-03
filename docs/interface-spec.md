@@ -89,7 +89,7 @@ Gateway status (only with `--gateway-id ID`): retained `ehg/_gw/ID/status`, payl
 
 Same data as section 5, different shape. `ehg_raw(time, node, record_id, seq, frame_idx, ch, v)`: one row per frame **and channel**, `v` = the raw integer sample (never scaled), primary key `(node, seq, ch, time)`;
 `time` = `t_inject_host` + i / `fs_hz`. `ehg_pkt(time, node, seq, n_frames, retrans, replayed, t_inject_dev, t_inject_host, t_gw_rx, t_mqtt_pub, t_ingest_rx, t_db_ack)`, key `(node, seq, time)`.
-`ehg_health(time, node, delivery_pct, p95_latency_ms, rx, missing, unrecovered, flatline_channels, saturated_pct, score)`, key `(node, time)` (written by the triage worker, Unit 8). Created by `backend/db/migrations` (revision 0001 plain tables, 0002 TimescaleDB).
+`ehg_health(time, node, delivery_pct, p95_latency_ms, rx, missing, unrecovered, flatline_channels, saturated_pct, score)`, key `(node, time)` (written by the triage worker, Unit 8). Created by `backend/db/migrations` (revision 0001 plain tables, 0002 triage and registry, 0003 TimescaleDB).
 Writes use `ON CONFLICT DO NOTHING`, so replays are harmless. `eval/backend_client.py --backend timescale` returns exactly the shapes the InfluxDB path returns; `eval/parity.py` checks it.
 
 NATS JetStream stream `EHG` (file storage, 7 days / 8 GB, one-hour duplicate window): `EHG.PKT.<node>` = the packet JSON (header `Nats-Msg-Id: <node>:<seq>:<t_inject>`), `EHG.GW.<gateway>` = status text,

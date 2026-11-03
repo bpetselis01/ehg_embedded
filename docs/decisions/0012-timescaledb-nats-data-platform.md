@@ -30,8 +30,8 @@ time series plus relational data (registry, alerts, audit). It must fit beside t
 ## Built and checked in Unit 6 (2026-11-03)
 
 - Checked with tests: the bridge acknowledges MQTT only after the stream's acknowledgement; a failure leaves it unacknowledged; a crash between publish and ack redelivers and the (fake) duplicate window stores it once; unreadable messages go to `EHG.BAD.*` and are acknowledged;
-  the writer's rows equal the samples (raw integers, 24-bit kept), batches are atomic and idempotent on a real PostgreSQL 14, an outage is `degraded` with the messages kept in NATS, and revision 0002 **fails loudly** (and leaves the database at 0001) on a server without TimescaleDB.
-- **NOT verified:** JetStream's duplicate window and `Nats-Msg-Id` behaviour on a real server (the fake mimics the documented behaviour); `nak(delay=...)` redelivery pacing; revision 0002 (hypertables, compression, continuous aggregates, `SHOW timescaledb.license`) on a real TimescaleDB; the `timescaledb-ha` image's init script and data path; the whole parity proof.
+  the writer's rows equal the samples (raw integers, 24-bit kept), batches are atomic and idempotent on a real PostgreSQL 14, an outage is `degraded` with the messages kept in NATS, and revision 0003 **fails loudly** (and leaves the database at 0001) on a server without TimescaleDB.
+- **NOT verified:** JetStream's duplicate window and `Nats-Msg-Id` behaviour on a real server (the fake mimics the documented behaviour); `nak(delay=...)` redelivery pacing; revision 0003 (hypertables, compression, continuous aggregates, `SHOW timescaledb.license`) on a real TimescaleDB; the `timescaledb-ha` image's init script and data path; the whole parity proof.
   psycopg 3 is LGPL-3.0 (recorded in the licence register).
 - **Deviation:** the writer stores one row per frame **and channel** (the prompt's schema) where InfluxDB stores one point per frame; `eval/backend_client.py` regroups them, and `eval/parity.py` proves the regrouped data are identical.
 

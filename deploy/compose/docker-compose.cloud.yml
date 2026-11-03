@@ -103,6 +103,7 @@ services:
       HAPI_DB_PASSWORD: ${HAPI_DB_PASSWORD:?HAPI_DB_PASSWORD is not set}
       KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?KEYCLOAK_DB_PASSWORD is not set}
       EXPORTER_DB_PASSWORD: ${EXPORTER_DB_PASSWORD:?EXPORTER_DB_PASSWORD is not set}
+      TRIAGE_DB_PASSWORD: ${TRIAGE_DB_PASSWORD:?TRIAGE_DB_PASSWORD is not set}
     volumes:
       - ../postgres/10-init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro
       - pg-data:/home/postgres/pgdata

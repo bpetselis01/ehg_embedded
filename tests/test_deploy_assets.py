@@ -27,7 +27,7 @@ RESERVED_MIB = {"hapi (Unit 9)": 2300, "keycloak (Unit 7)": 1360, "step-ca (Unit
 BUDGET_MIB = int(9.5 * 1024)  # the whole-stack ceiling: ~9.5 GB of the 12 GB, leaving the OS, Docker and headroom
 EXPECTED_SERVICES = {"caddy", "mosquitto", "nats", "postgres", "prometheus", "alertmanager", "loki", "grafana", "alloy", "node-exporter", "cadvisor", "postgres-exporter"}
 SECRET_ENV = {"EHG_DOMAIN": "x.example", "POSTGRES_PASSWORD": "x", "EHG_DB_PASSWORD": "x", "HAPI_DB_PASSWORD": "x", "KEYCLOAK_DB_PASSWORD": "x",
-              "EXPORTER_DB_PASSWORD": "x", "GRAFANA_ADMIN_PASSWORD": "x"}
+              "EXPORTER_DB_PASSWORD": "x", "TRIAGE_DB_PASSWORD": "x", "GRAFANA_ADMIN_PASSWORD": "x"}
 
 
 def deploy_files() -> list[Path]:

@@ -1,6 +1,6 @@
 """Apply or undo the database migrations (Alembic, hand-written SQL).
 
-  uv run python -m backend.db.migrate upgrade              # to the latest revision (0002 needs TimescaleDB)
+  uv run python -m backend.db.migrate upgrade              # to the latest revision (0003 needs TimescaleDB)
   uv run python -m backend.db.migrate upgrade 0001         # only the plain-PostgreSQL schema
   uv run python -m backend.db.migrate downgrade 0001       # one step back; "base" removes everything
 
@@ -9,10 +9,10 @@ INPUT: command (upgrade | downgrade | current), an optional revision (default he
   (SQLAlchemy URL, e.g. postgresql+psycopg://ehg:SECRET@localhost:5432/ehg) or --url.
 OUTPUT: Alembic's own lines ("Running upgrade  -> 0001, ..."), then the current revision. Exit status 0 only if the database is at the requested revision. A failure leaves the
   failed revision unapplied (each revision runs in its own transaction), never half-applied.
-  e.g. `current` prints "0002 (head)" or "0001" or "(no revision: empty database)".
+  e.g. `current` prints "0003 (head)" or "0002" or "(no revision: empty database)".
 HOW: Builds an Alembic Config in code (no alembic.ini) pointing at backend/db/migrations.
 ROLE IN THESIS: The migration step of the restore drill and of the cloud deployment (docs/decisions/0017).
-BEFORE -> AFTER: Before: no schema. After: tables from revision 0001, hypertables and roll-ups from 0002.
+BEFORE -> AFTER: Before: no schema. After: tables from revisions 0001 and 0002, hypertables and roll-ups from 0003.
 """
 
 import argparse

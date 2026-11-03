@@ -1,6 +1,6 @@
 """Base schema: ehg_raw, ehg_pkt, ehg_health as plain PostgreSQL tables (works on any PostgreSQL 14 or later).
 
-PURPOSE: The enterprise store's tables, mirroring the InfluxDB measurements field for field (docs/interface-spec.md 5). TimescaleDB features are a separate revision (0002) so that this one
+PURPOSE: The enterprise store's tables, mirroring the InfluxDB measurements field for field (docs/interface-spec.md 5). TimescaleDB features are a separate revision (0003) so that this one
   can be tested on a plain PostgreSQL and so that a missing extension fails loudly there, not here.
 INPUT: an empty database. OUTPUT: tables ehg_raw (one row per frame and channel, raw integer samples), ehg_pkt (one row per packet, timing fields), ehg_health (one row per node per minute, written by the triage worker).
   e.g. ehg_raw row: (2026-10-06 02:31:08.018676+00, 'EHG-93C0', '0', 0, 0, 0, 1093)

@@ -41,6 +41,7 @@ services:
       HAPI_DB_PASSWORD: ${EHG_DB_PASSWORD:-local-only-change-me}
       KEYCLOAK_DB_PASSWORD: ${EHG_DB_PASSWORD:-local-only-change-me}
       EXPORTER_DB_PASSWORD: ${EHG_DB_PASSWORD:-local-only-change-me}
+      TRIAGE_DB_PASSWORD: ${EHG_DB_PASSWORD:-local-only-change-me}
     ports: ["127.0.0.1:5433:5432"]
     volumes:
       - ../deploy/postgres/10-init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro

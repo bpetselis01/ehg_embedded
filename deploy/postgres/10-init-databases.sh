@@ -1,7 +1,8 @@
 #!/bin/sh
 # PURPOSE: First start of PostgreSQL only: create the databases and login roles the cloud services use. Runs once, from /docker-entrypoint-initdb.d.
-# INPUT: environment variables (from the decrypted secrets): EHG_DB_PASSWORD, HAPI_DB_PASSWORD, KEYCLOAK_DB_PASSWORD, EXPORTER_DB_PASSWORD.
-#   e.g. creates roles ehg, hapi, keycloak, ehg_exporter and databases ehg, hapi, keycloak (one owner each).
+# INPUT: environment variables (from the decrypted secrets): EHG_DB_PASSWORD, HAPI_DB_PASSWORD, KEYCLOAK_DB_PASSWORD, EXPORTER_DB_PASSWORD, TRIAGE_DB_PASSWORD.
+#   e.g. creates roles ehg, hapi, keycloak, ehg_exporter, ehg_triage and databases ehg, hapi, keycloak (one owner each).
+#   ehg_triage is the triage service's own login: it owns nothing, and the migrations grant it only what it needs (append-only on the audit log).
 # OUTPUT: nothing printed except psql's own messages; a missing variable stops the script with an error (set -eu), so the container fails visibly.
 # HOW: psql variables with :'name' quoting put the passwords into the statements safely, so a quote in a password cannot break or inject SQL.
 #   ehg_exporter gets only pg_monitor (read-only statistics) for postgres_exporter. TimescaleDB itself is enabled by the migrations (Unit 6), not here.
@@ -10,11 +11,12 @@
 # BEFORE -> AFTER: Before: an empty cluster. After: three empty databases with their owners.
 set -eu
 psql -v ON_ERROR_STOP=1 --username postgres --dbname postgres \
-  -v ehg_pw="$EHG_DB_PASSWORD" -v hapi_pw="$HAPI_DB_PASSWORD" -v kc_pw="$KEYCLOAK_DB_PASSWORD" -v exp_pw="$EXPORTER_DB_PASSWORD" <<'SQL'
+  -v ehg_pw="$EHG_DB_PASSWORD" -v hapi_pw="$HAPI_DB_PASSWORD" -v kc_pw="$KEYCLOAK_DB_PASSWORD" -v exp_pw="$EXPORTER_DB_PASSWORD" -v tri_pw="$TRIAGE_DB_PASSWORD" <<'SQL'
 CREATE ROLE ehg LOGIN PASSWORD :'ehg_pw';
 CREATE ROLE hapi LOGIN PASSWORD :'hapi_pw';
 CREATE ROLE keycloak LOGIN PASSWORD :'kc_pw';
 CREATE ROLE ehg_exporter LOGIN PASSWORD :'exp_pw';
+CREATE ROLE ehg_triage LOGIN PASSWORD :'tri_pw';
 GRANT pg_monitor TO ehg_exporter;
 CREATE DATABASE ehg OWNER ehg;
 CREATE DATABASE hapi OWNER hapi;

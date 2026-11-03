@@ -156,7 +156,8 @@ Step by step:
 | [`backend/bridge/bridge.py`](../backend/bridge/bridge.py) | MQTT -> JetStream; acknowledges the broker only after the stream has the message |
 | [`backend/ts_writer/writer.py`](../backend/ts_writer/writer.py) | JetStream -> PostgreSQL/TimescaleDB, idempotent, atomic batches, reports "degraded" when the database is down |
 | [`backend/db/migrate.py`](../backend/db/migrate.py) | applies or undoes the database migrations (Alembic) |
-| [`backend/db/migrations/env.py`](../backend/db/migrations/env.py), [`versions/0001_base_schema.py`](../backend/db/migrations/versions/0001_base_schema.py), [`versions/0002_timescale.py`](../backend/db/migrations/versions/0002_timescale.py) | Alembic environment; plain tables; TimescaleDB hypertables, compression, retention, roll-ups |
+| [`backend/db/migrations/env.py`](../backend/db/migrations/env.py), [`versions/0001_base_schema.py`](../backend/db/migrations/versions/0001_base_schema.py), [`versions/0002_triage_registry.py`](../backend/db/migrations/versions/0002_triage_registry.py), [`versions/0003_timescale.py`](../backend/db/migrations/versions/0003_timescale.py) | Alembic environment; plain time-series tables; alerts, append-only audit log and device/subject registry; TimescaleDB hypertables, compression, retention, roll-ups |
+| [`backend/triage/rules.py`](../backend/triage/rules.py) | pipeline-health alert rules, hysteresis, severity score and worklist order (pure functions; nothing clinical) |
 | [`backend/platform.Dockerfile`](../backend/platform.Dockerfile), [`backend/docker-compose.platform.yml`](../backend/docker-compose.platform.yml) | the platform services' image and the compose override (profile `platform`) |
 | [`eval/parity.py`](../eval/parity.py) | compares InfluxDB and TimescaleDB for the same run; fails if they differ |
 | [`tests/conftest.py`](../tests/conftest.py) | a throwaway local PostgreSQL for the tests that need real SQL |
