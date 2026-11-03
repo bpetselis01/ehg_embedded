@@ -9,12 +9,14 @@ import pytest
 from backend.triage.rules import Config
 from backend.triage.stream import Engine, FleetMonitor, NodeMonitor
 
+BASE = 1_791_000_000.0  # a plausible wall-clock time: the shared validator refuses epoch-0 timestamps
+
 
 def pkt(seq, t_inject_host=None, node="EHG-1", frames=10, n_ch=3, flags=0, fill=None, **extra):
     """A packet message; samples vary by default (so they are not flat); `fill` makes every sample that constant."""
     samples = [[(seq * 7 + f * 3 + c * 11) % 1000 for c in range(n_ch)] for f in range(frames)] if fill is None else [[fill] * n_ch for _ in range(frames)]
-    m = {"node_id": node, "seq": seq, "frame_idx": seq * frames, "t_inject": seq * 16384, "t_inject_host": seq * 0.5 if t_inject_host is None else t_inject_host,
-         "n_ch": n_ch, "fs_hz": 20, "record_id": 0, "flags": flags, "samples": samples, "t_gw_rx": 0.0, "t_mqtt_pub": 0.0}
+    m = {"node_id": node, "seq": seq, "frame_idx": seq * frames, "t_inject": seq * 16384, "t_inject_host": BASE + seq * 0.5 if t_inject_host is None else t_inject_host,
+         "n_ch": n_ch, "fs_hz": 20, "record_id": 0, "flags": flags, "samples": samples, "t_gw_rx": BASE, "t_mqtt_pub": BASE}
     m.update(extra)
     return m
 
@@ -64,17 +66,17 @@ def test_loss_rate_counts_what_went_missing_in_the_last_60_s_and_still_is():
 
 def test_latency_is_off_without_a_clock_offset_and_ignores_resends_and_replays():
     off = NodeMonitor("EHG-1")
-    off.on_packet(pkt(1, t_inject_host=10.0), 10.4)
-    assert off.snapshot(11.0, None).latency_p95_ms is None, "no offset configured: no latency claim"
+    off.on_packet(pkt(1, t_inject_host=BASE + 10.0), BASE + 10.4)
+    assert off.snapshot(BASE + 11.0, None).latency_p95_ms is None, "no offset configured: no latency claim"
     m = NodeMonitor("EHG-1", clock_offset_s=0.0)
     for i in range(20):
-        m.on_packet(pkt(i, t_inject_host=100.0 + i), 100.0 + i + 0.5)   # 500 ms each
-    m.on_packet(pkt(30, t_inject_host=100.0, flags=1), 160.0)              # a re-sent copy, 60 s old: excluded
-    m.on_packet(pkt(31, t_inject_host=100.0, replayed=True), 161.0)        # an outbox replay: excluded
-    assert m.snapshot(162.0, None).latency_p95_ms == pytest.approx(500.0, abs=1)
+        m.on_packet(pkt(i, t_inject_host=BASE + 100.0 + i), BASE + 100.0 + i + 0.5)   # 500 ms each
+    m.on_packet(pkt(30, t_inject_host=BASE + 100.0, flags=1), BASE + 160.0)              # a re-sent copy, 60 s old: excluded
+    m.on_packet(pkt(31, t_inject_host=BASE + 100.0, replayed=True), BASE + 161.0)        # an outbox replay: excluded
+    assert m.snapshot(BASE + 162.0, None).latency_p95_ms == pytest.approx(500.0, abs=1)
     shifted = NodeMonitor("EHG-1", clock_offset_s=0.2)
-    shifted.on_packet(pkt(1, t_inject_host=10.0), 10.7)
-    assert shifted.snapshot(11.0, None).latency_p95_ms == pytest.approx(500.0, abs=1), "the configured offset is removed"
+    shifted.on_packet(pkt(1, t_inject_host=BASE + 10.0), BASE + 10.7)
+    assert shifted.snapshot(BASE + 11.0, None).latency_p95_ms == pytest.approx(500.0, abs=1), "the configured offset is removed"
 
 
 def test_flatline_needs_ten_seconds_of_constant_samples_per_channel():
@@ -222,3 +224,70 @@ def test_thresholds_in_the_engine_config_take_effect():
     fleet2, store2 = FleetMonitor(), FakeStore()
     run_engine(Engine(fleet2, store2), 30, feeder=feeder(fleet2, silent=[(5, 100)]))
     assert ("open", "EHG-1", "NODE_OFFLINE", "critical") in store2.calls
+
+
+# ---------------------------------------------------------------- hostile input (automated security review, 2026-11-03)
+
+@pytest.mark.parametrize("bad", [{"fs_hz": 0}, {"fs_hz": float("nan")}, {"fs_hz": 10**9}, {"samples": [[1.5, 2, 3]]}, {"samples": [[0] * 65]}, {"samples": [[0, 0, 0]] * 20000}, {"samples": []},
+                                 {"node_id": "bad.node"}, {"flags": "x"}, {"seq": 2**40}])
+def test_the_monitor_refuses_the_messages_the_writer_refuses_and_stays_unchanged(bad):
+    fleet = FleetMonitor()
+    fleet.on_packet(pkt(1), 1.0)
+    before = fleet.nodes["EHG-1"].snapshot(2.0, None)
+    broken = pkt(2)
+    broken.update(bad)
+    with pytest.raises(ValueError):
+        fleet.on_packet(broken, 2.0)
+    assert fleet.nodes["EHG-1"].snapshot(2.0, None) == before and list(fleet.nodes) == ["EHG-1"] if bad.get("node_id") is None else not fleet.nodes.get("bad.node")
+
+
+def test_a_channel_count_change_does_not_break_the_evaluation():
+    m = NodeMonitor("EHG-1")
+    stream(m, range(25))
+    stream(m, range(25, 60), start=12.5, n_ch=16)
+    s = m.snapshot(30.0, None)
+    assert s.n_channels == 16 and s.flatline_channels >= 0
+
+
+def test_a_huge_sequence_jump_is_a_restart_not_a_two_billion_entry_list():
+    import time
+    m = NodeMonitor("EHG-1")
+    stream(m, range(5))
+    start = time.time()
+    m.on_packet(pkt(2**31 - 1), 3.0)
+    assert time.time() - start < 1.0, "must not build a list of 2 billion missing numbers"
+    s = m.snapshot(3.5, None)
+    assert s.seq_restarted and s.missing_60 == 0 and len(m.tracker.missing) == 0
+
+
+def test_the_number_of_unregistered_nodes_is_capped():
+    fleet = FleetMonitor(max_nodes=3)
+    for i in range(3):
+        fleet.on_packet(pkt(1, node=f"N-{i}"), 1.0)
+    with pytest.raises(ValueError, match="too many"):
+        fleet.on_packet(pkt(1, node="N-3"), 1.0)
+    fleet.on_packet(pkt(2, node="N-0"), 2.0)  # an existing node still works
+    assert len(fleet.nodes) == 3
+
+
+def test_kept_frames_are_bounded_whatever_the_sampling_rate():
+    m = NodeMonitor("EHG-1")
+    for s in range(200):
+        m.on_packet(pkt(s, frames=1000, fs_hz=100000), s * 0.01)
+    assert sum(n for n, _ in m._frames) <= 4000 + 1000
+
+
+def test_one_bad_node_cannot_stop_the_evaluation_of_the_others(monkeypatch):
+    fleet, store, logs = FleetMonitor(), FakeStore(), []
+    fleet.on_packet(pkt(1, node="GOOD"), 0.0)
+    fleet.on_packet(pkt(1, node="BAD"), 0.0)
+    real = NodeMonitor.snapshot
+
+    def snapshot(self, now, status):
+        if self.id == "BAD":
+            raise RuntimeError("corrupt state")
+        return real(self, now, status)
+    monkeypatch.setattr(NodeMonitor, "snapshot", snapshot)
+    engine = Engine(fleet, store, log=logs.append)
+    run_engine(engine, 12)
+    assert ("open", "GOOD", "NODE_OFFLINE", "critical") in store.calls and any("BAD" in str(l) and "corrupt state" in str(l) for l in logs)

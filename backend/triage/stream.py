@@ -22,12 +22,17 @@ from datetime import datetime, timezone
 
 import numpy as np
 
+from backend.ts_writer.writer import validate
 from gateway.tracking import GapTracker
+
 from backend.triage.rules import AlertView, Config, RuleTracker, Snapshot, evaluate, node_score
 
 MAX_TRIES, RETRY_S, MARGIN_S = 5, 1.0, 2.0  # the gateway's resend budget (gateway/gateway.py) plus a margin
 WINDOW_S, SIGNAL_S, RESTART_HOLD_S = 60.0, 10.0, 5.0
 RAIL16, RAIL24 = (32767, -32768), (8388607, -8388608)
+MAX_GAP = 10_000  # a forward jump bigger than this is a restart, never a list of missing numbers (GapTracker would build one entry per number)
+MAX_KEPT_FRAMES = 4_000  # hard bound on the signal window, whatever fs_hz claims
+MAX_NODES = 256  # monitors for node ids that nobody registered are capped
 
 
 class NodeMonitor:
@@ -39,22 +44,31 @@ class NodeMonitor:
         self.last_packet_t: float | None = None
         self.interval_s, self.fs, self.n_ch, self.flags = 0.5, 20.0, 0, 0
         self._rx, self._gaps, self._lat = deque(), deque(), deque()  # (t,), (t, seq), (t, ms)
-        self._frames = deque()  # (n_frames, array) newest last
+        self._frames, self._total = deque(), 0  # (n_frames, array) newest last, and their frame count
         self._streams_seen, self._restart_until = 0, 0.0
 
     def on_packet(self, m: dict, t_recv: float) -> None:
-        """Record one packet message received at t_recv."""
+        """Record one packet message received at t_recv. The message must already be valid (FleetMonitor.on_packet checks it)."""
         self.last_packet_t, self.fs, self.flags = t_recv, float(m["fs_hz"]), int(m["flags"])
         self.interval_s = len(m["samples"]) / self.fs
         arr = np.asarray(m["samples"], dtype=np.int64)
+        if arr.shape[1] != self.n_ch:
+            self._frames.clear()  # a different channel count: old frames can no longer be stacked with the new ones
+            self._total = 0
         self.n_ch = arr.shape[1]
         self._frames.append((len(arr), arr))
-        new = self.tracker.observe(int(m["seq"]))
+        self._total += len(arr)
+        self._trim()
+        seq, last = int(m["seq"]), self.tracker.last
+        forced_restart = last is not None and seq - last > MAX_GAP
+        if forced_restart:
+            self.tracker, self._streams_seen = GapTracker(), 0
+        new = self.tracker.observe(seq)
         for s in new:
             self.first_missing[s] = t_recv
             self._gaps.append((t_recv, s))
         if self.tracker.streams != self._streams_seen:
-            if self._streams_seen:  # the very first packet starts stream 1; that is not a restart
+            if self._streams_seen or forced_restart:  # the very first packet starts stream 1; that is not a restart
                 self._restart_until = t_recv + RESTART_HOLD_S
             self._streams_seen, self.first_missing = self.tracker.streams, {}
             self._gaps.clear()
@@ -81,13 +95,17 @@ class NodeMonitor:
                         rx_60=len(self._rx), missing_60=missing_60, latency_p95_ms=p95, flatline_channels=flat, n_channels=self.n_ch, saturated_pct=sat,
                         seq_restarted=now < self._restart_until)
 
+    def _trim(self) -> None:
+        """Drop the oldest packets while the rest still cover the signal window: memory stays bounded whatever fs_hz or the packet size claim."""
+        need = min(int(SIGNAL_S * self.fs), MAX_KEPT_FRAMES)
+        while self._frames and self._total - self._frames[0][0] >= need:
+            self._total -= self._frames.popleft()[0]
+
     def _signal(self, now: float) -> tuple[int, float]:
         """(channels with zero variance, % of samples at the rails) over the last 10 s of frames; (0, 0) until 10 s have been seen."""
-        need = int(SIGNAL_S * self.fs)
-        total = sum(n for n, _ in self._frames)
-        while self._frames and total - self._frames[0][0] >= need:
-            total -= self._frames.popleft()[0]
-        if total < need or self.n_ch == 0:
+        need = min(int(SIGNAL_S * self.fs), MAX_KEPT_FRAMES)
+        self._trim()
+        if self._total < need or self.n_ch == 0:
             return 0, 0.0
         data = np.concatenate([a for _, a in self._frames])[-need:]
         hi, lo = RAIL24 if self.flags & 2 else RAIL16
@@ -97,14 +115,19 @@ class NodeMonitor:
 class FleetMonitor:
     """All nodes, plus gateway status. `gateway_of(node)` returns the node's gateway id (from the registry) or None."""
 
-    def __init__(self, gateway_of=lambda node: None, clock_offset_s: float | None = None):
+    def __init__(self, gateway_of=lambda node: None, clock_offset_s: float | None = None, max_nodes: int = MAX_NODES):
         self.nodes: dict[str, NodeMonitor] = {}
         self.gateways: dict[str, str] = {}
-        self._gateway_of, self._offset = gateway_of, clock_offset_s
+        self._gateway_of, self._offset, self._max_nodes = gateway_of, clock_offset_s, max_nodes
 
     def on_packet(self, m: dict, t_recv: float) -> None:
-        """Route a packet to its node's monitor."""
-        self.nodes.setdefault(m["node_id"], NodeMonitor(m["node_id"], self._offset)).on_packet(m, t_recv)
+        """Route a packet to its node's monitor. Raises ValueError for a message the writer would refuse, or for a new node beyond the cap; the monitors are left unchanged."""
+        validate(m)
+        if m["node_id"] not in self.nodes:
+            if len(self.nodes) >= self._max_nodes:
+                raise ValueError(f"too many nodes ({self._max_nodes}) are already being monitored; ignoring {m['node_id']!r}")
+            self.nodes[m["node_id"]] = NodeMonitor(m["node_id"], self._offset)
+        self.nodes[m["node_id"]].on_packet(m, t_recv)
 
     def on_status(self, gateway_id: str, status: str, t: float) -> None:
         """Record a gateway's retained online/offline text."""
@@ -117,9 +140,15 @@ class FleetMonitor:
             g = next(iter(self.gateways))
         return self.gateways.get(g) if g else None
 
-    def snapshots(self, now: float) -> dict[str, Snapshot]:
-        """A snapshot for every node seen so far."""
-        return {n: m.snapshot(now, self.gateway_status(n)) for n, m in self.nodes.items()}
+    def snapshots(self, now: float, log=print) -> dict[str, Snapshot]:
+        """A snapshot for every node seen so far; a node whose state is broken is logged and skipped, never allowed to stop the others."""
+        out = {}
+        for n, m in self.nodes.items():
+            try:
+                out[n] = m.snapshot(now, self.gateway_status(n))
+            except Exception as e:  # noqa: BLE001
+                log(f"triage: could not evaluate node {n} ({type(e).__name__}: {e}); skipped this round")
+        return out
 
 
 class Engine:
@@ -132,7 +161,7 @@ class Engine:
     def tick(self, now: float) -> list[tuple]:
         """One evaluation round; returns the (node, event...) tuples applied."""
         applied = []
-        snaps = self.fleet.snapshots(now)
+        snaps = self.fleet.snapshots(now, self.log)
         for node, snap in snaps.items():
             for ev in self.tracker.update(node, evaluate(snap, self.cfg)):
                 kind, rule = ev[0], ev[1]
@@ -234,7 +263,10 @@ async def run() -> None:
     async def evaluate_loop():
         """Once a second."""
         while True:
-            await asyncio.to_thread(engine.tick, time.time())
+            try:
+                await asyncio.to_thread(engine.tick, time.time())
+            except Exception as e:  # noqa: BLE001  (a database hiccup in one round must not end the loop for good)
+                print(f"triage: evaluation round failed ({type(e).__name__}: {e}); retrying in 1 s")
             await asyncio.sleep(1.0)
 
     server = uvicorn.Server(uvicorn.Config(app, host=host, port=int(os.environ.get("TRIAGE_PORT", "8780")), log_level="info"))

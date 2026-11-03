@@ -84,6 +84,13 @@ All four were real, all fixed with failing tests first (`tests/test_ts_writer.py
   Now a single gate covers every route that touches a node, whatever the caller's role: such nodes and their alerts are left out of the worklist and the list (the worklist reports `hidden_no_consent`), alert detail and every workflow action return 403, and each refusal is an audit row (`consent.denied`). Tests: `tests/test_triage_api.py`.
 - Open: aggregate numbers on `/metrics` (alert counts by state) include alerts on non-consented nodes; they identify no node or subject. The consent rule depends on the registry linking nodes to subjects; a node that is not registered is not gated (documented in `backend/triage/registry.py`).
 
+## Stream monitor (Unit 8): second review round, 2026-11-03
+
+- **Unvalidated packets in the monitor (HIGH, fixed):** `stream.py` trusted message contents that the writer already validates. A hostile `fs_hz`, a huge packet or a changing channel count could crash the evaluation loop or exhaust memory. It now runs the SAME `validate()` as the writer before any state changes, resets its frame window when the channel count changes, keeps at most 4,000 frames per node whatever `fs_hz` claims (trimmed on receipt, not only when a snapshot is taken),
+  caps the number of monitored nodes at 256, and isolates each node's evaluation (a broken node is logged and skipped; the evaluation loop survives a failed round).
+- **A related attack the review did not name, found while fixing it (fixed):** a sequence number jumping forward by billions made `GapTracker` build one entry per missing number. A forward jump over 10,000 is now treated as a restart (and shown as SEQ_RESTART) before the tracker sees it. My test for this ran against the unfixed code first and was killed, which is how I knew it was real.
+- Still open: `GapTracker` remembers every sequence number seen in a stream (its own comment says so); a long soak from a hostile gateway can still grow that set slowly.
+
 ## Known limit: a gateway can publish for any node id
 
 `topic write ehg/+/pkt` lets an authenticated gateway publish packets labelled with another node's id. Pinning a gateway to its nodes needs either a gateway id in the topic or message (a change to the documented `ehg/<node>/pkt` interface that `eval/` and the recorded runs rely on) or a check against a registry of which gateway serves which node.

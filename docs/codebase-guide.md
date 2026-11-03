@@ -157,6 +157,7 @@ Step by step:
 | [`backend/ts_writer/writer.py`](../backend/ts_writer/writer.py) | JetStream -> PostgreSQL/TimescaleDB, idempotent, atomic batches, reports "degraded" when the database is down |
 | [`backend/db/migrate.py`](../backend/db/migrate.py) | applies or undoes the database migrations (Alembic) |
 | [`backend/db/migrations/env.py`](../backend/db/migrations/env.py), [`versions/0001_base_schema.py`](../backend/db/migrations/versions/0001_base_schema.py), [`versions/0002_triage_registry.py`](../backend/db/migrations/versions/0002_triage_registry.py), [`versions/0003_timescale.py`](../backend/db/migrations/versions/0003_timescale.py) | Alembic environment; plain time-series tables; alerts, append-only audit log and device/subject registry; TimescaleDB hypertables, compression, retention, roll-ups |
+| [`deploy/keycloak/realm-ehg.json`](../deploy/keycloak/realm-ehg.json) | the Keycloak realm as code: roles, clients (PKCE, device grant), TOTP for staff; no secrets, no users |
 | [`backend/triage/stream.py`](../backend/triage/stream.py) | per-node measurement from the packet stream, the once-a-second rule evaluation, health rows, and the service entry point |
 | [`backend/triage/app.py`](../backend/triage/app.py) | the triage HTTP API: worklist, trends, alert workflow, registry, audit, config; role-checked and audited |
 | [`backend/triage/registry.py`](../backend/triage/registry.py) | gateways, nodes, pseudonymous subjects with consent, and the health history behind the trends |

@@ -1,0 +1,186 @@
+{
+  "realm": "ehg",
+  "enabled": true,
+  "sslRequired": "all",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "bruteForceProtected": true,
+  "failureFactor": 5,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA1",
+  "otpPolicyDigits": 6,
+  "otpPolicyPeriod": 30,
+  "roles": {
+    "realm": [
+      {
+        "name": "viewer",
+        "description": "read the worklist, trends and FHIR panel"
+      },
+      {
+        "name": "operator",
+        "description": "viewer + acknowledge, note, escalate, resolve alerts"
+      },
+      {
+        "name": "admin",
+        "description": "operator + audit, configuration, registry, revoke gateways"
+      },
+      {
+        "name": "gateway",
+        "description": "an enrolled phone: may request a device certificate"
+      }
+    ]
+  },
+  "clientScopes": [
+    {
+      "name": "gateway:enrol",
+      "protocol": "openid-connect",
+      "description": "allows POST /enroll on the enrolment API",
+      "attributes": {
+        "include.in.token.scope": "true"
+      }
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "triage-ui",
+      "name": "Triage page",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "https://${EHG_DOMAIN}/*"
+      ],
+      "webOrigins": [
+        "https://${EHG_DOMAIN}"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://${EHG_DOMAIN}/*"
+      }
+    },
+    {
+      "clientId": "ios-gateway",
+      "name": "iPhone gateway",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "attributes": {
+        "oauth2.device.authorization.grant.enabled": "true"
+      },
+      "defaultClientScopes": [
+        "gateway:enrol"
+      ]
+    },
+    {
+      "clientId": "triage-api",
+      "name": "Triage API (resource server)",
+      "bearerOnly": true,
+      "publicClient": false,
+      "secret": "${TRIAGE_API_CLIENT_SECRET}"
+    },
+    {
+      "clientId": "enroll-api",
+      "name": "Enrolment API (resource server)",
+      "bearerOnly": true,
+      "publicClient": false,
+      "secret": "${ENROLL_API_CLIENT_SECRET}"
+    },
+    {
+      "clientId": "fhir-sync",
+      "name": "FHIR sync worker",
+      "publicClient": false,
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "secret": "${FHIR_SYNC_CLIENT_SECRET}"
+    }
+  ],
+  "authenticationFlows": [
+    {
+      "alias": "browser-ehg",
+      "description": "Browser login; TOTP is REQUIRED for the operator and admin roles",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "auth-cookie",
+          "requirement": "ALTERNATIVE",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "autheticatorFlow": false
+        },
+        {
+          "flowAlias": "browser-ehg-forms",
+          "requirement": "ALTERNATIVE",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "autheticatorFlow": true
+        }
+      ]
+    },
+    {
+      "alias": "browser-ehg-forms",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "auth-username-password-form",
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "autheticatorFlow": false
+        },
+        {
+          "flowAlias": "browser-ehg-otp-for-staff",
+          "requirement": "CONDITIONAL",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "autheticatorFlow": true
+        }
+      ]
+    },
+    {
+      "alias": "browser-ehg-otp-for-staff",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "conditional-user-role",
+          "authenticatorConfig": "otp-for-operator",
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "autheticatorFlow": false
+        },
+        {
+          "authenticator": "auth-otp-form",
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "autheticatorFlow": false
+        }
+      ]
+    }
+  ],
+  "authenticatorConfig": [
+    {
+      "alias": "otp-for-operator",
+      "config": {
+        "condUserRole": "operator",
+        "negate": "false"
+      }
+    }
+  ],
+  "browserFlow": "browser-ehg",
+  "users": []
+}
