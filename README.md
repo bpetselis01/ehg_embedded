@@ -132,7 +132,7 @@ The API documents: [`docs/api/openapi-triage.json`](docs/api/openapi-triage.json
 
 ```sh
 cd ios/EHGWire && swift test                               # decodes tests/fixtures/packet_vectors.json; command line only, no Xcode project or phone
-uv run python tools/gen_packet_vectors.py                  # regenerate the vectors after any wire-format change (all three copies change together)
+uv run python tools/gen_packet_vectors.py                  # regenerate the vectors after any wire-format, gap-tracker or clock-map change (all copies change together)
 deploy/backup/backup.sh --dry-run --out /tmp/ehg-backups   # prints the plan; restore_drill.sh --backup DIR restores onto a CLEAN server and times it
 ```
 

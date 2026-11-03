@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-11-04: Swift GapTracker and ClockMap (phone-free part of Unit 15, continued)
+
+- **Added:** `ios/EHGWire/Sources/EHGWire/Tracking.swift` (line-for-line ports of `gateway/tracking.py`), a `tracking` section in the golden vectors (10 gap cases and 4 clock cases evaluated by the Python classes, including a stream restart, uint32 wrap-around of sequence numbers and of the tick counter), 3 more Swift tests and 3 Python guards.
+- **Tested:** `swift test` 9 of 9 pass (command line only): every `observe()` return value and final state, and every host time, equal Python's (to 1e-9 s).
+- **Shared limit, on purpose:** a huge forward jump in the sequence returns a huge list of missing numbers in both languages (capping it would break "every loss is identified" after a long outage); the app must cap what it asks the board to re-send (the board keeps 256 packets). Noted in the Swift header.
+- **NOT done:** RESEND scheduling (1 s retry, at most 5 tries) lives in `gateway/gateway.py`'s Node class and is not ported; the app, CoreBluetooth and MQTT client are not written.
+
 ## 2026-11-04: enrolment service entry point and CRL delivery to the broker (written, tested; never run against step-ca, Keycloak or a broker container)
 
 - **Added:** `backend/enroll/service.py` (starts the enrolment API from environment variables; names every missing variable, refuses a malformed root fingerprint or a key file others can read; `/crl` is a 502 when the CA fails, never an empty list), `deploy/crl-sync.sh` plus a cron entry in cloud-init (every 5 minutes), the script added to the CI shellcheck job.

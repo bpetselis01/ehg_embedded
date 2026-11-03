@@ -12,7 +12,18 @@ private struct Vectors: Decodable {
         let name: String, hex: String, packet: P
     }
     struct Invalid: Decodable { let name: String, hex: String, error: String }
-    let valid: [Valid], invalid: [Invalid]
+    struct Tracking: Decodable {
+        struct Gap: Decodable {
+            struct Final: Decodable { let last: Int, missing: [Int], received: Int, duplicates: Int, streams: Int }
+            let name: String, seqs: [Int], returns: [[Int]], final: Final
+        }
+        struct Clock: Decodable {
+            struct Query: Decodable { let ticks: Int, host: Double }
+            let name: String, updates: [[Double]], offset: Double, queries: [Query]
+        }
+        let gap: [Gap], clock: [Clock]
+    }
+    let valid: [Valid], invalid: [Invalid], tracking: Tracking
 }
 
 private func bytes(_ hex: String) -> [UInt8] {
@@ -87,5 +98,37 @@ final class PacketTests: XCTestCase {
                 XCTAssertThrowsError(try Packet.parse(damaged), "flip byte \(i) bit \(bit)")
             }
         }
+    }
+
+    func testGapTrackerReturnsExactlyWhatThePythonTrackerReturned() throws {
+        let cases = try loadVectors().tracking.gap
+        XCTAssertGreaterThanOrEqual(cases.count, 9)
+        for c in cases {
+            var t = GapTracker()
+            let got = c.seqs.map { t.observe($0) }
+            XCTAssertEqual(got, c.returns, c.name)
+            XCTAssertEqual(t.last, c.final.last, c.name)
+            XCTAssertEqual(t.missing.sorted(), c.final.missing, c.name)
+            XCTAssertEqual(t.received, c.final.received, c.name)
+            XCTAssertEqual(t.duplicates, c.final.duplicates, c.name)
+            XCTAssertEqual(t.streams, c.final.streams, c.name)
+        }
+    }
+
+    func testClockMapGivesTheSameHostTimesAsPython() throws {
+        let cases = try loadVectors().tracking.clock
+        XCTAssertGreaterThanOrEqual(cases.count, 4)
+        for c in cases {
+            var m = ClockMap()
+            XCTAssertNil(m.toHost(0), "\(c.name): no offset before the first update")
+            for u in c.updates { m.update(ticks: Int(u[0]), tHost: u[1]) }
+            XCTAssertEqual(try XCTUnwrap(m.offset), c.offset, accuracy: 1e-9, c.name)
+            for q in c.queries { XCTAssertEqual(try XCTUnwrap(m.toHost(q.ticks)), q.host, accuracy: 1e-9, "\(c.name) ticks \(q.ticks)") }
+        }
+    }
+
+    func testTheSpecExampleFromTheDocstring() {
+        var t = GapTracker()
+        XCTAssertEqual([0, 1, 2, 5, 3].map { t.observe($0) }, [[], [], [], [3, 4], []])
     }
 }

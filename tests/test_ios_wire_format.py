@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from gateway import packet
+from gateway.tracking import NEW_STREAM_BACKSTEP, ClockMap, GapTracker
 from tools.gen_packet_vectors import OUT, build
 
 ROOT = Path(__file__).parents[1]
@@ -83,4 +84,35 @@ def test_swift_test_suite_reads_the_shared_vectors():
 @pytest.mark.skipif(os.environ.get("EHG_INTEGRATION") != "1" or shutil.which("swift") is None, reason="needs EHG_INTEGRATION=1 and the Swift toolchain")
 def test_swift_test_passes():
     r = subprocess.run(["swift", "test"], cwd=ROOT / "ios/EHGWire", capture_output=True, text=True, timeout=600)
-    assert r.returncode == 0 and "Executed 6 tests, with 0 failures" in r.stdout + r.stderr, (r.stdout + r.stderr)[-2000:]
+    m = re.search(r"Executed (\d+) tests, with 0 failures", r.stdout + r.stderr)
+    assert r.returncode == 0 and m and int(m.group(1)) >= 9, (r.stdout + r.stderr)[-2000:]
+
+
+TRACKING = VECTORS["tracking"]
+TRACKING_SWIFT = (ROOT / "ios/EHGWire/Sources/EHGWire/Tracking.swift").read_text()
+
+
+def test_tracking_vectors_replay_in_python_exactly():
+    assert len(TRACKING["gap"]) >= 9 and len(TRACKING["clock"]) >= 4
+    for c in TRACKING["gap"]:
+        t = GapTracker()
+        assert [t.observe(q) for q in c["seqs"]] == c["returns"], c["name"]
+        assert {"last": t.last, "missing": sorted(t.missing), "received": t.received, "duplicates": t.duplicates, "streams": t.streams} == c["final"], c["name"]
+    for c in TRACKING["clock"]:
+        m = ClockMap()
+        for ticks, host in c["updates"]:
+            m.update(ticks, host)
+        assert m.offset == c["offset"] and all(m.to_host(q["ticks"]) == q["host"] for q in c["queries"]), c["name"]
+
+
+def test_tracking_vectors_cover_the_rules_that_matter():
+    names = {c["name"] for c in TRACKING["gap"]} | {c["name"] for c in TRACKING["clock"]}
+    assert {"gap_then_late_fill", "duplicate_ignored", "backstep_over_1000_is_a_new_stream", "near_uint32_limit", "tick_counter_wraps", "keeps_the_smallest_offset"} <= names
+    assert max(len(r) for c in TRACKING["gap"] for r in c["returns"]) <= 100, "keep the fixture small: no case should need a huge gap list"
+
+
+def test_swift_tracking_constants_match_python():
+    assert re.search(r"newStreamBackstep = (\d+)", TRACKING_SWIFT).group(1) == str(NEW_STREAM_BACKSTEP)
+    assert "1 << 32" in TRACKING_SWIFT and "ClockMap.wrap / 2" in TRACKING_SWIFT
+    assert "seq >= previous - GapTracker.newStreamBackstep" in TRACKING_SWIFT, "the new-stream rule is the one in gateway/tracking.py"
+

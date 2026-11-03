@@ -174,8 +174,8 @@ Step by step:
 | [`tools/export_api_docs.py`](../tools/export_api_docs.py) | writes `docs/api/openapi-triage.json` and `openapi-enroll.json` from the FastAPI apps; `--check` says if they are stale |
 | [`docs/api/asyncapi.yaml`](api/asyncapi.yaml) | the MQTT topics, payload keys and NATS subjects (checked against the code by `tests/test_api_docs.py`) |
 | [`docs/regulatory.md`](regulatory.md), [`docs/slo.md`](slo.md), [`docs/dr.md`](dr.md) | regulatory framing and hazard table (no compliance claim), service-level objectives, backups and failure drills |
-| [`tools/gen_packet_vectors.py`](../tools/gen_packet_vectors.py) | writes the golden wire-format vectors (`tests/fixtures/packet_vectors.json`) from `gateway/packet.py`; `--check` says if they are stale |
-| [`ios/EHGWire/`](../ios/EHGWire/Package.swift) | Swift package: wire v2 decoder and encoder (`Sources/EHGWire/Packet.swift`) and tests that decode the golden vectors; command line only, no app, no Xcode project |
+| [`tools/gen_packet_vectors.py`](../tools/gen_packet_vectors.py) | writes the golden wire-format, gap-tracker and clock-map vectors (`tests/fixtures/packet_vectors.json`) from `gateway/packet.py`; `--check` says if they are stale |
+| [`ios/EHGWire/`](../ios/EHGWire/Package.swift) | Swift package: wire v2 decoder and encoder (`Sources/EHGWire/Packet.swift`), `GapTracker` and `ClockMap` ports (`Tracking.swift`) and tests that replay the golden vectors; command line only, no app, no Xcode project |
 | [`backend/enroll/service.py`](../backend/enroll/service.py) | starts the enrolment API from environment variables; refuses unsafe settings; `/crl` asks the CA (never serves an empty list) |
 | [`deploy/crl-sync.sh`](../deploy/crl-sync.sh) | cron job on the VM: fetches the CRL, verifies it (signature, expiry, not older), installs it into the broker's file and signals Mosquitto |
 | [`backend/triage/slis.py`](../backend/triage/slis.py) | fleet-level gauges for the service-level objectives and the bus consumers' backlog (Prometheus) |
