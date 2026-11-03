@@ -104,6 +104,15 @@ with one `component` per channel, each `valueSampledData` = raw counts in `data`
 `factor` = 1/gain, `origin` = −baseline/gain mV, `interval` = 1000/fs ms. Raw counts stay unchanged (H4).
 The live path (BLE → MQTT → InfluxDB) stays custom. Codes use a local system: no standard EHG code was found.
 
+## 5c. Services and message documents (Units 7 to 12)
+
+- **Wire format copies:** three, all checked against `tests/fixtures/packet_vectors.json` (generated from `gateway/packet.py` by `tools/gen_packet_vectors.py`): `firmware/ehg_node/src/ehg_packet.h`, `gateway/packet.py`, `ios/EHGWire/Sources/EHGWire/Packet.swift`.
+- **MQTT and bus:** [`docs/api/asyncapi.yaml`](api/asyncapi.yaml) (topics, QoS, payload keys, `replayed`, gateway status, `EHG.PKT|GW|BAD` subjects, `Nats-Msg-Id`). Changed by Units 3 and 6.
+- **HTTP APIs:** [`docs/api/openapi-triage.json`](api/openapi-triage.json) (worklist, node detail and trend, alerts and their actions, registry, audit, configuration, `/fhir/*`, `/ui-config.json`, probes) and [`openapi-enroll.json`](api/openapi-enroll.json) (certificate enrolment, revocation, CRL). Both are generated from the code and diffed by `tests/test_api_docs.py`.
+- **Database:** migrations `backend/db/migrations/versions/0001` (time series), `0002` (alerts, append-only audit log, registry of gateways, nodes, subjects and certificates), `0003` (TimescaleDB). Applied revisions are frozen: change by adding a new revision.
+- **FHIR resources written** (by `backend/fhir_sync/worker.py`): `Device` (identifier `urn:thesisb:ehg/node-id|<node>`) and `Observation` (identifier `urn:thesisb:ehg/obs-key|<node>/<record>/<chunk>`), one per 600-frame chunk, SampledData in raw counts. `Consent`, `AuditEvent` and `Provenance` are NOT written: consent is enforced from the registry and the audit is the hash chain.
+- **Metrics:** `ehg_fleet_packets_60s`, `ehg_fleet_latency_p95_seconds`, `ehg_fleet_nodes_reporting`, `ehg_consumer_pending`, `ehg_triage_alerts`, `ehg_triage_bad_messages_total`, `ehg_triage_dead_letters_total`, `ehg_writer_*`, `ehg_bridge_*`, `ehg_disk_*`, `ehg_backup_*` (see [slo.md](slo.md)).
+
 ## 6. Icelandic → classifier decimation policy (H4 stretch; proposed)
 
 Transport all 16 channels at 200 Hz (report §6.9). For the 3-channel 20 Hz classifier, downstream: pick 3 channels (proposed: EHG6, EHG7, EHG10, the central 2×2 area; **Zicheng to decide**). Then apply an anti-alias FIR low-pass at 8 Hz with zero phase (`scipy.signal.decimate(x, 10, ftype='fir', zero_phase=True)`), then Zicheng's normal pipeline. The Icelandic set is monopolar, TPEHG is bipolar: deriving bipolar pairs (e.g. EHG6−EHG7) is closer to TPEHG and needs agreement.

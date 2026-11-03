@@ -1,7 +1,7 @@
 # Production topology: from prototype to an enterprise-style remote-monitoring chain
 
-**Status of this document (2026-11-03):** a plan. At the time of writing only the *Existing* items below are built. Every other row says *Planned*
-(with the unit that builds it) or *Design-only* (never to be built on free services). Statuses are updated as each unit lands and again in Unit 17.
+**Status of this document (2026-11-04, final pass of the non-cloud sweep):** the *Existing* items were built and measured on the prototype. Rows marked **Written** have code and unit tests but **have never run as a service** (no Docker and no cloud account were available): they are not validated results.
+Rows marked *Planned* are not built (they need the board, the iPhone or the VM). *Design-only* is never to be built on free services. Statuses were updated in Unit 17.
 Why each choice was made: [decisions 0007 to 0017](decisions/0007-enterprise-evolution-keep-influx-as-reference.md). The wire format, MQTT JSON and database schema are in
 [interface-spec.md](interface-spec.md); the code is mapped in [codebase-guide.md](codebase-guide.md).
 
@@ -62,9 +62,9 @@ Never describe a stand-in or design-only hop as if it were done.
 |---|---|---|---|
 | 1 | Sensor node | nRF52840 **DK** replaying public EHG. Not a wearable and no analogue front end (that is another thesis's scope) | Existing; pairing and signing key Planned (Unit 13) |
 | 2 | BLE link | Zephyr GATT notify, wire v2 with CRC and RESEND | Existing; LESC option Planned (Unit 13) |
-| 3 | Mobile gateway | Native Swift iOS app, with the Python gateway as reference | Planned (Unit 15); gated by a feasibility spike; free signing expires every 7 days |
+| 3 | Mobile gateway | Native Swift iOS app, with the Python gateway as reference | Wire library **written and tested on the Mac** (`ios/EHGWire`); the app, the feasibility spike and any phone test are Planned (need Byron and the phone); free signing expires every 7 days |
 | 4 | Cellular and MQTT | iPhone cellular data; MQTT over TLS 1.3 mTLS (or WSS on 443) | Planned; will be a *phone-cellular* measurement (H1-cellular). A real LTE-M or NB-IoT modem is **Design-only / not built** |
-| 5 | Cloud core | Oracle A1 VM: Mosquitto, NATS, TimescaleDB, triage, HAPI, Keycloak, observability | Planned (Units 4 to 12); needs your Oracle account |
+| 5 | Cloud core | Oracle A1 VM: Mosquitto, NATS, TimescaleDB, triage, HAPI, Keycloak, observability | **Written** (Units 4 to 12: Terraform validated, services unit-tested); never applied or started; the cloud compose file still lacks bridge, writers, triage, Keycloak, step-ca and HAPI; needs your Oracle account |
 | 6a | Operator dashboard | Triage page, Grafana and the raw viewer | Grafana and the viewer Existing; triage page written and tried in a browser against stub data (Unit 10), never against a real database or Keycloak |
 | 6b | EHR interoperability | Self-hosted HAPI FHIR R5 as a *reference* EHR | Sync worker and read-only facade written and tested against a fake FHIR server (Unit 9); HAPI itself never started; no hospital EHR, HL7 v2 or vendor integration |
 
@@ -82,28 +82,69 @@ App Store or TestFlight distribution; fleet-wide staged firmware rollout; write-
 | Ingestion | Mosquitto anonymous on 1883 | Clustered broker with mTLS | mTLS on 8883 with ACLs, short-lived certificates and a CRL | Planned (clustering Design-only) |
 | Storage | InfluxDB 2.7 | TimescaleDB plus relational | TimescaleDB and Postgres (registry, alerts, audit) with parity to InfluxDB; Influx stays the reference | Planned |
 | Identity and security | CRC only; Nordic development bootloader key | LESC, mTLS 1.3, X.509, OIDC, role-based access, write-once audit | LESC (flag), mTLS 1.3, certificate lifecycle, Keycloak with MFA and roles, hash-chained audit | Planned (write-once Design-only) |
-| EHR | FHIR R5 batch export only (`tools/fhir_export.py`) | FHIR write-back to the EHR | Live write-back into a self-hosted HAPI FHIR R5 server | Existing (export) / Planned |
-| Operator UI | Grafana and raw viewer | Severity worklist, sparklines, alert workflow, EHR panel | Triage page for pipeline health with a HAPI-backed EHR panel | Planned |
-| Operations | Manual `docker compose` on a Mac | Infrastructure as code, observability, disaster recovery, SLOs | Terraform and cloud-init, Prometheus and Loki stack, SLOs, measured RPO and RTO | Planned |
-| Compliance | Unregulated prototype | Software-as-medical-device obligations, health privacy law | Intended-purpose statement; Australian framing; standards "designed with reference to"; no compliance claims | Planned (Unit 17) |
+| EHR | FHIR R5 batch export only (`tools/fhir_export.py`) | FHIR write-back to the EHR | Live write-back into a self-hosted HAPI FHIR R5 server | Existing (export) / Written (live write-back, fake server only) |
+| Operator UI | Grafana and raw viewer | Severity worklist, sparklines, alert workflow, EHR panel | Triage page for pipeline health with a HAPI-backed EHR panel | Written (page tried against stub data) |
+| Operations | Manual `docker compose` on a Mac | Infrastructure as code, observability, disaster recovery, SLOs | Terraform and cloud-init, Prometheus and Loki stack, SLOs, RPO declared, RTO to be measured | Written (never applied) |
+| Compliance | Unregulated prototype | Software-as-medical-device obligations, health privacy law | Intended-purpose statement; Australian framing; standards "designed with reference to"; no compliance claims | Written ([regulatory.md](regulatory.md)) |
 
 ## Enterprise capability checklist
 
 | Capability | Free implementation | Status | Units |
 |---|---|---|---|
-| Device registry and provisioning | Postgres `registry` schema, enrolment API, step-ca | Planned | 6, 7 |
-| Gateway identity and revocation | 7-day client certificates, CRL | Planned (CRL reload unverified) | 2, 7 |
+| Device registry and provisioning | Postgres `registry` schema, enrolment API, step-ca | **Written**, tested with a local PostgreSQL and a fake CA; step-ca never run | 6, 7 |
+| Gateway identity and revocation | 7-day client certificates, CRL | **Written**; CRL reload tested on a local Mosquitto 2.1.2; the host job that delivers the CRL to the broker is NOT built | 2, 7 |
 | Over-the-air update | MCUboot and MCUmgr exist; own signing key; app-based update | Partly Existing; key Planned; app update Tier C; fleet rollout Design-only | 13, 15d |
-| Multi-subject data model | Pseudonymous `subject` per PhysioNet record | Planned | 6, 7 |
-| Consent | FHIR `Consent`, enforced in the facade | Planned (a data-model demonstration, not a legal consent platform) | 9 |
-| Audit | Hash-chained log, FHIR `AuditEvent`, Loki | Planned (tamper-evident, **not** write-once) | 8, 9 |
-| Alert management | Rules, hysteresis, lifecycle with required notes | Planned | 8, 10 |
+| Multi-subject data model | Pseudonymous `subject` per PhysioNet record | **Written** (registry tables), tested | 6, 7 |
+| Consent | Registry consent status, enforced in the API, the facade and the sync worker (no FHIR `Consent` resource is written) | **Written**, tested (a data-model demonstration, not a legal consent platform) | 8, 9 |
+| Audit | Hash-chained log, Loki (no FHIR `AuditEvent` is written) | **Written**, tested on a real PostgreSQL (tamper-evident, **not** write-once) | 8 |
+| Alert management | Rules, hysteresis, lifecycle with required notes, triage page | **Written**; page tried in a browser against stub data only | 8, 10 |
 | High availability | None on one free VM | **Design-only** | 12 |
-| Disaster recovery | pgBackRest, restic, a timed restore drill | Planned; RPO about 24 h; RTO to be measured | 12 |
-| Observability | Prometheus, Alertmanager, Loki, Grafana, Alloy, OCI alarm | Planned | 12 |
-| Service-level objectives | Prometheus recording rules; measured, no SLA | Planned | 12 |
+| Disaster recovery | Nightly `pg_dump`, optional restic, a timed restore drill (pgBackRest and point-in-time recovery NOT built) | **Written**; restore tested on a throwaway PostgreSQL; RPO about 24 h; RTO not measured | 12 |
+| Observability | Prometheus, Alertmanager, Loki, Grafana, Alloy, OCI alarm | **Written** (rules and dashboard structure-tested; never evaluated; alert delivery not wired) | 12 |
+| Service-level objectives | Prometheus recording rules; measured, no SLA | **Written**; no value measured yet ([slo.md](slo.md)) | 12 |
 | Infrastructure as code | Terraform, cloud-init, Docker Compose | **Written and validated (`terraform validate`), never applied** (Unit 4); the compose file is partial until Units 6 to 9 | 4 |
-| Supply chain | Syft, Trivy, cosign, Dependabot, gitleaks | Planned | 14 |
-| Regulatory pack | Intended purpose, hazard analysis, traceability | Planned; "designed with reference to" only | 17 |
+| Supply chain | Syft, Trivy, cosign, Dependabot, gitleaks | Minimal: shellcheck and guard tests in CI, Dependabot; scanners documented, not wired ([supply-chain.md](supply-chain.md)) | 14 |
+| Regulatory pack | Intended purpose, hazard analysis, traceability | **Written** ([regulatory.md](regulatory.md)); "designed with reference to" only | 17 |
 
 Licences for every component: [licences.md](licences.md).
+
+## C4-style views (Mermaid)
+
+**Context: who and what the system talks to.** There is no hospital system, no patient and no clinician in the loop: the "reference EHR" is a self-hosted FHIR server.
+
+```mermaid
+flowchart TB
+  researcher["Researcher / operator<br/>(Byron; viewer, operator or admin role)"]
+  subgraph ehg["EHG telemetry system (this repository)"]
+    chain["Sensor node, gateway and cloud core"]
+  end
+  public["PhysioNet public EHG records<br/>(de-identified, replayed)"]
+  idp["Keycloak (own realm)"]
+  ehr["HAPI FHIR R5<br/>reference EHR, self-hosted"]
+  oci["Oracle Always Free VM<br/>(hosts it all; never created yet)"]
+  public -->|"converted, replayed"| chain
+  researcher -->|"browser: triage page, Grafana"| chain
+  chain -->|"OIDC tokens"| idp
+  chain -->|"FHIR R5 write and read"| ehr
+  chain --- oci
+```
+
+**Containers: the pieces and the protocols between them.** Solid boxes exist as code; none of the cloud containers has been started.
+
+```mermaid
+flowchart LR
+  node["nRF52840 DK<br/>Zephyr firmware"] -->|"BLE GATT, wire v2 + CRC"| gw["Python gateway (Mac)<br/>outbox, RESEND"]
+  node -.->|"BLE (app not written)"| ios["iPhone gateway<br/>ios/EHGWire only"]
+  gw -->|"MQTT QoS 1, TLS 1.3 mTLS"| mq["Mosquitto :8883"]
+  mq --> br["bridge"] -->|"JetStream EHG"| nats["NATS"]
+  nats --> tsw["ts-writer"] --> pg[("PostgreSQL + TimescaleDB<br/>time series, registry, alerts, audit")]
+  nats --> tri["triage service<br/>rules, API, page"] --> pg
+  nats --> inf["influx-writer / ingest"] --> influx[("InfluxDB reference")]
+  pg --> fs["fhir-sync"] --> hapi["HAPI FHIR R5"]
+  tri -->|"read-only /fhir facade"| hapi
+  caddy["Caddy :443"] --> tri
+  caddy --> kc["Keycloak"]
+  caddy --> graf["Grafana"]
+  enr["enrolment API + step-ca"] -.->|"certificates, CRL"| mq
+  prom["Prometheus, Loki, Alertmanager"] -.-> pg
+```

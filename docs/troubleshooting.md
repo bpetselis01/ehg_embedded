@@ -95,3 +95,19 @@ Background: [decision 0012](decisions/0012-timescaledb-nats-data-platform.md). A
 | `eval/parity.py` says FAIL | The two stores differ | Do not switch the cloud profile to TimescaleDB. Read which check failed; check that `ingest` was stopped and both writers read the same stream |
 | `eval/*.py --backend timescale`: "needs EHG_TS_DSN" | The connection string is not set | `export EHG_TS_DSN="host=localhost port=5433 dbname=ehg user=ehg password=..."` (5433 is the local platform database; Supabase uses 5432) |
 | Tests using real SQL are skipped | No local PostgreSQL | `brew install postgresql@14` (tests start a throwaway cluster in /tmp; TimescaleDB tests still need Docker) |
+
+## Triage, FHIR, observability, backups, Swift (Units 8 to 15; none of these has run against real servers)
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Triage page shows "Your session ended" after a few minutes | Access tokens last 5 minutes and the page holds no refresh token | Sign in again (by design: nothing is kept in the browser) |
+| Page asks to sign in but the Keycloak login returns "invalid audience" at the API | The token carries no `aud: triage-api` | The `triage-ui` client needs the audience mapper in `deploy/keycloak/realm-ehg.json`; re-import the realm (found and fixed 2026-11-04, not tested on a real Keycloak) |
+| `AUTH_MODE=dev refuses to run` | Dev mode has fixed users and only runs on loopback | Bind to 127.0.0.1 or use `AUTH_MODE=oidc` |
+| `/fhir/Observation` answers 403 for a node you can see on the worklist | The FHIR routes need ACTIVE consent; a node with no subject is refused (the worklist is more lenient) | Register the node with a subject whose `consent_status` is `active` |
+| `/fhir/*` answers 404 | No FHIR server is configured (`fhir_upstream` unset) | Give the triage service a FHIR base URL |
+| FHIR sync sends nothing | The node has no consent, or no chunk is complete yet (a chunk is sent once a later frame arrives) | Check the worker log line per node: `skipped: consent`, `pending: N` |
+| `swift test` cannot find `tests/fixtures/packet_vectors.json` | Run from a copy of the package outside the repository | Run it in `ios/EHGWire` inside the repository (the test finds the file relative to its own path) |
+| `tests/test_ios_wire_format.py` says the vectors are stale | The wire format changed, or `gateway/packet.py` did | `uv run python tools/gen_packet_vectors.py`, then update the Swift copy and run `swift test` |
+| `tests/test_api_docs.py` says an API document is stale | A route or model changed | `uv run python tools/export_api_docs.py` and commit the result |
+| `restore_drill.sh` says `REFUSING: database ... already exists` | It never overwrites | Run it on a clean server, not on a live database |
+| `EhgTargetDown` for bridge, ts-writer or triage straight after deployment | Those services are not in the cloud compose file yet | Expected until they are added (docs/progress.md, Unit 12) |

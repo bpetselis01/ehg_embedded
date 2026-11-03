@@ -1,0 +1,118 @@
+# PURPOSE: The message interfaces of the pipeline in AsyncAPI 3.0: the MQTT topics gateways publish to, and the NATS JetStream subjects behind them. The HTTP side is openapi-triage.json and openapi-enroll.json.
+# INPUT/OUTPUT: none (documentation). tests/test_api_docs.py checks that it parses, that every channel address appears in the code, that the payload keys are the ones the gateway publishes, and that the required keys are the bridge's.
+# HOW: Payload field meanings, units and the `replayed` rule are in docs/interface-spec.md section 4. The sample array holds raw ADC counts (int16 or 24-bit), unscaled, so the chain stays bit-exact (H2/H4).
+# NOT DESCRIBED: the BLE GATT wire format (docs/interface-spec.md section 3, tests/fixtures/packet_vectors.json), MQTT over WebSocket on 443 (planned, not built), and any message the triage service emits (it emits none: alerts go to PostgreSQL).
+asyncapi: 3.0.0
+info:
+  title: EHG telemetry message interfaces
+  version: 0.1.0
+  description: >-
+    Research prototype for measuring wireless telemetry performance. Not for clinical decision-making.
+    Gateways publish one JSON message per radio packet over MQTT (QoS 1, TLS 1.3, client certificate whose CN is the gateway id); the bridge copies it into a JetStream stream and acknowledges the MQTT message only after the stream has stored it.
+servers:
+  broker:
+    host: "{domain}:8883"
+    protocol: mqtts
+    description: Mosquitto with mutual TLS. A gateway may publish only on its own status topic and on ehg/+/pkt (a documented gap, it can publish for any node id).
+    variables:
+      domain: {description: The VM's DuckDNS name, default: ehg-demo.duckdns.org}
+  bus:
+    host: nats:4222
+    protocol: nats
+    description: NATS JetStream stream EHG on the private Docker network only. Subjects EHG.PKT.>, EHG.GW.> and EHG.BAD.>.
+channels:
+  packet:
+    address: ehg/{nodeId}/pkt
+    servers: [{$ref: "#/servers/broker"}]
+    parameters:
+      nodeId: {description: "The node's id, 1 to 64 characters of A-Z a-z 0-9 _ -, e.g. EHG-93C0"}
+    messages:
+      packet: {$ref: "#/components/messages/packet"}
+  gatewayStatus:
+    address: ehg/_gw/{gatewayId}/status
+    servers: [{$ref: "#/servers/broker"}]
+    parameters:
+      gatewayId: {description: The gateway id; must equal the certificate CN under TLS}
+    messages:
+      status: {$ref: "#/components/messages/status"}
+  busPacket:
+    address: EHG.PKT.{nodeId}
+    servers: [{$ref: "#/servers/bus"}]
+    parameters:
+      nodeId: {description: Same id as in the MQTT topic}
+    messages:
+      packet: {$ref: "#/components/messages/busPacket"}
+  busGateway:
+    address: EHG.GW.{gatewayId}
+    servers: [{$ref: "#/servers/bus"}]
+    parameters:
+      gatewayId: {description: Gateway id}
+    messages:
+      status: {$ref: "#/components/messages/status"}
+  busBad:
+    address: EHG.BAD.{reason}
+    servers: [{$ref: "#/servers/bus"}]
+    parameters:
+      reason: {description: "One of not_json, missing_fields, invalid_node, node_mismatch, invalid_field, invalid_gateway, unexpected_topic"}
+    messages:
+      unreadable: {$ref: "#/components/messages/unreadable"}
+operations:
+  publishPacket:
+    action: send
+    channel: {$ref: "#/channels/packet"}
+    summary: A gateway sends each decoded radio packet. QoS 1, not retained.
+  publishStatus:
+    action: send
+    channel: {$ref: "#/channels/gatewayStatus"}
+    summary: A gateway announces online (on connect) and the broker publishes offline as its last will. Retained, QoS 1.
+  storePacket:
+    action: send
+    channel: {$ref: "#/channels/busPacket"}
+    summary: The bridge stores the packet with header Nats-Msg-Id node:seq:t_inject, so a redelivery is dropped by the stream (exactly-once stored).
+  keepUnreadable:
+    action: send
+    channel: {$ref: "#/channels/busBad"}
+    summary: The bridge keeps anything it cannot use, for inspection, and acknowledges the MQTT message so it is not redelivered forever.
+components:
+  messages:
+    packet:
+      name: PacketMessage
+      contentType: application/json
+      payload: {$ref: "#/components/schemas/packet"}
+    busPacket:
+      name: PacketMessage
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          Nats-Msg-Id: {type: string, description: "node_id:seq:t_inject, e.g. EHG-93C0:40:655360"}
+      payload: {$ref: "#/components/schemas/packet"}
+    status:
+      name: GatewayStatus
+      contentType: text/plain
+      payload: {type: string, enum: [online, offline]}
+    unreadable:
+      name: Unreadable
+      description: The original bytes, untouched.
+      payload: {type: string}
+  schemas:
+    packet:
+      type: object
+      required: [node_id, seq, t_inject]
+      properties:
+        node_id: {type: string, pattern: "^[A-Za-z0-9_-]{1,64}$"}
+        seq: {type: integer, minimum: 0, description: Packet sequence number, wraps at 2^32}
+        frame_idx: {type: integer, minimum: 0}
+        t_inject: {type: integer, minimum: 0, description: Device ticks at 32768 Hz when frame 0 was injected}
+        t_inject_host: {type: number, description: Host seconds since the epoch for frame 0, from the clock map}
+        n_ch: {type: integer, minimum: 1, maximum: 64}
+        fs_hz: {type: integer, minimum: 1}
+        record_id: {type: integer, minimum: 0}
+        flags: {type: integer, description: "bit 0 retransmission, bit 1 24-bit samples"}
+        samples:
+          type: array
+          description: Frames of raw ADC counts, [frame][channel]; unscaled
+          items: {type: array, items: {type: integer}}
+        t_gw_rx: {type: number, description: Gateway receive time, seconds since the epoch}
+        t_mqtt_pub: {type: number, description: Time the message was handed to MQTT, seconds since the epoch}
+        replayed: {type: boolean, description: "Present and true only when the message waited in the gateway outbox (outage, restart, in-flight limit); absent means false. Its latency is not H1 latency."}

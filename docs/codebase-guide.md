@@ -171,6 +171,9 @@ Step by step:
 | [`backend/triage/state.py`](../backend/triage/state.py) | alert lifecycle in PostgreSQL (open, acknowledged, escalated, resolved), required notes, auto-resolve, audit in the same transaction |
 | [`viewer/triage.html`](../viewer/triage.html), [`viewer/triage.css`](../viewer/triage.css), [`viewer/triage.js`](../viewer/triage.js) | the triage page: sign-in (OIDC code flow with PKCE), worklist, node detail (trend, alerts, EHR), alert actions; served by the triage API at `/` |
 | [`backend/fhir_sync/worker.py`](../backend/fhir_sync/worker.py) | copies complete stored windows into the reference FHIR server (HAPI) as conditional, idempotent transactions, only for nodes with active consent |
+| [`tools/export_api_docs.py`](../tools/export_api_docs.py) | writes `docs/api/openapi-triage.json` and `openapi-enroll.json` from the FastAPI apps; `--check` says if they are stale |
+| [`docs/api/asyncapi.yaml`](api/asyncapi.yaml) | the MQTT topics, payload keys and NATS subjects (checked against the code by `tests/test_api_docs.py`) |
+| [`docs/regulatory.md`](regulatory.md), [`docs/slo.md`](slo.md), [`docs/dr.md`](dr.md) | regulatory framing and hazard table (no compliance claim), service-level objectives, backups and failure drills |
 | [`tools/gen_packet_vectors.py`](../tools/gen_packet_vectors.py) | writes the golden wire-format vectors (`tests/fixtures/packet_vectors.json`) from `gateway/packet.py`; `--check` says if they are stale |
 | [`ios/EHGWire/`](../ios/EHGWire/Package.swift) | Swift package: wire v2 decoder and encoder (`Sources/EHGWire/Packet.swift`) and tests that decode the golden vectors; command line only, no app, no Xcode project |
 | [`backend/triage/slis.py`](../backend/triage/slis.py) | fleet-level gauges for the service-level objectives and the bus consumers' backlog (Prometheus) |
