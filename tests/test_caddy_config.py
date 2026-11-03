@@ -8,8 +8,10 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
-CADDYFILE = Path(__file__).parents[1] / "deploy/caddy/Caddyfile"
+ROOT = Path(__file__).parents[1]
+CADDYFILE = ROOT / "deploy/caddy/Caddyfile"
 text = CADDYFILE.read_text()
 body = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))  # code only, not the comments
 
@@ -25,7 +27,7 @@ def test_all_routing_is_inside_one_route_block_so_order_is_the_written_order():
     handles = [m.start(1) for m in re.finditer(r"^[ \t]*(handle)", body, re.M)]
     assert handles and all(open_at < h < close_at for h in handles), "every handle block must be inside the route block"
     assert body.index("handle @internal") == min(handles), "the deny rule is the first thing the route does"
-    assert body.rstrip().endswith("}\n}") and re.search(r"\thandle \{\s*reverse_proxy triage:8780\s*\}\s*\}\s*\}\s*$", body), "the catch-all is last"
+    assert body.rstrip().endswith("}\n}") and re.search(r"\thandle \{\s*import csp\s*reverse_proxy triage:8780\s*\}\s*\}\s*\}\s*$", body), "the catch-all is last"
 
 
 def test_grafana_does_not_serve_its_own_metrics_even_if_a_route_were_wrong():
@@ -76,7 +78,7 @@ def test_only_the_ehg_realms_public_paths_of_keycloak_are_reachable():
     assert re.search(r"handle /auth/\* \{\s*respond 404\s*\}", body) and body.index("handle @keycloak") < body.index("handle /auth/*")
 
 
-@pytest.mark.parametrize("header", ["Strict-Transport-Security", "X-Content-Type-Options", "X-Frame-Options", "Referrer-Policy", "Permissions-Policy", "Content-Security-Policy", "-Server"])
+@pytest.mark.parametrize("header", ["Strict-Transport-Security", "X-Content-Type-Options", "X-Frame-Options", "Referrer-Policy", "Permissions-Policy", "-Server"])
 def test_every_response_gets_the_security_headers(header):
     assert re.search(rf"^\s*{re.escape(header)}\b", body, re.M)
 
@@ -97,7 +99,7 @@ def test_bodies_are_size_limited_and_enrolment_more_tightly():
 def test_tls_is_not_weakened_and_the_domain_comes_from_the_environment():
     for weak in ("tls internal", "skip_verify", "insecure", "auto_https off", "disable_redirects", "http://"):
         assert weak not in body, weak
-    assert body.lstrip().startswith("{$EHG_DOMAIN} {")
+    assert body.lstrip().startswith("(csp) {") and "\n{$EHG_DOMAIN} {" in body, "one snippet, then the one site block"
 
 
 def test_the_missing_rate_limit_is_written_down_not_implied():
@@ -108,3 +110,36 @@ def test_the_missing_rate_limit_is_written_down_not_implied():
 def test_caddy_validate_accepts_it():
     r = subprocess.run(["caddy", "validate", "--config", str(CADDYFILE), "--adapter", "caddyfile"], capture_output=True, text=True, env={**os.environ, "EHG_DOMAIN": "ehg.example.org"})
     assert r.returncode == 0, r.stderr
+
+
+def handle_blocks():
+    """(opening line, text) of every top-level handle block inside the route, by brace counting."""
+    out, route = [], body[body.index("route {") + len("route {"):]
+    for m in re.finditer(r"^\t\t(handle(?:_path)?[^\n]*)\{\n", route, re.M):
+        depth, i = 1, m.end()
+        while depth:
+            depth += {"{": 1, "}": -1}.get(route[i], 0)
+            i += 1
+        out.append((m.group(1).strip(), route[m.end():i]))
+    return out
+
+
+def test_the_strict_csp_is_only_on_what_the_triage_service_serves_not_on_keycloak_or_grafana():
+    """Keycloak's sign-in pages and Grafana need inline scripts and styles and send their own policy: a blanket header would replace it and break them."""
+    blocks = dict(handle_blocks())
+    with_csp = {k for k, v in blocks.items() if "import csp" in v}
+    assert with_csp == {"handle /api/*", "handle /fhir/*", "handle"}, with_csp
+    assert all("triage:8780" in blocks[k] for k in with_csp)
+    assert not any("Content-Security-Policy" in v or "import csp" in v for k, v in blocks.items() if k not in with_csp)
+    snippet = re.search(r"\(csp\) \{\n\theader Content-Security-Policy \"([^\"]+)\"\n\}", body)
+    assert snippet, "the policy lives in one snippet"
+    csp = snippet.group(1)
+    assert "'unsafe-inline'" not in csp and "'unsafe-eval'" not in csp and "http:" not in csp
+    assert "frame-ancestors 'none'" in csp and "default-src 'self'" in csp and "script-src 'self'" in csp and "style-src 'self'" in csp
+
+
+def test_grafana_is_configured_for_the_sub_path_the_front_door_serves_it_on():
+    env = yaml.safe_load((ROOT / "deploy/compose/docker-compose.cloud.yml").read_text())["services"]["grafana"]["environment"]
+    assert env["GF_SERVER_SERVE_FROM_SUB_PATH"] == "true" and env["GF_SERVER_ROOT_URL"].endswith("/grafana/") and "${EHG_DOMAIN" in env["GF_SERVER_ROOT_URL"]
+    assert "Keycloak single sign-on is NOT configured" in body or "NOT configured" in (ROOT / "deploy/caddy/Caddyfile").read_text(), "do not claim a Keycloak login for Grafana"
+

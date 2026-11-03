@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-11-04: front-door review by reading (CSP vs Keycloak and Grafana; Grafana sub-path), fixed
+
+- **Found (never run, from knowledge of how the products behave, so not verified):** (1) the Caddyfile put one strict Content-Security-Policy on EVERY response; Caddy's `header` replaces what the upstream sent, so Keycloak's sign-in pages and Grafana (which need inline scripts and styles and send their own policy) would very probably have broken. The policy is now a snippet applied only to what the triage service serves (the page, `/api`, `/fhir`).
+  (2) Grafana was routed at `/grafana` but not told it lives on a sub-path (`GF_SERVER_ROOT_URL`, `GF_SERVER_SERVE_FROM_SUB_PATH`), which usually gives redirect loops or 404s; both are now set. (3) The Caddyfile comment said Grafana signs in through Keycloak: it does not (no OAuth settings exist); the comment now says it uses its own admin login.
+- **Reviewed, no change needed:** Loki (schema v13, tsdb, retention with the compactor and a delete-request store) and Alloy (journal relabel keeps only entries with a container name) match the documented option names; both still unrun.
+- **Tests:** the CSP placement is checked block by block (only the three triage-bound handles import the snippet); Grafana's sub-path settings and the honest sign-in wording are checked.
+
 ## 2026-11-04: another first-start failure found by reading (TimescaleDB extension permission), fixed
 
 - **Found:** migration 0003 runs as the NON-superuser role `ehg` and starts with `CREATE EXTENSION timescaledb`, which needs a superuser (the extension is not marked trusted, to my knowledge of TimescaleDB; not verified on a server). The first real start would have stopped there unless the image happened to pre-create it.
