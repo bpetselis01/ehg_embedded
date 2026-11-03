@@ -23,9 +23,13 @@
 - Optional now: start Docker Desktop (then I can run the no-hardware baseline, the TLS cloud profile containers and `eval/integrity.py` runs); `brew install shellcheck age sops`
 
 ## Next three actions
-1. Wait for Byron's log. When he reports, read `docs/deployment.md` (Log section) and fix the runbook and `deploy/` for every difference he saw (Oracle labels, first-boot errors, container start failures, broker key permissions, update.sh behaviour); add rows to troubleshooting
-2. Check Checkpoint 3 with him (AskUserQuestion): reachable VM, Mac gateway publishes over mTLS from the internet, negative checks failed as expected. Then record `docker stats` of the edge subset in progress.md
-3. Only then start Unit 6 (NATS bridge, ts-writer, migrations, `eval/parity.py`, `eval/backend_client.py --backend`); it needs the VM first for memory numbers; its local parts (bridge, writers, migrations tests) can be written earlier if Byron asks, but do not switch the cloud profile to Timescale as primary before CHECKPOINT 4
+1. Unit 8 remaining: `backend/triage/app.py` (FastAPI factory `create_app(store, audit, auth, ...)`: routes per prompt section 6, RBAC matrix viewer/operator/admin using `backend/jwtauth.py`, 404/409/422/503 mapping from `state.py` errors, audit every alert read, `/healthz` `/readyz` `/metrics` (404 if X-Forwarded-* present), `GET/PUT /api/config` admin), tests with `fastapi.testclient` + the `pg_url` fixture and a local RSA key (see `tests/test_jwtauth.py`); then `backend/triage/stream.py` (`NodeMonitor` pure class using `gateway.tracking.GapTracker`: per-node Snapshot each second, ehg_health row each minute, dead-letter advisory `bus.DEAD_LETTER_ADVISORY`, JetStream glue) with tests for the pure part; add the triage service to `backend/platform.Dockerfile` deps (fastapi, uvicorn, PyJWT) and compose (profile `triage`).
+2. Then Unit 7 (realm JSON in `deploy/keycloak/realm-ehg.json` with a no-secrets test, `backend/enroll/` CSR validation with `cryptography`, `stepca_client.py` against a fake CA, CRL regeneration hook, `registry` queries on the schema in migration 0002), Unit 9, 10, 11, 12, 14, 15, 17 as in the order above.
+3. After each unit: `uv run pytest -q` then `git add -A && git commit` (use && so a failing test blocks the commit); add file names to docs/codebase-guide.md (the file-index test enforces it); update progress.md, security.md, licences.md (fastapi, starlette, pydantic, PyJWT, cryptography, httpx, uvicorn all confirmed locally: MIT/BSD/Apache).
+
+## Done in this non-cloud sweep (committed unless noted)
+- Unit 6 complete (bridge, writer, migrations, backend abstraction, parity, platform compose) + 2 security-review fix rounds. Migrations: 0001 plain, 0002 triage and registry (needs role `ehg_triage`), 0003 TimescaleDB.
+- Unit 8 so far: `rules.py` (44 tests), `audit.py` + `state.py` (45 tests on real PostgreSQL 14), `backend/jwtauth.py` (36 tests). UNCOMMITTED until the next commit if you see this note first: run the tests and commit them.
 
 ## Warnings / traps
 - Never push, never commit on `main`, no AI trailer in commit messages (CI fails on it). You never create or query cloud resources and never ask for credentials; Byron runs terraform apply and the update script

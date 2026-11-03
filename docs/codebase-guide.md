@@ -157,6 +157,9 @@ Step by step:
 | [`backend/ts_writer/writer.py`](../backend/ts_writer/writer.py) | JetStream -> PostgreSQL/TimescaleDB, idempotent, atomic batches, reports "degraded" when the database is down |
 | [`backend/db/migrate.py`](../backend/db/migrate.py) | applies or undoes the database migrations (Alembic) |
 | [`backend/db/migrations/env.py`](../backend/db/migrations/env.py), [`versions/0001_base_schema.py`](../backend/db/migrations/versions/0001_base_schema.py), [`versions/0002_triage_registry.py`](../backend/db/migrations/versions/0002_triage_registry.py), [`versions/0003_timescale.py`](../backend/db/migrations/versions/0003_timescale.py) | Alembic environment; plain time-series tables; alerts, append-only audit log and device/subject registry; TimescaleDB hypertables, compression, retention, roll-ups |
+| [`backend/triage/audit.py`](../backend/triage/audit.py) | hash-chained append-only audit log and its verifier (`--verify`); tamper-evident, not write-once |
+| [`backend/triage/state.py`](../backend/triage/state.py) | alert lifecycle in PostgreSQL (open, acknowledged, escalated, resolved), required notes, auto-resolve, audit in the same transaction |
+| [`backend/jwtauth.py`](../backend/jwtauth.py) | JWT validation (explicit algorithms, required claims), role mapping and the dev mode (loopback only) |
 | [`backend/triage/rules.py`](../backend/triage/rules.py) | pipeline-health alert rules, hysteresis, severity score and worklist order (pure functions; nothing clinical) |
 | [`backend/platform.Dockerfile`](../backend/platform.Dockerfile), [`backend/docker-compose.platform.yml`](../backend/docker-compose.platform.yml) | the platform services' image and the compose override (profile `platform`) |
 | [`eval/parity.py`](../eval/parity.py) | compares InfluxDB and TimescaleDB for the same run; fails if they differ |

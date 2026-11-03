@@ -28,6 +28,10 @@ Each UNVERIFIED row is checked in the unit that first uses the component, and th
 | PyYAML 6.0.3 (dev, added in Unit 2) | MIT | Parses compose and cloud-init files in tests | Permissive | Confirmed locally (package metadata and classifier) |
 | OpenSSL 3.0.12 (command line, used by `tools/pki.sh` and the tests) | Not read; stated as Apache-2.0 for OpenSSL 3 in general | Makes the certificates | Free; a tool run locally, not shipped | UNVERIFIED |
 | Mosquitto 2.1.2 (Homebrew build used for the local tests; same version as the `eclipse-mosquitto:2` image) | `EPL-2.0 OR BSD-3-Clause` | Real-broker tests; cloud broker | Free; the licence is read from the Docker image's own label `org.opencontainers.image.licenses` | Confirmed from the image label (2026-11-03); licence text not read |
+| FastAPI 0.162.0, Pydantic 2.14.2 | MIT | Triage and enrolment APIs | Permissive | Confirmed locally (package metadata) |
+| Starlette 1.10.0, uvicorn 0.54.0, httpx 0.28.1 | BSD-3-Clause | Web server and test client | Permissive | Confirmed locally (package metadata) |
+| PyJWT 2.15.1 | MIT | Token validation | Permissive | Confirmed locally (package metadata) |
+| cryptography 50.0.2 | Apache-2.0 OR BSD-3-Clause | CSR validation, test keys | Permissive | Confirmed locally (package metadata) |
 | nats-py 2.16.0 | Apache-2.0 | NATS client | Permissive | Confirmed locally (package metadata) |
 | psycopg 3.3.7 (+ psycopg-binary) | **LGPL-3.0-only** | PostgreSQL client | Free; used as an unmodified library, so the LGPL does not extend to this code. Keep it a normal dependency (do not vendor or modify it) | Confirmed locally (package metadata) |
 | Alembic 1.20.1, SQLAlchemy 2.1.6, Mako 1.4.3 | MIT | Migrations | Permissive | Confirmed locally (package metadata) |
