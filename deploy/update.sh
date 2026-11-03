@@ -3,6 +3,7 @@
 #   deploy/update.sh --tag v0.2.0 --commit 0123abc...full-40-char-sha     on the VM: move to that release and (re)start the stack
 #   deploy/update.sh --ssh ubuntu@ehg.example.org --tag v0.2.0 --commit SHA   from your Mac: runs the line above on the VM over SSH
 #   deploy/update.sh --bootstrap                                           first boot / after a reboot: start the stack as it is, IF the age key is in place
+#   deploy/update.sh --bootstrap --services "caddy mosquitto"             start only those services (the edge subset, to test the front door first)
 #   options: --dry-run (print every step, change nothing)  --verify-signature (also require a valid git tag signature)  --timeout SECONDS (default 300)
 #
 # PURPOSE: One safe, repeatable way to change what runs on the VM. Running it twice with the same arguments changes nothing the second time.
@@ -24,7 +25,7 @@ REPO="$EHG_HOME/repo"
 STATE="$EHG_HOME/state"
 COMPOSE_FILE="deploy/compose/docker-compose.cloud.yml"
 RUNTIME_ENV="${EHG_RUNTIME_ENV:-/run/ehg/runtime.env}"
-TAG="" COMMIT="" SSH_TARGET="" BOOTSTRAP=0 DRY=0 VERIFY_SIG=0 TIMEOUT=300
+TAG="" COMMIT="" SSH_TARGET="" SERVICES="" BOOTSTRAP=0 DRY=0 VERIFY_SIG=0 TIMEOUT=300
 
 die() { echo "update.sh: $*" >&2; exit 1; }
 say() { echo "update.sh: $*"; }
@@ -38,6 +39,7 @@ while [ $# -gt 0 ]; do
         --commit) [ $# -ge 2 ] || die "--commit needs a value"; COMMIT=$2; shift 2 ;;
         --ssh) [ $# -ge 2 ] || die "--ssh needs user@host"; SSH_TARGET=$2; shift 2 ;;
         --timeout) [ $# -ge 2 ] || die "--timeout needs seconds"; TIMEOUT=$2; shift 2 ;;
+        --services) [ $# -ge 2 ] || die "--services needs a quoted list, e.g. \"caddy mosquitto\""; SERVICES=$2; shift 2 ;;
         --bootstrap) BOOTSTRAP=1; shift ;;
         --dry-run) DRY=1; shift ;;
         --verify-signature) VERIFY_SIG=1; shift ;;
@@ -45,6 +47,7 @@ while [ $# -gt 0 ]; do
         *) die "unknown option $1 (see --help)" ;;
     esac
 done
+if [ -n "$SERVICES" ]; then echo "$SERVICES" | grep -Eq '^[a-z0-9-]+( [a-z0-9-]+)*$' || die "--services must be service names separated by single spaces"; fi
 case "$TIMEOUT" in ''|*[!0-9]*) die "--timeout must be a whole number of seconds" ;; esac
 if [ "$BOOTSTRAP" = 0 ]; then
     [ -n "$TAG" ] && [ -n "$COMMIT" ] || die "give --tag TAG and --commit FULL_SHA (or --bootstrap)"
@@ -56,6 +59,7 @@ fi
 if [ -n "$SSH_TARGET" ]; then
     remote="sudo -u ehg $REPO/deploy/update.sh --timeout $TIMEOUT"
     [ "$BOOTSTRAP" = 1 ] && remote="$remote --bootstrap" || remote="$remote --tag $TAG --commit $COMMIT"
+    [ -z "$SERVICES" ] || remote="$remote --services '$SERVICES'"
     [ "$VERIFY_SIG" = 1 ] && remote="$remote --verify-signature"
     [ "$DRY" = 1 ] && remote="$remote --dry-run"
     say "running on $SSH_TARGET: $remote"
@@ -81,11 +85,11 @@ decrypt_secrets() {
 
 # wait until every service is running, and healthy where it has a health check
 wait_healthy() {
-    [ "$DRY" = 1 ] && { echo "DRY-RUN: wait up to ${TIMEOUT}s for all services to be running/healthy"; return 0; }
+    [ "$DRY" = 1 ] && { echo "DRY-RUN: wait up to ${TIMEOUT}s for ${SERVICES:-all} services to be running/healthy"; return 0; }
     waited=0
     while [ "$waited" -lt "$TIMEOUT" ]; do
         bad=$(docker compose --env-file "$RUNTIME_ENV" --env-file "$EHG_HOME/etc/site.env" -f "$REPO/$COMPOSE_FILE" ps --all --format json \
-              | jq -r 'select((.State != "running") or ((.Health // "") != "" and .Health != "healthy")) | .Service' | sort -u | tr '\n' ' ')
+              | jq -r --arg want "$SERVICES" 'select(($want == "") or (.Service as $s | ($want | split(" ") | index($s)) != null)) | select((.State != "running") or ((.Health // "") != "" and .Health != "healthy")) | .Service' | sort -u | tr '\n' ' ')
         [ -z "$bad" ] && { say "all services are up"; return 0; }
         sleep 5; waited=$((waited + 5))
     done
@@ -96,7 +100,8 @@ wait_healthy() {
 deploy_current() {
     decrypt_secrets || return $?
     compose pull
-    compose up -d --remove-orphans
+    # shellcheck disable=SC2086 # $SERVICES is a validated list of service names and must split into words
+    compose up -d --remove-orphans $SERVICES
     wait_healthy
 }
 

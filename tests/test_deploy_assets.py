@@ -229,6 +229,29 @@ def test_update_dry_run_prints_every_step_and_changes_nothing(tmp_path):
     assert list(tmp_path.iterdir()) == [], "a dry run must not create anything"
 
 
+def test_update_services_limits_what_is_started_and_what_is_waited_for(tmp_path):
+    r = run_update("--dry-run", "--bootstrap", "--services", "caddy mosquitto", tmp=tmp_path)
+    assert r.returncode == 0, r.stderr
+    assert "up -d --remove-orphans caddy mosquitto" in r.stdout and "wait up to 300s for caddy mosquitto services" in r.stdout
+    plain = run_update("--dry-run", "--bootstrap", tmp=tmp_path)
+    assert "up -d --remove-orphans\n" in plain.stdout + "\n" and "for all services" in plain.stdout
+
+
+@pytest.mark.parametrize("services", ["caddy; rm -rf /", "Caddy", "a  b", "$(id)", "caddy,mosquitto"])
+def test_update_refuses_an_unsafe_services_list(services):
+    r = run_update("--bootstrap", "--services", services)
+    assert r.returncode != 0 and "service names separated by single spaces" in r.stderr
+
+
+def test_private_repository_is_cloned_over_ssh_with_a_deploy_key_and_strict_host_keys():
+    doc = yaml.safe_load(render_cloud_init())
+    files = {f["path"]: f["content"] for f in doc["write_files"]}
+    git = files["/opt/ehg/.gitconfig"]
+    assert "-i /opt/ehg/secrets/deploy_key" in git and "StrictHostKeyChecking=yes" in git and "IdentitiesOnly=yes" in git and "UserKnownHostsFile=/opt/ehg/etc/known_hosts" in git
+    assert "StrictHostKeyChecking=no" not in CLOUD_INIT.read_text()
+    assert 'repo_url            = "git@github.com:' in (TF / "terraform.tfvars.example").read_text(), "the example shows the SSH form for a private repository"
+
+
 def test_update_over_ssh_runs_the_same_command_as_the_service_user():
     r = run_update("--dry-run", "--ssh", "ubuntu@ehg.example.org", "--tag", "v0.2.0", "--commit", GOOD_SHA, "--verify-signature", tmp=Path("/opt/ehg"))  # the ssh branch touches nothing locally
     assert r.returncode == 0

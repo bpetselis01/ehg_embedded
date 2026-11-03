@@ -2,7 +2,9 @@
 # PURPOSE: First-boot setup of the EHG cloud VM (Ubuntu 24.04, arm64): hardened SSH, automatic security updates, a host firewall that repeats the cloud
 #   security list, the 150 GB data volume, Docker, a non-root service user, and the repository at a pinned tag.
 # INPUT: Terraform fills four values: admin_cidr, domain_name, repo_url, repo_tag (deploy/terraform/main.tf). NO secret is in this file.
-#   e.g. admin_cidr = 203.0.113.7/32, domain_name = ehg-demo.duckdns.org, repo_tag = v0.1.0
+#   e.g. admin_cidr = 203.0.113.7/32, domain_name = ehg-demo.duckdns.org, repo_url = git@github.com:OWNER/REPO.git, repo_tag = v0.1.0
+#   A PRIVATE repository is cloned over SSH with a read-only deploy key that you place by hand (/opt/ehg/secrets/deploy_key) plus a known_hosts file; the git
+#   settings for that are written to /opt/ehg/.gitconfig below. No key is ever part of this file.
 # OUTPUT: a VM with /srv/ehg-data mounted, Docker running with its data there and its logs in the journal, /opt/ehg/repo checked out, and a status file
 #   /opt/ehg/state/first-boot.status that says what worked. The stack starts only once the age key is copied to /opt/ehg/secrets/age.key (by hand).
 # HOW: cloud-init writes the config files, then runs /usr/local/sbin/ehg-first-boot.sh once. Docker is installed AFTER the volume is mounted, so its
@@ -99,6 +101,11 @@ write_files:
     permissions: "0644"
     content: |
       * * * * * root /usr/local/sbin/ehg-df-metrics.sh
+  - path: /opt/ehg/.gitconfig
+    permissions: "0644"
+    content: |
+      [core]
+          sshCommand = ssh -i /opt/ehg/secrets/deploy_key -o IdentitiesOnly=yes -o UserKnownHostsFile=/opt/ehg/etc/known_hosts -o StrictHostKeyChecking=yes
   - path: /etc/sysctl.d/99-ehg.conf
     permissions: "0644"
     content: |
@@ -152,7 +159,7 @@ write_files:
       # 4. the repository at the pinned tag (a private repository needs a deploy key placed by hand; see the deployment runbook (Unit 5))
       echo "EHG_DOMAIN=${domain_name}" > /opt/ehg/etc/site.env
       if [ ! -d /opt/ehg/repo/.git ]; then
-        git clone --depth 1 --branch ${repo_tag} ${repo_url} /opt/ehg/repo && status "repo cloned at ${repo_tag}" || status "ERROR git clone failed (private repo? see the deployment runbook (Unit 5))"
+        git clone --depth 1 --branch ${repo_tag} ${repo_url} /opt/ehg/repo && status "repo cloned at ${repo_tag}" || status "NOTE git clone failed: expected for a private repository until the deploy key and known_hosts are in place; follow step 10 of the deployment runbook"
       fi
       chown -R ehg:ehg /opt/ehg
       chmod 700 /opt/ehg/secrets /opt/ehg/pki

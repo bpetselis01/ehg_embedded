@@ -58,7 +58,7 @@ variable "domain_name" {
 }
 
 variable "repo_url" {
-  description = "Git URL the VM clones at first boot. A private repository needs a read-only deploy key, which is out-of-band (the deployment runbook, Unit 5)."
+  description = "Git URL the VM clones. For a private repository use the SSH form git@github.com:OWNER/REPO.git; the read-only deploy key is placed by hand afterwards (the deployment runbook, Unit 5)."
   type        = string
 }
 

@@ -8,5 +8,5 @@ admin_cidr          = "203.0.113.7/32"                # REPLACE with your own pu
 ssh_public_key      = "ssh-ed25519 AAAAREPLACE_ME byron@laptop"
 notification_email  = "you@example.org"
 domain_name         = "REPLACE-ME.duckdns.org"
-repo_url            = "https://github.com/REPLACE/REPO.git"
+repo_url            = "git@github.com:REPLACE/REPO.git" # SSH form: the repository is private, so the VM uses a read-only deploy key
 repo_tag            = "REPLACE-TAG"
