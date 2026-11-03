@@ -18,6 +18,7 @@ the file index and the duplicated facts). Historical records are dated and descr
 | [fault-injection.md](fault-injection.md) | the `--faults` options and what each one simulates | current |
 | [troubleshooting.md](troubleshooting.md) | known failures: symptom, cause, fix | current |
 | [decisions/](decisions/) | why the main design choices were made (one short record each; 0007 to 0017 accepted at Checkpoint 1, 2026-11-03; most are not built yet) | current |
+| [security.md](security.md) | threat model and controls table (status per control); what was tested for the TLS cloud profile and what was not | current (grows per unit) |
 | [production-topology.md](production-topology.md) | the planned enterprise-style chain, hop by hop, with what is built, planned or design-only | plan (2026-11-03) |
 | [licences.md](licences.md) | licence, edition and status (confirmed or UNVERIFIED) of every component used or considered | current |
 | [claude-code-prompt-thesis-b-hardening.md](claude-code-prompt-thesis-b-hardening.md) | the full specification for the enterprise-style evolution (units, checkpoints, rules) | plan (2026-11-03) |
@@ -140,6 +141,10 @@ Step by step:
 | [`gateway/tracking.py`](../gateway/tracking.py) | missing-packet tracker and clock converter |
 | [`gateway/gateway.py`](../gateway/gateway.py) | Bluetooth (or simulated) → MQTT bridge |
 | [`backend/docker-compose.yml`](../backend/docker-compose.yml) | starts broker, database, ingest and Grafana |
+| [`backend/docker-compose.cloud.yml`](../backend/docker-compose.cloud.yml) | optional override: broker on 8883 with TLS 1.3 and client certificates, ingest presents a certificate (no 1883) |
+| [`backend/mosquitto/mosquitto.tls.conf`](../backend/mosquitto/mosquitto.tls.conf), [`acl`](../backend/mosquitto/acl) | the TLS broker settings and the per-identity topic permissions used by the override |
+| [`tools/pki.sh`](../tools/pki.sh) | makes the private CA, broker and client certificates and the revocation list (`init`, `client`, `revoke`, `crl`) |
+| [`tests/test_mqtt_tls_config.py`](../tests/test_mqtt_tls_config.py) | checks the TLS config, ACL, compose merge, PKI and (opt-in) a real local Mosquitto |
 | [`backend/.env.example`](../backend/.env.example) | shared names and passwords (copy to `.env`) |
 | [`backend/mosquitto/mosquitto.conf`](../backend/mosquitto/mosquitto.conf) | broker settings (keeps a queue on disk) |
 | [`backend/ingest/ingest.py`](../backend/ingest/ingest.py) + `Dockerfile` | MQTT → InfluxDB writer |

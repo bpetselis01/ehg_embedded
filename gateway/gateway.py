@@ -4,6 +4,8 @@
   uv run python -m gateway.gateway --nodes 2       # up to 2 nodes
   uv run python -m gateway.gateway --no-mqtt       # print instead of publishing
   uv run python -m gateway.gateway --simulate 3    # 3 software nodes, no BLE (backend tests, H3 load)
+  uv run python -m gateway.gateway --simulate 1 --mqtt-tls --ca backend/pki/ca-chain.crt \\
+      --cert backend/pki/clients/ehg-gw-01.crt --key backend/pki/clients/ehg-gw-01.key   # cloud profile: TLS 1.3 + client cert, port 8883
 
 PURPOSE: Laptop-side bridge. Packets from the board (Bluetooth) -> database side (MQTT).
 INPUT: 1 BLE notification per packet = bytes in the wire format (header + int16 samples + CRC;
@@ -45,6 +47,7 @@ import asyncio
 import csv
 import json
 import random
+import ssl
 import struct
 import time
 from pathlib import Path
@@ -141,6 +144,15 @@ def ranges(seqs: list[int]):
     return out
 
 
+def tls_context(ca: str, cert: str, key: str) -> ssl.SSLContext:
+    """Client TLS 1.3 context: trusts only `ca`, checks the broker's name, presents the client certificate."""
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)  # verifies the certificate chain and the host name by default
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_3  # paho's tls_set() has no "1.3 only" switch, so build the context here
+    ctx.load_verify_locations(cafile=ca)
+    ctx.load_cert_chain(certfile=cert, keyfile=key)
+    return ctx
+
+
 def make_publisher(args):
     """Return (publish, close). Publishes to MQTT, or just prints when --no-mqtt."""
     if args.no_mqtt:
@@ -150,7 +162,13 @@ def make_publisher(args):
     import paho.mqtt.client as mqtt
     c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"ehg-gateway-{int(time.time())}")
     c.max_queued_messages_set(0)  # unbounded: never drop at the gateway
-    c.connect(args.mqtt, 1883)
+    if args.mqtt_tls:
+        c.tls_set_context(tls_context(args.ca, args.cert, args.key))
+        # paho runs the TLS handshake inside its network thread, so a refused certificate raises nowhere: say so out loud
+        c.on_connect = lambda cl, u, f, rc, p: print(f"[mqtt] connected over TLS ({rc})" if not rc.is_failure else f"[mqtt] broker refused the connection: {rc}")
+        c.on_connect_fail = lambda cl, u: print("[mqtt] connection failed (TLS handshake or network); retrying. Check --ca/--cert/--key, the broker name and the CRL")
+        c.on_disconnect = lambda cl, u, f, rc, p: print(f"[mqtt] disconnected ({rc})")
+    c.connect(args.mqtt, args.mqtt_port)
     c.loop_start()
 
     def publish(node_id, msg):
@@ -248,18 +266,36 @@ async def sim_main(args, publish):
     await asyncio.gather(*(sim_node(i, args, publish) for i in range(args.simulate)))
 
 
-def main():
-    """Parse command-line options, then run either the BLE or the simulated source."""
+def parse_args(argv=None):
+    """Command-line options. The TLS flags are all-or-nothing, so a half-set TLS setup fails loudly instead of publishing in plain text."""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--nodes", type=int, default=1)
     ap.add_argument("--scan-s", type=float, default=10)
     ap.add_argument("--mqtt", default="localhost")
+    ap.add_argument("--mqtt-port", type=int, default=None, help="default 1883, or 8883 with --mqtt-tls")
+    ap.add_argument("--mqtt-tls", action="store_true", help="TLS 1.3 with a client certificate (needs --ca, --cert, --key)")
+    ap.add_argument("--ca", help="CA chain that signed the broker certificate (backend/pki/ca-chain.crt)")
+    ap.add_argument("--cert", help="this gateway's client certificate (backend/pki/clients/ehg-gw-01.crt)")
+    ap.add_argument("--key", help="the private key of --cert")
     ap.add_argument("--no-mqtt", action="store_true")
     ap.add_argument("--simulate", type=int, default=0, help="N software nodes instead of BLE")
     ap.add_argument("--sim-record", default="data/converted/tpehgdb/tpehg1007.npz")
     ap.add_argument("--sim-loss", type=float, default=0.0, help="drop probability per packet (sim only)")
     ap.add_argument("--frames", type=int, default=10, help="frames per packet (sim only; firmware uses Kconfig)")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
+    tls_files = (args.ca, args.cert, args.key)
+    if args.mqtt_tls and not all(tls_files):
+        ap.error("--mqtt-tls needs --ca, --cert and --key")
+    if any(tls_files) and not args.mqtt_tls:
+        ap.error("--ca/--cert/--key given without --mqtt-tls: refusing to fall back to plain MQTT")
+    if args.mqtt_port is None:
+        args.mqtt_port = 8883 if args.mqtt_tls else 1883
+    return args
+
+
+def main():
+    """Parse command-line options, then run either the BLE or the simulated source."""
+    args = parse_args()
     publish, close = make_publisher(args)
     try:
         asyncio.run(sim_main(args, publish) if args.simulate else ble_main(args, publish))

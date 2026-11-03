@@ -1,5 +1,17 @@
 # Progress log
 
+## 2026-11-03: Unit 2, MQTT over TLS 1.3 with client certificates (optional cloud profile; [decision 0008](decisions/0008-mqtt-mtls-and-topic-acls.md))
+
+- **Added:** [`tools/pki.sh`](../tools/pki.sh) (offline root, intermediate, broker and client certificates, revoke, CRL; ECDSA P-256), [`backend/mosquitto/mosquitto.tls.conf`](../backend/mosquitto/mosquitto.tls.conf) + [`acl`](../backend/mosquitto/acl),
+  [`backend/docker-compose.cloud.yml`](../backend/docker-compose.cloud.yml) (override), `gateway --mqtt-port/--mqtt-tls/--ca/--cert/--key`, `MQTT_*` environment variables for ingest and the viewer, [`docs/security.md`](security.md), a troubleshooting section, README "cloud profile locally".
+  `.gitignore` now covers `backend/pki/`, `*.key`, `*.pem`, `*.p12`. Dev dependency added: PyYAML (`uv.lock` updated).
+- **Default behaviour unchanged:** `docker compose config` shows the default stack still publishes 1883 and has the same 4 services; gateway, ingest and viewer defaults are plain 1883 (tests). A half-set TLS setup exits with an error instead of falling back to plain MQTT.
+- **Tested against a real Mosquitto 2.1.2** (Homebrew, `EHG_INTEGRATION=1`; the repo's config and ACL with only paths and port rewritten): readers cannot publish; a gateway cannot write another gateway's status but can write its own; no client certificate, TLS 1.2 only and a certificate from another CA are refused;
+  `gateway --simulate 1 --mqtt-tls` publishes packets the viewer identity reads; a refused certificate is reported on the gateway console. Revoked certificate: refused after SIGHUP (CRL not re-read by itself). Expired CRL: refuses all clients (Python OpenSSL, not the broker).
+- **Numbers:** 83 tests before, 45 new. `uv run pytest -q`: 122 passed, 6 skipped (the real-broker group). With `EHG_INTEGRATION=1` and `mosquitto` installed: 128 passed in about 29 s.
+- **NOT done / not verified:** the compose containers were not started (Docker not running); `eval/integrity.py` over TLS (needs Influx, i.e. Docker) so the "100 % over TLS" integration step is still open; key-file readability inside the container; WebSocket on 443; carrier blocking of 8883;
+  TLS overhead (plain versus TLS timing) not measured yet; `shellcheck` not run (not installed). The "default stack still the same 4 containers" claim is from `docker compose config`, not from running them.
+
 ## 2026-11-03: Unit 1, decisions and topology documents (docs only; [prompt](claude-code-prompt-thesis-b-hardening.md))
 
 - **Added:** [decisions 0007 to 0017](decisions/0007-enterprise-evolution-keep-influx-as-reference.md) (*Accepted* by Byron at Checkpoint 1, 2026-11-03),

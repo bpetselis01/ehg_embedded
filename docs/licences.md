@@ -25,6 +25,9 @@ Each UNVERIFIED row is checked in the unit that first uses the component, and th
 | websockets 17.1 | BSD-3-Clause | Live viewer | Permissive | Confirmed locally (package metadata) |
 | pyserial 3.5 (dev) | BSD | Serial feeder | Permissive | Confirmed locally (package classifier) |
 | pytest 9.1.1 (dev) | MIT | Tests | Permissive | Confirmed locally (package metadata) |
+| PyYAML 6.0.3 (dev, added in Unit 2) | MIT | Parses compose and cloud-init files in tests | Permissive | Confirmed locally (package metadata and classifier) |
+| OpenSSL 3.0.12 (command line, used by `tools/pki.sh` and the tests) | Not read; stated as Apache-2.0 for OpenSSL 3 in general | Makes the certificates | Free; a tool run locally, not shipped | UNVERIFIED |
+| Mosquitto 2.1.2 (Homebrew build used for the local tests) | Not read (EPL/EDL per the prompt) | Real-broker tests | Free to run locally | UNVERIFIED |
 | Eclipse Mosquitto | EPL/EDL (as stated in the prompt) | Edge MQTT broker | Open source, free to self-host | UNVERIFIED |
 | InfluxDB 2.7 (OSS) | Not stated in the prompt | Reference time-series store | Free to self-host | UNVERIFIED |
 | Grafana OSS | Apache-2.0 or AGPL-3.0 (the prompt says "check") | Dashboards | Free to self-host for own use; AGPL terms matter only if modified and offered to others | UNVERIFIED |

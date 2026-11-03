@@ -4,7 +4,7 @@
 
 ## Status
 
-Accepted (Checkpoint 1, 2026-11-03; status of the build is stated in each record). Implemented by Unit 2.
+Accepted (Checkpoint 1, 2026-11-03). Implemented by Unit 2 on 2026-11-03 as an optional cloud profile; tested against a local Mosquitto 2.1.2, containers not yet started (Docker was not running).
 
 ## Context
 
@@ -23,7 +23,9 @@ for a laptop on a bench and wrong for a broker on a public address: anyone could
 - Clients use an `ssl.SSLContext` with `minimum_version = TLSv1_3` (paho-mqtt 2.x `tls_set()` has no TLS-1.3-only switch).
 - Port 8883 is exposed directly on the cloud VM. A WebSocket-over-TLS path on 443 is the fallback if a carrier blocks 8883
   (**unverified**; test on the real network). If client certificates do not survive that path, record the finding instead of weakening authentication.
-- Mosquitto's `crlfile` option, its live reload behaviour and the WebSocket listener options are **unverified** on 2.1 and must be checked before use.
+- **Checked against Mosquitto 2.1.2 (Homebrew, 2026-11-03, Unit 2):** `tls_version` is a minimum (manual and test); the CN becomes the user name; `pattern` ACLs with `%u` exist but the ACL uses explicit per-gateway lines so a reader never gets a write grant;
+  `crlfile` works and is re-read on **SIGHUP** as well as at start-up (tested; a running broker does not notice a changed CRL by itself); an expired CRL refuses every client (tested with Python's OpenSSL, not the broker). Details and tests: [security.md](../security.md).
+- **Still unverified:** the WebSocket-on-443 path and client certificates through it, carrier blocking of 8883, the `eclipse-mosquitto:2` image's version and key-file readability inside the container (Docker was not running).
 
 ## Consequences
 

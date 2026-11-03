@@ -30,6 +30,7 @@ BEFORE -> AFTER: Before: gateway/gateway.py via the Mosquitto broker. Runs in Do
 
 import json
 import os
+import ssl
 import time
 from collections import deque
 
@@ -85,14 +86,40 @@ def on_message(client, userdata, msg):
         .time(ns(m["t_inject_host"]), WritePrecision.NS)))
 
 
+def mqtt_settings(env=os.environ):
+    """(host, port, TLS context or None) from MQTT_HOST / MQTT_PORT / MQTT_TLS / MQTT_CA / MQTT_CERT / MQTT_KEY.
+
+    With none of the TLS variables set this is the plain local broker on 1883, exactly as before. The context is built
+    here, not imported from gateway/, because this file runs alone in a container (viewer/server.py carries the same code).
+    """
+    host = env.get("MQTT_HOST", "localhost")
+    files = [env.get(k) for k in ("MQTT_CA", "MQTT_CERT", "MQTT_KEY")]
+    if env.get("MQTT_TLS", "").lower() not in ("1", "true", "yes"):
+        if any(files):
+            raise SystemExit("MQTT_CA/MQTT_CERT/MQTT_KEY are set but MQTT_TLS is not: refusing to fall back to plain MQTT")
+        return host, int(env.get("MQTT_PORT", 1883)), None
+    if not all(files):
+        raise SystemExit("MQTT_TLS is on, so MQTT_CA, MQTT_CERT and MQTT_KEY must all be set")
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)  # checks the broker certificate and its name
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_3
+    ctx.load_verify_locations(cafile=files[0])
+    ctx.load_cert_chain(certfile=files[1], keyfile=files[2])
+    return host, int(env.get("MQTT_PORT", 8883)), ctx
+
+
 def main():
     """Connect to the broker (retrying until it is up) and process messages forever."""
+    host, port, tls = mqtt_settings()
     c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="ehg-ingest", clean_session=False)
     c.on_connect = lambda cl, u, f, rc, p: cl.subscribe("ehg/+/pkt", qos=1)
     c.on_message = on_message
+    if tls:  # the TLS handshake runs inside paho's loop, so failures need to be reported, not retried silently
+        c.tls_set_context(tls)
+        c.on_connect_fail = lambda cl, u: print("MQTT connection failed (TLS handshake or network); retrying. Check the certificate files, the broker name and the CRL")
+        c.on_disconnect = lambda cl, u, f, rc, p: print(f"MQTT disconnected ({rc})")
     while True:
         try:
-            c.connect(os.environ.get("MQTT_HOST", "localhost"), 1883)
+            c.connect(host, port)
             break
         except OSError:
             print("waiting for broker...")

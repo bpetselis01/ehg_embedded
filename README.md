@@ -16,7 +16,7 @@ Status, run results and open items: [`docs/progress.md`](docs/progress.md).
 
 | Path | What |
 |---|---|
-| [`tools/`](tools) | [`convert.py`](tools/convert.py) (WFDB → int16 `.npz`), [`feed.py`](tools/feed.py) (streams a `.npz` into the board over serial), [`make_replay.py`](tools/make_replay.py) (`.npz` → built-in firmware recording, via `build.sh --record`), [`fhir_export.py`](tools/fhir_export.py) (stored window → FHIR R5), [`watch_db.py`](tools/watch_db.py) + [`demo.sh`](tools/demo.sh) (live demo) |
+| [`tools/`](tools) | [`convert.py`](tools/convert.py) (WFDB → int16 `.npz`), [`feed.py`](tools/feed.py) (streams a `.npz` into the board over serial), [`make_replay.py`](tools/make_replay.py) (`.npz` → built-in firmware recording, via `build.sh --record`), [`fhir_export.py`](tools/fhir_export.py) (stored window → FHIR R5), [`watch_db.py`](tools/watch_db.py) + [`demo.sh`](tools/demo.sh) (live demo), [`pki.sh`](tools/pki.sh) (certificates for the TLS cloud profile) |
 | [`firmware/ehg_node/`](firmware/ehg_node) | Zephyr app for `nrf52840dk/nrf52840`, NCS v3.4.1. [`firmware/build.sh`](firmware/build.sh) builds and flashes it |
 | [`gateway/`](gateway) | Bleak central → MQTT; `--simulate N` software nodes use the same wire format |
 | [`backend/`](backend) | docker compose: Mosquitto, InfluxDB 2.7, ingest, Grafana (provisioned dashboard) |
@@ -67,6 +67,21 @@ uv run pytest -q
 ```
 
 The DK serial port is VCOM0 (`/dev/cu.usbmodem0010502082941`, 460800 baud). It carries the recording in (from `tools/feed.py`) and the board's log out, so `feed.py` prints the log: link parameters and, every 10 s, `sent / resent / ring_overflow / starved / max_inject_late`. Only one program can open the port.
+
+### Cloud profile locally (optional): MQTT over TLS 1.3 with client certificates
+
+The default stack above is unchanged (plain MQTT on 1883, this computer only). The cloud profile is opt-in and needs OpenSSL 3 (`brew install openssl@3`); background in [docs/security.md](docs/security.md) and [decision 0008](docs/decisions/0008-mqtt-mtls-and-topic-acls.md).
+
+```sh
+tools/pki.sh init --host localhost            # root, intermediate, broker + client certificates in backend/pki (gitignored)
+(cd backend && docker compose -f docker-compose.yml -f docker-compose.cloud.yml up -d)   # broker on 127.0.0.1:8883, no 1883
+uv run python -m gateway.gateway --simulate 1 --mqtt-tls --ca backend/pki/ca-chain.crt \
+    --cert backend/pki/clients/ehg-gw-01.crt --key backend/pki/clients/ehg-gw-01.key
+EHG_INTEGRATION=1 uv run pytest tests/test_mqtt_tls_config.py -q   # also tests a real local broker (brew install mosquitto)
+```
+
+Each component has its own certificate: the ingest container uses `ehg-ingest` (set by the override), the viewer needs `MQTT_TLS=1 MQTT_CA=… MQTT_CERT=… MQTT_KEY=…` ([`viewer/server.py`](viewer/server.py)).
+The containers of this profile have **not been started** yet (Docker was not running when this was written); the broker config and ACL were tested against a local Mosquitto 2.1.2 ([docs/security.md](docs/security.md)).
 
 ## Reproducing the results
 

@@ -27,3 +27,9 @@ firmware/ehg_node/src/replay_data.h
 
 # local symlink to the XIAO blinky test project outside this repo
 xiao_blinky
+
+# TLS keys and certificates (tools/pki.sh writes them to backend/pki/): never commit
+backend/pki/
+*.key
+*.pem
+*.p12
