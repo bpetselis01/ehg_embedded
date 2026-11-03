@@ -2,13 +2,22 @@
 //   container name; Alloy reads ONLY the journal. It does not mount Docker's data directory (that holds every container's environment, including the database
 //   passwords) and it does not mount the Docker socket (root-equivalent on the host).
 // INPUT: /var/log/journal and /etc/machine-id (mounted read-only). OUTPUT: log lines pushed to http://loki:3100 with the labels container (Docker's name) and unit.
-// HOW: loki.relabel turns the journal fields CONTAINER_NAME and _SYSTEMD_UNIT into labels; everything else is dropped from the label set.
+// HOW: loki.relabel first KEEPS only entries with a Docker container name (so host auth/ssh/sudo logs never reach Loki or Grafana readers), then turns CONTAINER_NAME and
+//   _SYSTEMD_UNIT into the labels container and unit. Alloy can still READ the whole journal (it is mounted read-only); a compromised Alloy would see host logs. That residual
+//   risk is accepted and written down in docs/security.md.
 // STATUS: UNVERIFIED against the pinned Alloy version (nobody has started it yet). The Alloy process must be able to read the journal files (they belong to the group
 //   systemd-journal); if it cannot, add that group to the service with group_add using the numeric id (getent group systemd-journal on the VM).
 // ROLE IN THESIS: Centralised logs (docs/decisions/0016-observability-and-slos.md).
 // BEFORE -> AFTER: Before: nothing collects logs. After: Loki has them, searchable by container name.
 loki.relabel "journal" {
   forward_to = []
+
+  // keep ONLY entries that carry a Docker container name: sshd, sudo, login and every other host log line is dropped here, before anything is sent to Loki
+  rule {
+    source_labels = ["__journal_container_name"]
+    regex         = ".+"
+    action        = "keep"
+  }
 
   rule {
     source_labels = ["__journal_container_name"]

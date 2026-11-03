@@ -12,7 +12,7 @@
 #   (docker inspect gives it): ssh -L 3000:<container-ip>:3000 ubuntu@<vm>; see deploy/README.md.
 # HOW: HOST MOUNTS ARE MINIMAL ON PURPOSE (a security review found the first draft too generous): no container mounts the host root, /run, /var/run or Docker's
 #   data directory, because any of them reaches the Docker socket or every container's environment (which holds the database passwords). Alloy reads only the
-#   systemd journal (Docker's log driver is journald), node-exporter gets /proc, /sys and a metrics file written by cron, cAdvisor gets /sys. cAdvisor therefore
+#   systemd journal (Docker's log driver is journald) and forwards only entries with a container name, node-exporter gets /proc, /sys and a metrics file written by cron, cAdvisor gets /sys. cAdvisor therefore
 #   shows containers by cgroup id, not by name. Two networks: "edge" (Caddy, Mosquitto: the only ones with a route to the internet) and "internal" (no route out at all).
 #   Cloud-init also blocks containers from the cloud metadata address 169.254.169.254.
 #   Every image is pinned by version AND digest (all checked to have linux/arm64 on 2026-11-03). Every service has no-new-privileges and a memory limit;
@@ -193,6 +193,8 @@ services:
       - /var/log/journal:/var/log/journal:ro
       - /etc/machine-id:/etc/machine-id:ro
       - alloy-data:/var/lib/alloy/data
+    cap_drop: [ALL]
+    read_only: true
     mem_limit: 96m
     labels:
       ehg.healthcheck: "none: the Alloy image has no shell or wget; Prometheus scrapes alloy:12345 instead"

@@ -170,6 +170,8 @@ def test_container_logs_go_to_the_journal_and_disk_metrics_need_no_host_mount():
     assert "ehg_disk_avail_bytes" in df and "mv \"$tmp\" \"$out\"" in df, "written atomically"
     assert "ehg-df-metrics.sh" in files["/etc/cron.d/ehg-df-metrics"]
     alloy = (DEPLOY / "observability/config.alloy").read_text()
+    assert re.search(r'source_labels\s*=\s*\["__journal_container_name"\]\s*\n\s*regex\s*=\s*"\.\+"\s*\n\s*action\s*=\s*"keep"', alloy), "host logs (sshd, sudo) must be dropped before they are sent"
+    assert services()["alloy"]["cap_drop"] == ["ALL"] and services()["alloy"]["read_only"] is True
     assert "loki.source.journal" in alloy and not re.search(r"^[^/\n]*(/var/lib/docker|docker\.sock)", alloy, re.M), "Alloy reads the journal only"
 
 
