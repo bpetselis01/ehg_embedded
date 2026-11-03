@@ -11,8 +11,8 @@
 - Docker / compose: Docker daemon not running; nothing started. Terraform 1.14.9 installed; the provider cache is only in the session scratchpad
 - Background processes or runs: none
 
-## Decisions made this session (all in docs/deployment.md and progress.md)
-- DuckDNS + Caddy; Sydney (ap-sydney-1); repo stays private (SSH deploy key); outbox ON by default; soak and first H3 skipped; card consent PENDING
+## Decisions made this session (not yet in an ADR or progress.md)
+- None outstanding: DuckDNS + Caddy, Sydney (ap-sydney-1), private repo (SSH deploy key), outbox ON by default, soak and first H3 skipped and the card consent PENDING are all recorded in docs/deployment.md and progress.md
 
 ## Open questions waiting for Byron
 - The Oracle card (phone number + credit card for verification; never Pay-As-You-Go). Asked once, deferred; ask again when he reports back on the runbook
