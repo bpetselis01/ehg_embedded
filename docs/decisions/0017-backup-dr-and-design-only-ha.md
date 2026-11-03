@@ -4,7 +4,7 @@
 
 ## Status
 
-Proposed (awaiting Checkpoint 1 approval). Backups and the restore drill are implemented by Unit 12; high availability is documentation only.
+Accepted (Checkpoint 1, 2026-11-03; status of the build is stated in each record). Backups and the restore drill are implemented by Unit 12; high availability is documentation only.
 
 ## Context
 

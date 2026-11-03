@@ -4,7 +4,7 @@
 
 ## Status
 
-Proposed (awaiting Checkpoint 1 approval). Implemented by Unit 7. The findings the prompt tells Unit 7 to record (step-ca templates, revocation, direct Keycloak-token use) are still to be checked and added here.
+Accepted (Checkpoint 1, 2026-11-03; status of the build is stated in each record). Implemented by Unit 7. The findings the prompt tells Unit 7 to record (step-ca templates, revocation, direct Keycloak-token use) are still to be checked and added here.
 
 ## Context
 

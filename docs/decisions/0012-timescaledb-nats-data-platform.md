@@ -4,7 +4,7 @@
 
 ## Status
 
-Proposed (awaiting Checkpoint 1 approval). Implemented by Unit 6; becomes the primary cloud store only after Checkpoint 4.
+Accepted (Checkpoint 1, 2026-11-03; status of the build is stated in each record). Implemented by Unit 6; becomes the primary cloud store only after Checkpoint 4.
 
 ## Context
 

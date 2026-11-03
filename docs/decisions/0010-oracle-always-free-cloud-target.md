@@ -4,7 +4,7 @@
 
 ## Status
 
-Proposed (awaiting Checkpoint 1 approval). Byron chose this target on 2026-11-03; building it starts at Unit 4. No cloud account exists yet.
+Accepted (Checkpoint 1, 2026-11-03; status of the build is stated in each record). Byron chose this target on 2026-11-03; building it starts at Unit 4. No cloud account exists yet.
 
 ## Context
 

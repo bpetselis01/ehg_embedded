@@ -4,7 +4,7 @@
 
 ## Status
 
-Proposed (awaiting Checkpoint 1 approval). Implemented by Unit 3 (Python) and Unit 15 (Swift).
+Accepted (Checkpoint 1, 2026-11-03; status of the build is stated in each record). Implemented by Unit 3 (Python) and Unit 15 (Swift).
 
 ## Context
 

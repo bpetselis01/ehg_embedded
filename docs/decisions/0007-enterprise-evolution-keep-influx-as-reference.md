@@ -4,7 +4,7 @@
 
 ## Status
 
-Proposed (awaiting Checkpoint 1 approval). Nothing in this record is built yet.
+Accepted (Checkpoint 1, 2026-11-03; status of the build is stated in each record). Nothing in this record is built yet.
 
 ## Context
 
