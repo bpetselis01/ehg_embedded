@@ -1,5 +1,11 @@
 # Progress log
 
+## 2026-11-04: a start-up bug found by reading the never-run NATS code (fixed, with a guard test)
+
+- **Found:** the triage service's consumer filtered on `EHG.>` but the stream listed only `EHG.PKT.>`, `EHG.GW.>` and `EHG.BAD.>`. JetStream refuses a consumer whose filter is not inside the stream's subjects (to my recollection of the server's rule: **not verified against a real server**, none is installed), so triage would have failed at start-up on the real stack. Nothing could catch it before because no NATS server has run.
+- **Fixed:** the stream has one subject, `EHG.>` (harmless if my recollection is wrong); `tests/test_bridge.py` now implements the subset rule and checks every consumer filter found in the code (it failed before the fix with the exact message). All other nats-py calls in the services were compared with the installed library's real signatures (`add_stream`, `pull_subscribe`, `fetch`, `consumer_info`, `ack`, `nak(delay=)`, `term`, `publish(headers=, timeout=)`, `connect(name=, max_reconnect_attempts=)`): they match.
+- **Lesson recorded:** the `run()` functions of the services are the least tested code in the repository; the first real start will find more.
+
 ## 2026-11-04: Swift GapTracker and ClockMap (phone-free part of Unit 15, continued)
 
 - **Added:** `ios/EHGWire/Sources/EHGWire/Tracking.swift` (line-for-line ports of `gateway/tracking.py`), a `tracking` section in the golden vectors (10 gap cases and 4 clock cases evaluated by the Python classes, including a stream restart, uint32 wrap-around of sequence numbers and of the tick counter), 3 more Swift tests and 3 Python guards.

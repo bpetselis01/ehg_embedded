@@ -92,7 +92,7 @@ Same data as section 5, different shape. `ehg_raw(time, node, record_id, seq, fr
 `ehg_health(time, node, delivery_pct, p95_latency_ms, rx, missing, unrecovered, flatline_channels, saturated_pct, score)`, key `(node, time)` (written by the triage worker, Unit 8). Created by `backend/db/migrations` (revision 0001 plain tables, 0002 triage and registry, 0003 TimescaleDB).
 Writes use `ON CONFLICT DO NOTHING`, so replays are harmless. `eval/backend_client.py --backend timescale` returns exactly the shapes the InfluxDB path returns; `eval/parity.py` checks it.
 
-NATS JetStream stream `EHG` (file storage, 7 days / 8 GB, one-hour duplicate window): `EHG.PKT.<node>` = the packet JSON (header `Nats-Msg-Id: <node>:<seq>:<t_inject>`), `EHG.GW.<gateway>` = status text,
+NATS JetStream stream `EHG` (one stream subject, `EHG.>`, covering the three sub-trees below, because a consumer's filter must lie inside the stream's subjects; file storage, 7 days / 8 GB, one-hour duplicate window): `EHG.PKT.<node>` = the packet JSON (header `Nats-Msg-Id: <node>:<seq>:<t_inject>`), `EHG.GW.<gateway>` = status text,
 `EHG.BAD.<reason>` = messages the bridge could not read (kept as received). Durable pull consumers `ts-writer`, `influx-writer`, later `triage` and `fhir-sync`; 30 s ack wait, at most 5 deliveries.
 
 **Proposed classifier hook:** the classifier reads `ehg_raw` for a `node_id` over a 60 s window with a 30 s step (Flux query in [`eval/backend_client.py:query_frames`](../eval/backend_client.py)), converts to mV with the gain above, runs unchanged, and writes the label to measurement `ehg_label` (tags `node_id`, fields `label`, `score`, `window_start`). A separate subscriber like this is also how report §8.4 describes the hook.

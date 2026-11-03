@@ -49,8 +49,11 @@ def msg_id(msg: dict) -> str:
 
 
 def stream_config() -> StreamConfig:
-    """The EHG stream: file storage, limits retention, old messages discarded first, a one-hour duplicate window."""
-    return StreamConfig(name=STREAM, subjects=[f"{PKT_PREFIX}.>", f"{GW_PREFIX}.>", f"{BAD_PREFIX}.>"], storage=StorageType.FILE,
+    """The EHG stream: file storage, limits retention, old messages discarded first, a one-hour duplicate window.
+
+    One subject, `EHG.>`, that covers EHG.PKT.*, EHG.GW.* and EHG.BAD.*: a JetStream consumer's filter must lie INSIDE the stream's subjects, and the triage consumer watches everything (`EHG.>`),
+    which was NOT inside the three separate sub-trees this stream used to list."""
+    return StreamConfig(name=STREAM, subjects=[f"{STREAM}.>"], storage=StorageType.FILE,
                         retention=RetentionPolicy.LIMITS, discard=DiscardPolicy.OLD, max_age=MAX_AGE_S, max_bytes=MAX_BYTES,
                         duplicate_window=DUPLICATE_WINDOW_S)
 

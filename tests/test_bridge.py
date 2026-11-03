@@ -123,7 +123,7 @@ def test_metrics_mirror_the_counters():
 
 def test_stream_and_consumer_configuration_follow_the_design():
     s = bus.stream_config()
-    assert s.name == "EHG" and set(s.subjects) == {"EHG.PKT.>", "EHG.GW.>", "EHG.BAD.>"}
+    assert s.name == "EHG" and set(s.subjects) == {"EHG.>"}
     assert s.storage.value == "file" and s.retention.value == "limits" and s.discard.value == "old"
     assert s.duplicate_window == 3600 and s.max_age == 7 * 86400 and s.max_bytes == 8 * 2**30
     c = bus.consumer_config("ts-writer")
@@ -177,3 +177,35 @@ def test_valid_ids_with_dashes_and_underscores_still_route_normally():
     deliver(b, "ehg/SIM-0000/pkt", packet(node="SIM-0000"), acks)
     deliver(b, "ehg/_gw/ehg-gw-01/status", b"online", acks)
     assert [s for s, _, _ in js.stored] == ["EHG.PKT.SIM-0000", "EHG.GW.ehg-gw-01"]
+
+
+def subject_is_subset(filter_: str, stream_subject: str) -> bool:
+    """NATS's rule for a consumer filter: every subject the filter can match must also be matched by the stream subject (`*` is one token, `>` is the rest)."""
+    f, t = filter_.split("."), stream_subject.split(".")
+    for i, tok in enumerate(t):
+        if tok == ">":
+            return len(f) > i  # the stream subject takes everything from here on, so any filter that is at least this long is inside it
+        if i >= len(f) or f[i] == ">" or (f[i] == "*" and tok != "*") or (tok != "*" and f[i] != tok):
+            return False
+    return len(f) == len(t)
+
+
+def test_the_subset_rule_itself():
+    assert subject_is_subset("EHG.PKT.>", "EHG.>") and subject_is_subset("EHG.PKT.node1", "EHG.PKT.>") and subject_is_subset("EHG.>", "EHG.>")
+    assert not subject_is_subset("EHG.>", "EHG.PKT.>") and not subject_is_subset("EHG.PKT.>", "EHG.GW.>") and not subject_is_subset("OTHER.>", "EHG.>")
+
+
+def test_every_consumer_filter_in_the_code_is_inside_the_streams_subjects():
+    """JetStream refuses to create a consumer whose filter is not a subset of the stream's subjects (found by reading, never run against a server: the triage consumer filtered on EHG.> while the stream held only the three sub-trees)."""
+    import re
+    from pathlib import Path
+    root = Path(__file__).parents[1]
+    filters = {"ts-writer": f"{bus.PKT_PREFIX}.>", "triage": "EHG.>"}
+    for path in ("backend/ts_writer/writer.py", "backend/triage/stream.py", "backend/ingest/ingest.py"):
+        for found in re.findall(r"pull_subscribe\(\s*f?\"([^\"]+)\"", (root / path).read_text()):
+            filters[path] = found.replace("{bus.PKT_PREFIX}", bus.PKT_PREFIX)
+    assert len(filters) >= 4, filters
+    subjects = bus.stream_config().subjects
+    for who, f in filters.items():
+        assert any(subject_is_subset(f, s) for s in subjects), f"{who}: filter {f!r} is not inside the stream subjects {subjects}"
+
