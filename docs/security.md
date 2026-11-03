@@ -108,6 +108,13 @@ All four were real, all fixed with failing tests first (`tests/test_ts_writer.py
 - **Keycloak's admin interface was reachable (MEDIUM, fixed):** `/auth/*` was proxied whole. Now only `/auth/realms/ehg/*` and `/auth/resources/*` are; the admin console, the master realm, health and metrics answer 404. Administer Keycloak through an SSH tunnel to the container. Test: `tests/test_caddy_config.py` (path-matching of allowed and blocked examples; `caddy adapt` ordering is checked only where Caddy is installed).
 - **Ordering of the deny rule (MEDIUM, second look, fixed):** relying on the source order of separate `handle` blocks is not guaranteed (Caddy sorts them by matcher specificity). All routing is now inside ONE `route` block, which runs exactly as written, with the deny rule first and the catch-all last (tested); Grafana's own `/metrics` is also switched off (`GF_METRICS_ENABLED=false`). Still UNVERIFIED by `caddy adapt` (Caddy is not installed here).
 
+## Triage page (Unit 10)
+
+- **Controls, each with a static test** (`tests/test_triage_page.py`): no inline script or style and no external host (the front door's CSP allows only same-origin files); server text is only inserted as text (no `innerHTML`, `eval` or string timers); no `localStorage`, cookie or IndexedDB, the access token lives in one JavaScript variable (a reload signs in again),
+  `sessionStorage` holds only the one-off PKCE verifier and state; the code flow with S256 PKCE and a checked `state`, no implicit or password flow; no clinical or diagnostic wording; the routes the script calls exist in the API; role-gated buttons (a viewer sees History only; the API enforces the real rule).
+- **Dev mode:** `/ui-config.json` lists the fixed dev users WITH their tokens, but only when `AUTH_MODE=dev`, which refuses to start on a non-loopback address; in `oidc` mode it carries no user list and no secret (tested).
+- **Limits:** no refresh token (the page asks to sign in again when the five-minute token ends); the page was exercised in the built-in browser against a stub API (roles, escalate with a required note, history, EHR panel, consent refusal) but never against Keycloak, a real database or the Caddy CSP, so a CSP violation that only a real header would show is not ruled out. No admin screens (configuration, audit) yet: those are API-only.
+
 ## FHIR sync and facade (Unit 9)
 
 - **Boundary:** browser or page -> triage API `/fhir/*` -> HAPI (private network, not routed by Caddy). The sync worker writes to HAPI directly; nothing else does.

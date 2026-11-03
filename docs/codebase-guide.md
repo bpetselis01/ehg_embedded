@@ -169,6 +169,7 @@ Step by step:
 | [`backend/triage/registry.py`](../backend/triage/registry.py) | gateways, nodes, pseudonymous subjects with consent, and the health history behind the trends |
 | [`backend/triage/audit.py`](../backend/triage/audit.py) | hash-chained append-only audit log and its verifier (`--verify`); tamper-evident, not write-once |
 | [`backend/triage/state.py`](../backend/triage/state.py) | alert lifecycle in PostgreSQL (open, acknowledged, escalated, resolved), required notes, auto-resolve, audit in the same transaction |
+| [`viewer/triage.html`](../viewer/triage.html), [`viewer/triage.css`](../viewer/triage.css), [`viewer/triage.js`](../viewer/triage.js) | the triage page: sign-in (OIDC code flow with PKCE), worklist, node detail (trend, alerts, EHR), alert actions; served by the triage API at `/` |
 | [`backend/fhir_sync/worker.py`](../backend/fhir_sync/worker.py) | copies complete stored windows into the reference FHIR server (HAPI) as conditional, idempotent transactions, only for nodes with active consent |
 | [`backend/triage/fhir_api.py`](../backend/triage/fhir_api.py) | the read-only FHIR facade (`/fhir/*`): node-scoped, consent-checked, audited; the browser never reaches HAPI |
 | [`deploy/hapi/application.yaml`](../deploy/hapi/application.yaml) | HAPI FHIR R5 configuration (no CORS, no Swagger, no mass delete); never started |

@@ -233,7 +233,8 @@ async def run() -> None:
     engine = Engine(fleet, store, sink=pg_health_sink(connect))
     bad, dead = Counter("ehg_triage_bad_messages", "messages kept under EHG.BAD.*"), Counter("ehg_triage_dead_letters", "JetStream max-delivery advisories")
     host = os.environ.get("BIND_HOST", "127.0.0.1")
-    app = create_app(store=store, audit=audit, auth=from_env(), registry=registry, known_nodes=lambda: list(fleet.nodes), config=engine.cfg)
+    app = create_app(store=store, audit=audit, auth=from_env(), registry=registry, known_nodes=lambda: list(fleet.nodes), config=engine.cfg,
+                     ui_oidc={"authority": os.environ.get("OIDC_UI_AUTHORITY", os.environ.get("OIDC_ISSUER", "")), "client_id": os.environ.get("OIDC_UI_CLIENT_ID", "triage-ui")})
     nc = await nats.connect(os.environ.get("NATS_URL", "nats://nats:4222"), name="ehg-triage", max_reconnect_attempts=-1)
     js = nc.jetstream()
     await js.add_stream(bus.stream_config())

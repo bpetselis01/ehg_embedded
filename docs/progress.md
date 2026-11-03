@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-11-04: Unit 10, the triage page (tried in a browser against a stub API; never against Keycloak or a real database)
+
+- **Added:** `viewer/triage.html|css|js` (vanilla, no CDN, CSP-clean), served by the triage API at `/`, `/triage.js`, `/triage.css`, plus a public `/ui-config.json` (mode, banner, purpose, the sign-in server or the dev users); the platform image copies the three files; `tests/test_triage_page.py` (10 static and serving tests).
+- **Tried by hand** (built-in browser, stub store): dev sign-in, worklist order and bands, sparklines, trend charts with the "not fully covered" notice, alerts tab with role-dependent buttons, escalate dialog with a required note, history, EHR panel, the consent refusal shown as a message. Fixed on the way: the native required-field bubble hid our own message (`novalidate` on the form).
+- **Bug found by this work, fixed:** the Keycloak realm (Unit 7) had no audience mapper, so no `triage-ui` token could have passed the API's audience check. Mappers added and tested (not verified on a real Keycloak).
+- **Automated review of Unit 9, 1 finding, fixed:** `/fhir/*` now gets `Cache-Control: no-store`.
+- **NOT done:** admin screens; refresh tokens; any run against a real Keycloak; a Lighthouse or screen-reader pass; the page has not been looked at on a phone-width screen.
+
 ## 2026-11-04: Unit 9, FHIR sync worker and read-only facade (tested against a FAKE FHIR server; HAPI never started)
 
 - **Added:** `backend/fhir_sync/worker.py` (reuses `tools.fhir_export.bundle` unchanged; one conditional transaction per COMPLETE 600-frame chunk: Device POST with If-None-Exist, Observation conditional PUT by identifier), `backend/triage/fhir_api.py` (`/fhir/metadata|Observation|Device`, wired in by `create_app(fhir_upstream=...)`),

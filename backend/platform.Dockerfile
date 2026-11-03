@@ -14,6 +14,7 @@ WORKDIR /app
 COPY backend /app/backend
 COPY gateway/tracking.py gateway/packet.py /app/gateway/
 COPY tools/fhir_export.py /app/tools/
+COPY viewer/triage.html viewer/triage.css viewer/triage.js /app/viewer/
 COPY eval/backend_client.py /app/eval/
 ENV PYTHONUNBUFFERED=1
 USER 10001
