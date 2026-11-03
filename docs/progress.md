@@ -76,7 +76,7 @@
 - **Tried by hand** (built-in browser, stub store): dev sign-in, worklist order and bands, sparklines, trend charts with the "not fully covered" notice, alerts tab with role-dependent buttons, escalate dialog with a required note, history, EHR panel, the consent refusal shown as a message. Fixed on the way: the native required-field bubble hid our own message (`novalidate` on the form).
 - **Bug found by this work, fixed:** the Keycloak realm (Unit 7) had no audience mapper, so no `triage-ui` token could have passed the API's audience check. Mappers added and tested (not verified on a real Keycloak).
 - **Automated review of Unit 9, 1 finding, fixed:** `/fhir/*` now gets `Cache-Control: no-store`.
-- **NOT done:** admin screens; refresh tokens; any run against a real Keycloak; a Lighthouse or screen-reader pass; the page has not been looked at on a phone-width screen.
+- **NOT done:** admin screens; refresh tokens; any run against a real Keycloak; a Lighthouse or screen-reader pass. (Phone width, 375 px, was checked later the same day in the built-in browser: the first layout overflowed, so the worklist now hides the open-alerts, rules and waiting-time columns below 720 px and fits without sideways scrolling.)
 
 ## 2026-11-04: Unit 9, FHIR sync worker and read-only facade (tested against a FAKE FHIR server; HAPI never started)
 

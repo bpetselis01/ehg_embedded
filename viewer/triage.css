@@ -42,4 +42,9 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 textarea { width: 100%; display: block; margin-top: 4px; }
 #dlg-error { color: var(--crit); min-height: 1.4em; }
 footer { margin-top: 32px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); }
-@media (max-width: 720px) { th:nth-child(5), td:nth-child(5), th:nth-child(7), td:nth-child(7) { display: none; } }
+@media (max-width: 720px) {
+  th:nth-child(4), td:nth-child(4), th:nth-child(5), td:nth-child(5), th:nth-child(7), td:nth-child(7) { display: none; }  /* open alerts, rules and waiting time: in the detail pane instead */
+  th, td { padding: 6px 4px; }
+  svg.spark { width: 64px; }
+  button.link { white-space: nowrap; }
+}

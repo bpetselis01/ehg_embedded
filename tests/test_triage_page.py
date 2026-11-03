@@ -92,3 +92,14 @@ def test_ui_config_in_oidc_mode_has_no_dev_users_and_no_secret():
     j = TestClient(app).get("/ui-config.json").json()
     assert j["mode"] == "oidc" and "dev_users" not in j and j["banner"] is None and j["oidc"]["client_id"] == "triage-ui"
     assert not re.search(r"secret|password|token", str(j), re.I)
+
+
+def test_narrow_screens_drop_columns_instead_of_scrolling_sideways():
+    """Found in the browser at 375 px: the full table overflowed. Below 720 px the open-alerts, rules and waiting-time columns are hidden (their facts are in the detail pane)."""
+    css = FILES["triage.css"]
+    media = re.search(r"@media \(max-width: 720px\) \{(.*?)\n\}", css, re.S).group(1)
+    for col in (4, 5, 7):
+        assert f"th:nth-child({col}), td:nth-child({col})" in media or f"td:nth-child({col})" in media, col
+    assert "display: none" in media and "svg.spark" in media and "white-space: nowrap" in media
+    assert re.search(r"<th scope=\"col\">Open alerts</th>.*<th scope=\"col\">Rules</th>.*<th scope=\"col\">Waiting</th>", FILES["triage.html"]), "the hidden columns are the 4th, 5th and 7th"
+
