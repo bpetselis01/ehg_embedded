@@ -173,7 +173,7 @@ def test_sql_two_batches_overlapping_store_the_union_once(store):
 # ---------------------------------------------------------------- poison messages (automated security review, 2026-11-03)
 
 POISON = [
-    {"fs_hz": 0}, {"fs_hz": -20}, {"fs_hz": float("nan")}, {"fs_hz": 10**9}, {"t_inject_host": 1e30}, {"t_inject_host": float("nan")}, {"t_inject_host": float("inf")},
+    {"fs_hz": 0}, {"fs_hz": 0.5}, {"fs_hz": -20}, {"fs_hz": float("nan")}, {"fs_hz": 10**9}, {"t_inject_host": 1e30}, {"t_inject_host": float("nan")}, {"t_inject_host": float("inf")},
     {"t_inject_host": 5.0}, {"t_gw_rx": "soon"}, {"seq": 2**40}, {"seq": 1.5}, {"seq": True}, {"seq": "40"}, {"t_inject": -1}, {"t_inject": 2**33}, {"flags": 999},
     {"node_id": "bad.node"}, {"node_id": "x" * 65}, {"node_id": "a\x00b"}, {"node_id": 7}, {"record_id": "r" * 100},
     {"samples": [[1.5, 2, 3]]}, {"samples": [[True, 2, 3]]}, {"samples": [[2**40, 0, 0]]}, {"samples": [[1, 2], [1, 2, 3]]}, {"samples": []}, {"samples": [[0] * 65]},

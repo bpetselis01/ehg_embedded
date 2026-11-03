@@ -60,8 +60,8 @@ def validate(m: dict) -> None:
         if not bus.valid_int(m.get(name), lo, hi):
             raise ValueError(f"{name} must be an integer in {lo}..{hi}, got {m.get(name)!r}")
     fs = m.get("fs_hz")
-    if isinstance(fs, bool) or not isinstance(fs, (int, float)) or not math.isfinite(fs) or not 0 < fs <= 100_000:
-        raise ValueError(f"fs_hz must be a number in (0, 100000], got {fs!r}")
+    if isinstance(fs, bool) or not isinstance(fs, (int, float)) or not math.isfinite(fs) or not 1 <= fs <= 100_000:
+        raise ValueError(f"fs_hz must be a number from 1 to 100000, got {fs!r}")
     for name in ("t_inject_host", "t_gw_rx", "t_mqtt_pub"):
         _epoch(m.get(name), name)
     if not isinstance(m.get("record_id"), (str, int)) or isinstance(m.get("record_id"), bool) or len(str(m["record_id"])) > 64:

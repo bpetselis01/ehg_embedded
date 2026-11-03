@@ -4,7 +4,7 @@
 
 ## Status
 
-Accepted (Checkpoint 1, 2026-11-03; status of the build is stated in each record). Implemented by Unit 7. The findings the prompt tells Unit 7 to record (step-ca templates, revocation, direct Keycloak-token use) are still to be checked and added here.
+Accepted (Checkpoint 1, 2026-11-03). Code written in Unit 7 on 2026-11-03 (realm file, enrolment API, CSR vetting, step-ca client, CLI); tested with a fake CA that issues real certificates, NOT against a real step-ca or Keycloak. The findings the prompt tells Unit 7 to record (step-ca templates, revocation/CRL, direct Keycloak-token use) are STILL to be checked and added here.
 
 ## Context
 

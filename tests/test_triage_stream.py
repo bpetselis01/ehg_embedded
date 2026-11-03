@@ -277,7 +277,8 @@ def test_kept_frames_are_bounded_whatever_the_sampling_rate():
     assert sum(n for n, _ in m._frames) <= 4000 + 1000
 
 
-def test_one_bad_node_cannot_stop_the_evaluation_of_the_others(monkeypatch):
+def test_a_node_whose_state_cannot_be_evaluated_still_gets_liveness_alerts(monkeypatch):
+    """Fail-safe, not fail-open: if the full snapshot breaks for one node, the rules still see whether it is alive."""
     fleet, store, logs = FleetMonitor(), FakeStore(), []
     fleet.on_packet(pkt(1, node="GOOD"), 0.0)
     fleet.on_packet(pkt(1, node="BAD"), 0.0)
@@ -288,6 +289,22 @@ def test_one_bad_node_cannot_stop_the_evaluation_of_the_others(monkeypatch):
             raise RuntimeError("corrupt state")
         return real(self, now, status)
     monkeypatch.setattr(NodeMonitor, "snapshot", snapshot)
-    engine = Engine(fleet, store, log=logs.append)
-    run_engine(engine, 12)
-    assert ("open", "GOOD", "NODE_OFFLINE", "critical") in store.calls and any("BAD" in str(l) and "corrupt state" in str(l) for l in logs)
+    run_engine(Engine(fleet, store, log=logs.append), 12)
+    assert ("open", "GOOD", "NODE_OFFLINE", "critical") in store.calls
+    assert ("open", "BAD", "NODE_OFFLINE", "critical") in store.calls, "a node that cannot be fully evaluated must not become invisible"
+    assert any("BAD" in str(l) and "corrupt state" in str(l) for l in logs)
+
+
+@pytest.mark.parametrize("fs", [0.01, 0.05, 0.2])
+def test_a_tiny_sampling_rate_cannot_empty_the_window_or_break_the_snapshot(fs):
+    m = NodeMonitor("EHG-1")
+    for s in range(5):
+        m.on_packet(pkt(s, fs_hz=fs), float(s))
+    snap = m.snapshot(6.0, None)      # must not raise
+    assert snap.n_channels == 3 and len(m._frames) >= 1, "the newest packet is never discarded"
+
+
+@pytest.mark.parametrize("fs", [0, 0.5, 0.99])
+def test_the_validator_requires_at_least_one_hertz(fs):
+    with pytest.raises(ValueError):
+        FleetMonitor().on_packet(pkt(1, fs_hz=fs), 1.0)

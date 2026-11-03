@@ -21,11 +21,23 @@
       },
       {
         "name": "operator",
-        "description": "viewer + acknowledge, note, escalate, resolve alerts"
+        "description": "viewer + acknowledge, note, escalate, resolve alerts",
+        "composite": true,
+        "composites": {
+          "realm": [
+            "viewer"
+          ]
+        }
       },
       {
         "name": "admin",
-        "description": "operator + audit, configuration, registry, revoke gateways"
+        "description": "operator + audit, configuration, registry, revoke gateways",
+        "composite": true,
+        "composites": {
+          "realm": [
+            "operator"
+          ]
+        }
       },
       {
         "name": "gateway",

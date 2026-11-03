@@ -157,6 +157,11 @@ Step by step:
 | [`backend/ts_writer/writer.py`](../backend/ts_writer/writer.py) | JetStream -> PostgreSQL/TimescaleDB, idempotent, atomic batches, reports "degraded" when the database is down |
 | [`backend/db/migrate.py`](../backend/db/migrate.py) | applies or undoes the database migrations (Alembic) |
 | [`backend/db/migrations/env.py`](../backend/db/migrations/env.py), [`versions/0001_base_schema.py`](../backend/db/migrations/versions/0001_base_schema.py), [`versions/0002_triage_registry.py`](../backend/db/migrations/versions/0002_triage_registry.py), [`versions/0003_timescale.py`](../backend/db/migrations/versions/0003_timescale.py) | Alembic environment; plain time-series tables; alerts, append-only audit log and device/subject registry; TimescaleDB hypertables, compression, retention, roll-ups |
+| [`backend/enroll/app.py`](../backend/enroll/app.py) | the enrolment API: token + certificate request in, short-lived client certificate out; revocation; public CRL |
+| [`backend/enroll/csr.py`](../backend/enroll/csr.py) | vets certificate requests (EC P-256, valid signature, no wildcard or CA request) and re-checks what the CA issued |
+| [`backend/enroll/stepca_client.py`](../backend/enroll/stepca_client.py) | talks to step-ca with one-time tokens: sign and revoke |
+| [`backend/enroll/cli.py`](../backend/enroll/cli.py) | `enrol-mac`, `list`, `revoke` from the command line (token via environment, key made locally) |
+| [`deploy/step-ca/README.md`](../deploy/step-ca/README.md), [`deploy/keycloak/README.md`](../deploy/keycloak/README.md) | what the CA template and the realm file assume, and what is not verified |
 | [`deploy/keycloak/realm-ehg.json`](../deploy/keycloak/realm-ehg.json) | the Keycloak realm as code: roles, clients (PKCE, device grant), TOTP for staff; no secrets, no users |
 | [`backend/triage/stream.py`](../backend/triage/stream.py) | per-node measurement from the packet stream, the once-a-second rule evaluation, health rows, and the service entry point |
 | [`backend/triage/app.py`](../backend/triage/app.py) | the triage HTTP API: worklist, trends, alert workflow, registry, audit, config; role-checked and audited |

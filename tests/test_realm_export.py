@@ -52,6 +52,17 @@ def test_totp_is_required_for_staff_through_a_conditional_flow():
     assert realm["authenticatorConfig"][0]["config"]["condUserRole"] == "operator" and realm["otpPolicyType"] == "totp"
 
 
+def test_every_role_above_viewer_gets_totp_either_directly_or_through_operator():
+    """The OTP condition matches ONE role (operator). A review found that an admin without `operator` would skip TOTP, so admin must contain operator."""
+    cond = realm["authenticatorConfig"][0]["config"]["condUserRole"]
+    roles = {r["name"]: r for r in realm["roles"]["realm"]}
+    for name in ("operator", "admin"):
+        covered = name == cond or cond in roles[name].get("composites", {}).get("realm", [])
+        assert covered and (name == cond or roles[name]["composite"] is True), f"{name} would be able to log in without TOTP"
+    assert "operator" in roles["admin"]["composites"]["realm"] and "viewer" in roles["operator"]["composites"]["realm"]
+    assert not roles["gateway"].get("composite"), "the phone role carries no staff rights"
+
+
 @pytest.mark.parametrize("client", ["triage-ui", "ios-gateway", "triage-api", "enroll-api", "fhir-sync"])
 def test_no_client_allows_the_password_grant(client):
     assert not clients[client].get("directAccessGrantsEnabled", False)

@@ -97,15 +97,15 @@ class NodeMonitor:
 
     def _trim(self) -> None:
         """Drop the oldest packets while the rest still cover the signal window: memory stays bounded whatever fs_hz or the packet size claim."""
-        need = min(int(SIGNAL_S * self.fs), MAX_KEPT_FRAMES)
-        while self._frames and self._total - self._frames[0][0] >= need:
+        need = max(1, min(int(SIGNAL_S * self.fs), MAX_KEPT_FRAMES))
+        while len(self._frames) > 1 and self._total - self._frames[0][0] >= need:  # never discard the newest packet
             self._total -= self._frames.popleft()[0]
 
     def _signal(self, now: float) -> tuple[int, float]:
         """(channels with zero variance, % of samples at the rails) over the last 10 s of frames; (0, 0) until 10 s have been seen."""
-        need = min(int(SIGNAL_S * self.fs), MAX_KEPT_FRAMES)
+        need = max(1, min(int(SIGNAL_S * self.fs), MAX_KEPT_FRAMES))
         self._trim()
-        if self._total < need or self.n_ch == 0:
+        if not self._frames or self._total < need or self.n_ch == 0:
             return 0, 0.0
         data = np.concatenate([a for _, a in self._frames])[-need:]
         hi, lo = RAIL24 if self.flags & 2 else RAIL16
@@ -146,8 +146,9 @@ class FleetMonitor:
         for n, m in self.nodes.items():
             try:
                 out[n] = m.snapshot(now, self.gateway_status(n))
-            except Exception as e:  # noqa: BLE001
-                log(f"triage: could not evaluate node {n} ({type(e).__name__}: {e}); skipped this round")
+            except Exception as e:  # noqa: BLE001  (fail safe: fall back to a liveness-only view so NODE_OFFLINE and GATEWAY_OFFLINE can still fire for this node)
+                log(f"triage: could not fully evaluate node {n} ({type(e).__name__}: {e}); using a liveness-only view this round")
+                out[n] = Snapshot(now=now, last_packet_t=m.last_packet_t, packet_interval_s=m.interval_s, gateway_status=self.gateway_status(n))
         return out
 
 

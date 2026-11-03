@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-11-03: Unit 7, identity and certificate enrolment (code; not run against Keycloak or step-ca) (decision [0013](decisions/0013-keycloak-and-certificate-lifecycle.md))
+
+- **Added:** `deploy/keycloak/realm-ehg.json` (+README), `backend/enroll/` (`app.py`, `csr.py`, `stepca_client.py`, `cli.py`), `deploy/step-ca/templates/ehg-gateway.tpl` (+README).
+- **Tested** (50 + 11 tests): CSR vetting (EC P-256 only; RSA, P-384, garbage, oversize, wildcard names, CA requests, a corrupted key all refused with a reason); the CN on the certificate comes from the login, never from the request; the provisioned/service identities (`ehg-gw-01`, `ehg-bridge`, ...) cannot be claimed by a login; revoked gateways cannot enrol and the CA is not even asked;
+  seven ways a CA can go wrong (error, garbage, wrong name, server-auth usage, 90-day life, someone else's key, CA flag) each become a 502 with nothing recorded; 5-per-hour rate limit; admin-only revocation that reaches the CA and reports a CA failure instead of hiding it; the one-time-token claims; the CLI writes a private key mode 600 and never takes the token as an argument.
+- **Bug found by a test:** a CSR with a corrupted key parsed but raised `ValueError` when its signature was checked, which would have been a 500 instead of a refusal.
+- **Automated reviews (two rounds on `stream.py` / the realm):** TOTP did not cover admins (admin now contains operator as a composite role); a near-zero sampling rate could make a node invisible (window, floor and fallback fixed); both in [security.md](security.md).
+- **NOT done / not verified:** everything against a real step-ca (template variables, provisioner claims, revocation/CRL support of the pinned version, the OIDC-provisioner shortcut); the realm import and the conditional-OTP flow on a real Keycloak (including whether the role condition follows composite roles); the host-side job that copies `GET /crl` to the broker and signals Mosquitto (not built); the registry-to-broker ACL sync (a new gateway still needs its two ACL lines by hand).
+
 ## 2026-11-03: Unit 8, triage service (rules, audit chain, alert state, JWT auth, API, stream monitor) (decision [0011](decisions/0011-triage-service-pipeline-health-not-clinical.md)); not run against NATS or HAPI
 
 - **Added:** `backend/triage/rules.py` (rules, hysteresis, score, worklist: pure), `audit.py` (hash chain, `--verify`), `state.py` (lifecycle), `registry.py`, `app.py` (FastAPI), `stream.py` (NodeMonitor, FleetMonitor, Engine, service entry point), `backend/jwtauth.py`; migration 0002 (triage + registry schemas, restricted `ehg_triage` role, append-only triggers).
