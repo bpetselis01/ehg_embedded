@@ -1,5 +1,10 @@
 # Progress log
 
+## 2026-11-03: Unit 11, the Caddyfile (front door); never run
+
+- **Added:** the real `deploy/caddy/Caddyfile` (routes `/`, `/api`, `/fhir` to the triage service; `/auth` to Keycloak; `/grafana` to Grafana; `/enroll-api` to the enrolment API; `/metrics` and probe paths answered 404; HSTS, nosniff, frame denial, strict CSP, no Server header; 1 MB / 16 KB body limits) and `tests/test_caddy_config.py` (28 structural tests; `caddy validate` runs only where Caddy is installed).
+- **Honest gap:** stock Caddy has no rate-limit directive; rate limiting lives in the services (enrolment 5 per hour per login; Keycloak brute-force protection). The upstream services (triage, Keycloak, enrolment, FHIR) are not in the cloud compose file yet, so those routes would answer 502 until they are added.
+
 ## 2026-11-03: Unit 7, identity and certificate enrolment (code; not run against Keycloak or step-ca) (decision [0013](decisions/0013-keycloak-and-certificate-lifecycle.md))
 
 - **Added:** `deploy/keycloak/realm-ehg.json` (+README), `backend/enroll/` (`app.py`, `csr.py`, `stepca_client.py`, `cli.py`), `deploy/step-ca/templates/ehg-gateway.tpl` (+README).
