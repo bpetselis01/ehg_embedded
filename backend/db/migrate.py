@@ -11,6 +11,8 @@ OUTPUT: Alembic's own lines ("Running upgrade  -> 0001, ..."), then the current 
   failed revision unapplied (each revision runs in its own transaction), never half-applied.
   e.g. `current` prints "0003 (head)" or "0002" or "(no revision: empty database)".
 HOW: Builds an Alembic Config in code (no alembic.ini) pointing at backend/db/migrations.
+  MIGRATION POLICY: until the first real deployment nothing has applied these revisions, so they were edited in place while the schema was being designed (0002 gained gateway_cert and ca_revoked_at that way).
+  From the first deployment on, an applied revision is FROZEN: every change is a NEW revision. An automated review asked for exactly this.
 ROLE IN THESIS: The migration step of the restore drill and of the cloud deployment (docs/decisions/0017).
 BEFORE -> AFTER: Before: no schema. After: tables from revisions 0001 and 0002, hypertables and roll-ups from 0003.
 """

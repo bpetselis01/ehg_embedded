@@ -19,6 +19,21 @@ def upstreams() -> dict[str, str]:
     return {m.group(1).strip(): m.group(2) for m in re.finditer(r"handle(?:_path)?\s*([^\{\n]*)\{[^}]*?reverse_proxy\s+(\S+)", body, re.S)} | {}
 
 
+def test_all_routing_is_inside_one_route_block_so_order_is_the_written_order():
+    """Regression for a review finding: separate handle blocks are sorted by matcher specificity, so the deny rule must not depend on source order of handle blocks."""
+    open_at, close_at = body.index("route {"), body.rindex("\n\t}\n}")
+    handles = [m.start(1) for m in re.finditer(r"^[ \t]*(handle)", body, re.M)]
+    assert handles and all(open_at < h < close_at for h in handles), "every handle block must be inside the route block"
+    assert body.index("handle @internal") == min(handles), "the deny rule is the first thing the route does"
+    assert body.rstrip().endswith("}\n}") and re.search(r"\thandle \{\s*reverse_proxy triage:8780\s*\}\s*\}\s*\}\s*$", body), "the catch-all is last"
+
+
+def test_grafana_does_not_serve_its_own_metrics_even_if_a_route_were_wrong():
+    import yaml
+    compose = yaml.safe_load((Path(__file__).parents[1] / "deploy/compose/docker-compose.cloud.yml").read_text())
+    assert compose["services"]["grafana"]["environment"]["GF_METRICS_ENABLED"] == "false"
+
+
 def test_the_routes_are_exactly_the_designed_ones():
     assert re.findall(r"^\s*(handle(?:_path)?)\s+(\S+)?\s*\{", body, re.M) == [("handle", "@internal"), ("handle", "/api/*"), ("handle", "/fhir/*"), ("handle", "@keycloak"), ("handle", "/auth/*"), ("handle", "/grafana/*"), ("handle_path", "/enroll-api/*"), ("handle", "")]
     proxied = re.findall(r"reverse_proxy\s+(\S+)", body)

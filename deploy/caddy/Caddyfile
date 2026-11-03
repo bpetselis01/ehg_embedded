@@ -26,44 +26,48 @@
 		max_size 1MB
 	}
 
-	# FIRST, and as a handle block: Caddy runs handle blocks before a bare respond, so a respond placed beside them would never be reached.
-	# The patterns also cover the same paths under a prefix (/grafana/metrics, /enroll-api/healthz).
-	@internal path /metrics /metrics/* /healthz /healthz/* /readyz /readyz/* */metrics */metrics/* */healthz */healthz/* */readyz */readyz/*
-	handle @internal {
-		respond 404
-	}
-
-	handle /api/* {
-		reverse_proxy triage:8780
-	}
-
-	handle /fhir/* {
-		reverse_proxy triage:8780
-	}
-
-	# Keycloak: ONLY the ehg realm's public endpoints and its static files. The admin console (/auth/admin), the master realm, health and metrics are not on the internet;
-	# reach the admin console through an SSH tunnel to the container instead (deploy/keycloak/README.md).
-	@keycloak path /auth/realms/ehg /auth/realms/ehg/* /auth/resources/*
-	handle @keycloak {
-		reverse_proxy keycloak:8080
-	}
-
-	handle /auth/* {
-		respond 404
-	}
-
-	handle /grafana/* {
-		reverse_proxy grafana:3000
-	}
-
-	handle_path /enroll-api/* {
-		request_body {
-			max_size 16KB
+	# ORDER MATTERS, so everything below is inside ONE route block: a route runs its directives exactly as written, whereas Caddy sorts separate handle blocks by how specific their
+	# matchers are, so a deny rule could end up behind a broader route. The deny rule is first; the catch-all is last.
+	route {
+		# FIRST in the route. (A bare respond outside it would run AFTER the handle blocks and never be reached.)
+		# The patterns also cover the same paths under a prefix (/grafana/metrics, /enroll-api/healthz).
+		@internal path /metrics /metrics/* /healthz /healthz/* /readyz /readyz/* */metrics */metrics/* */healthz */healthz/* */readyz */readyz/*
+		handle @internal {
+			respond 404
 		}
-		reverse_proxy enroll:8790
-	}
 
-	handle {
-		reverse_proxy triage:8780
+		handle /api/* {
+			reverse_proxy triage:8780
+		}
+
+		handle /fhir/* {
+			reverse_proxy triage:8780
+		}
+
+		# Keycloak: ONLY the ehg realm's public endpoints and its static files. The admin console (/auth/admin), the master realm, health and metrics are not on the internet;
+		# reach the admin console through an SSH tunnel to the container instead (deploy/keycloak/README.md).
+		@keycloak path /auth/realms/ehg /auth/realms/ehg/* /auth/resources/*
+		handle @keycloak {
+			reverse_proxy keycloak:8080
+		}
+
+		handle /auth/* {
+			respond 404
+		}
+
+		handle /grafana/* {
+			reverse_proxy grafana:3000
+		}
+
+		handle_path /enroll-api/* {
+			request_body {
+				max_size 16KB
+			}
+			reverse_proxy enroll:8790
+		}
+
+		handle {
+			reverse_proxy triage:8780
+		}
 	}
 }
