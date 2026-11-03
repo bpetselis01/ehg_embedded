@@ -17,7 +17,11 @@ the file index and the duplicated facts). Historical records are dated and descr
 | [interface-spec.md](interface-spec.md) | exact formats: `.npz`, packet bytes, MQTT message, database schema, FHIR export | current |
 | [fault-injection.md](fault-injection.md) | the `--faults` options and what each one simulates | current |
 | [troubleshooting.md](troubleshooting.md) | known failures: symptom, cause, fix | current |
-| [decisions/](decisions/) | why the main design choices were made (one short record each) | current |
+| [decisions/](decisions/) | why the main design choices were made (one short record each; 0007 to 0017 are proposed, awaiting approval) | current |
+| [production-topology.md](production-topology.md) | the planned enterprise-style chain, hop by hop, with what is built, planned or design-only | plan (2026-11-03) |
+| [licences.md](licences.md) | licence, edition and status (confirmed or UNVERIFIED) of every component used or considered | current |
+| [claude-code-prompt-thesis-b-hardening.md](claude-code-prompt-thesis-b-hardening.md) | the full specification for the enterprise-style evolution (units, checkpoints, rules) | plan (2026-11-03) |
+| [handoff.md](handoff.md) | the resume pin between working sessions (one file, always overwritten) | working note |
 | [progress.md](progress.md) | status log, results per run, blockers, next steps | dated log |
 | [research/nrf-ble-environment.md](research/nrf-ble-environment.md) | nRF / Bluetooth / macOS setup notes with sources | historical (2026-09/10) |
 | [design/codebase-design.md](design/codebase-design.md) | the original design behind this layout | historical (2026-09-29) |

@@ -1,5 +1,16 @@
 # Progress log
 
+## 2026-11-03: Unit 1, decisions and topology documents (docs only; [prompt](claude-code-prompt-thesis-b-hardening.md))
+
+- **Added:** [decisions 0007 to 0017](decisions/0007-enterprise-evolution-keep-influx-as-reference.md) (status *Proposed* until Byron approves at Checkpoint 1),
+  [`production-topology.md`](production-topology.md) (architecture, four tiers, boundaries, six-hop chain, capability checklist) and [`licences.md`](licences.md).
+  No code, firmware, compose or cloud change. The default local stack is untouched.
+- **Verified locally:** Zephyr and MCUboot are Apache-2.0; Python dependency licences read from installed metadata. **Prompt discrepancy:** it lists the
+  nRF Connect SDK as Apache-2.0, but `~/ncs/v3.4.1/nrf/LICENSE` is `LicenseRef-Nordic-5-Clause`; the repository wins and `licences.md` says so.
+- **Not verified (carried into the units that use them):** Oracle limits and A1 capacity, component licences other than the above, image arm64 support,
+  Mosquitto `crlfile` and WebSocket behaviour, JetStream duplicate window, HAPI R5 SampledData, step-ca and Keycloak behaviour, iOS free-team capabilities, carrier port blocking.
+- `uv run pytest -q`: 83 passed (link check and ADR-section check cover the new files).
+
 ## 2026-11-03: baseline before enterprise work ([claude-code-prompt-thesis-b-hardening.md](claude-code-prompt-thesis-b-hardening.md), Unit 0)
 
 - **Frozen:** tag `baseline-pre-enterprise` on `9ba4ad7`; work happens on `feat/enterprise-topology` (never `main`, not pushed).
