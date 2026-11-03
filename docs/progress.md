@@ -1,5 +1,10 @@
 # Progress log
 
+## 2026-11-04: integration run with everything that can run here
+
+- `EHG_INTEGRATION=1` (real Mosquitto 2.1.2, Terraform validate against the real Oracle provider schema, `swift test`, real OpenSSL, throwaway PostgreSQL 14): **777 passed, 3 skipped** (Caddy not installed; no TimescaleDB; shellcheck not installed). The one failure was my own HAPI test, which treated "the docker command exists" as "Docker is running"; it now asks `docker info` and skips without a daemon (it never starts Docker).
+- Never run anywhere: anything that needs a Docker daemon, NATS, TimescaleDB, Keycloak, step-ca, HAPI, Caddy, Prometheus, Grafana, Loki, Alloy, restic, shellcheck.
+
 ## 2026-11-04: `.dockerignore` for the repository-root build context
 
 - **Added:** `.dockerignore` (keys, certificates, `.env`, `backend/pki`, `deploy/secrets`, data, the git history and local tooling are not sent to the Docker builder), and a test that it lists those and does not exclude anything the Dockerfile copies. `CLAUDE.md` is listed in `.gitignore` in this repository, so my edit to it (three wire-format copies) is local and not in any commit.

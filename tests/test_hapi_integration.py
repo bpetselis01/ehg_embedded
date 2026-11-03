@@ -16,7 +16,17 @@ from datetime import datetime, timezone
 from backend.fhir_sync.worker import FhirClient, transaction
 from tools.fhir_export import bundle
 
-pytestmark = pytest.mark.skipif(os.environ.get("EHG_INTEGRATION") != "1" or shutil.which("docker") is None, reason="needs EHG_INTEGRATION=1 and Docker")
+def docker_daemon_is_up() -> bool:
+    """True only if a Docker daemon answers. This never starts one (Docker Desktop on this Mac also runs another project)."""
+    if shutil.which("docker") is None:
+        return False
+    try:
+        return subprocess.run(["docker", "info"], capture_output=True, timeout=15).returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
+
+
+pytestmark = pytest.mark.skipif(os.environ.get("EHG_INTEGRATION") != "1" or not docker_daemon_is_up(), reason="needs EHG_INTEGRATION=1 and a running Docker daemon")
 
 SRC = {"fs": np.float64(20.0), "gain": np.array([13107.0]), "baseline": np.array([0]), "channels": np.array(["1"])}
 
