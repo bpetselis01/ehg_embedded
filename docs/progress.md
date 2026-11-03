@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-11-04: the service image checked for completeness (clean environment and a static guard)
+
+- **Done:** installed exactly the Dockerfile's packages into a fresh Python 3.13 environment, laid the repository files out as the image copies them, and imported every service module (bridge, ts-writer, triage, migrate, enrolment service, FHIR sync, facade): all import. `eval`'s InfluxDB store is not in this image by design (the sync worker asks for the timescale store only).
+  The paho-mqtt 2.x calls in the bridge were compared with the installed signatures: they match.
+- **Guard:** `tests/test_platform_compose.py` now follows the imports of every service entry point and fails if a module is not copied by the Dockerfile or a third-party package is not installed (mutation-checked: removing the `tools/fhir_export.py` copy or `httpx` makes it fail).
+- **Still not checked:** the container actually building (no Docker), and any run against NATS, TimescaleDB, Keycloak or step-ca.
+
 ## 2026-11-04: a start-up bug found by reading the never-run NATS code (fixed, with a guard test)
 
 - **Found:** the triage service's consumer filtered on `EHG.>` but the stream listed only `EHG.PKT.>`, `EHG.GW.>` and `EHG.BAD.>`. JetStream refuses a consumer whose filter is not inside the stream's subjects (to my recollection of the server's rule: **not verified against a real server**, none is installed), so triage would have failed at start-up on the real stack. Nothing could catch it before because no NATS server has run.

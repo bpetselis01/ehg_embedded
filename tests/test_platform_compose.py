@@ -113,3 +113,66 @@ def test_a_poison_message_in_the_influx_writer_loop_is_terminated_and_a_transien
     asyncio.run(ing.consume([M(b"poison"), M(b"influx-down"), M(b"fine")]))
     assert calls == [(b"poison", "term"), (b"influx-down", ("nak", 5)), (b"fine", "ack")], "one message's failure must not stop the others"
     assert SimpleNamespace is not None
+
+
+# ---------------------------------------------------------------- the image contains everything its services import
+
+PIP_TO_IMPORT = {"nats-py": "nats", "psycopg": "psycopg", "alembic": "alembic", "sqlalchemy": "sqlalchemy", "prometheus-client": "prometheus_client", "paho-mqtt": "paho", "fastapi": "fastapi",
+                 "uvicorn": "uvicorn", "pyjwt": "jwt", "numpy": "numpy", "httpx": "httpx"}
+TRANSITIVE = {"starlette", "pydantic", "cryptography", "psycopg_binary", "mako", "anyio", "h11", "idna", "certifi", "httpcore", "click", "typing_extensions"}
+# imports that sit inside the command-line main() of tools/fhir_export.py: the sync worker uses only its bundle() function, never main()
+CLI_ONLY = {("tools/fhir_export.py", "backend_client"), ("tools/fhir_export.py", "tools.convert"),
+            ("eval/backend_client.py", "influxdb_client")}  # the last one is the InfluxDB store; the worker asks for the timescale store only
+SERVICE_MODULES = ["backend.bridge.bridge", "backend.ts_writer.writer", "backend.triage.stream", "backend.db.migrate", "backend.enroll.service", "backend.fhir_sync.worker"]
+
+
+def image_files():
+    """Python files the Dockerfile copies (read from its COPY lines), as repo-relative paths."""
+    out = set()
+    for line in DOCKERFILE.read_text().splitlines():
+        parts = line.split()
+        if parts[:1] == ["COPY"]:
+            srcs = parts[1:-1]
+            for s in srcs:
+                p = ROOT / s
+                out |= {f.relative_to(ROOT).as_posix() for f in p.rglob("*.py")} if p.is_dir() else ({s} if p.is_file() else set())
+    return out
+
+
+def imports_of(path: Path):
+    import ast
+    names = set()
+    for node in ast.walk(ast.parse(path.read_text())):
+        if isinstance(node, ast.Import):
+            names |= {a.name for a in node.names}
+        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            names.add(node.module)
+            names |= {f"{node.module}.{a.name}" for a in node.names}  # `from backend import bus` imports the submodule backend.bus
+    return names
+
+
+def test_every_module_the_services_import_is_in_the_image_or_installed_into_it():
+    import sys
+    pip = {m.group(1).split("[")[0].lower() for m in re.finditer(r'"([A-Za-z0-9_.\[\]-]+)>=', DOCKERFILE.read_text())}
+    assert pip == set(PIP_TO_IMPORT), f"the Dockerfile's packages changed: update PIP_TO_IMPORT ({pip ^ set(PIP_TO_IMPORT)})"
+    installed = set(PIP_TO_IMPORT.values()) | TRANSITIVE
+    present = image_files()
+    seen, todo = set(), [m.replace(".", "/") + ".py" for m in SERVICE_MODULES]
+    while todo:
+        f = todo.pop()
+        if f in seen:
+            continue
+        seen.add(f)
+        assert f in present, f"{f} is imported by a service but the Dockerfile does not copy it"
+        for name in imports_of(ROOT / f):
+            top = name.split(".")[0]
+            if (f, name) in CLI_ONLY or (f, top) in CLI_ONLY:
+                continue
+            if top in sys.stdlib_module_names:
+                continue
+            if top in {"backend", "gateway", "tools", "eval"}:
+                if (ROOT / (name.replace(".", "/") + ".py")).exists():  # a module file; a bare package directory or an attribute (backend.bus.valid_id) is not one
+                    todo.append(name.replace(".", "/") + ".py")
+            else:
+                assert top in installed, f"{f} imports {top}, which the image does not install"
+    assert len(seen) >= 15, seen
