@@ -44,11 +44,11 @@ class NoteBody(BaseModel):
     note: str | None = None
 
 
-def create_app(*, store, audit, auth, registry, known_nodes=lambda: [], ready=lambda: (True, ""), config: Config | None = None, on_revoke=None, fhir_upstream=None, ui_oidc=None, clock=lambda: datetime.now(timezone.utc)) -> FastAPI:
+def create_app(*, store, audit, auth, registry, known_nodes=lambda: [], ready=lambda: (True, ""), config: Config | None = None, on_revoke=None, fhir_upstream=None, ui_oidc=None, metrics: CollectorRegistry | None = None, clock=lambda: datetime.now(timezone.utc)) -> FastAPI:
     """Build the API around its collaborators (all injectable, so the tests need no network)."""
     app = FastAPI(title="EHG triage API", version="0.1.0", description=PURPOSE)
     cfg = config or Config()
-    metrics = CollectorRegistry()
+    metrics = metrics if metrics is not None else CollectorRegistry()  # the stream worker passes its own so its counters and SLI gauges are served too
     alerts_gauge = Gauge("ehg_triage_alerts", "Alerts by state", ["state"], registry=metrics)
 
     def who(min_role: str):

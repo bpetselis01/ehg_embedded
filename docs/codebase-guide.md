@@ -171,6 +171,10 @@ Step by step:
 | [`backend/triage/state.py`](../backend/triage/state.py) | alert lifecycle in PostgreSQL (open, acknowledged, escalated, resolved), required notes, auto-resolve, audit in the same transaction |
 | [`viewer/triage.html`](../viewer/triage.html), [`viewer/triage.css`](../viewer/triage.css), [`viewer/triage.js`](../viewer/triage.js) | the triage page: sign-in (OIDC code flow with PKCE), worklist, node detail (trend, alerts, EHR), alert actions; served by the triage API at `/` |
 | [`backend/fhir_sync/worker.py`](../backend/fhir_sync/worker.py) | copies complete stored windows into the reference FHIR server (HAPI) as conditional, idempotent transactions, only for nodes with active consent |
+| [`backend/triage/slis.py`](../backend/triage/slis.py) | fleet-level gauges for the service-level objectives and the bus consumers' backlog (Prometheus) |
+| [`deploy/backup/backup.sh`](../deploy/backup/backup.sh), [`deploy/backup/restore_drill.sh`](../deploy/backup/restore_drill.sh) | database backup with checksums, audit-chain head and a freshness metric; the timed restore drill on a clean server |
+| [`deploy/observability/rules/slo.yml`](../deploy/observability/rules/slo.yml), [`alerts.yml`](../deploy/observability/rules/alerts.yml) | SLO recording rules and 12 alert rules (never evaluated by Prometheus) |
+| [`deploy/observability/grafana/dashboards/pipeline-overview.json`](../deploy/observability/grafana/dashboards/pipeline-overview.json) | the one provisioned dashboard (read-only, as code) |
 | [`backend/triage/fhir_api.py`](../backend/triage/fhir_api.py) | the read-only FHIR facade (`/fhir/*`): node-scoped, consent-checked, audited; the browser never reaches HAPI |
 | [`deploy/hapi/application.yaml`](../deploy/hapi/application.yaml) | HAPI FHIR R5 configuration (no CORS, no Swagger, no mass delete); never started |
 | [`backend/jwtauth.py`](../backend/jwtauth.py) | JWT validation (explicit algorithms, required claims), role mapping and the dev mode (loopback only) |

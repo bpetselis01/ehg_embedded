@@ -1,0 +1,14 @@
+# PURPOSE: Tells Grafana to load every dashboard JSON file in /var/lib/grafana-dashboards (mounted from deploy/observability/grafana/dashboards/). Dashboards are code: edit the file, not the screen.
+# INPUT: none. OUTPUT: the dashboards appear in the folder "EHG". allowUiUpdates is false, so a change made on screen is not kept and cannot drift from the repository.
+# ROLE IN THESIS: Dashboards-as-code (docs/decisions/0016-observability-and-slos.md). UNVERIFIED: never loaded by a real Grafana.
+# BEFORE -> AFTER: Before: an empty Grafana. After: the pipeline overview.
+apiVersion: 1
+
+providers:
+  - name: ehg
+    folder: EHG
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana-dashboards

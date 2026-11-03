@@ -1,4 +1,4 @@
-# PURPOSE: Grafana data sources provisioned from code: Prometheus (default) and Loki. Dashboards as code arrive in Unit 12.
+# PURPOSE: Grafana data sources provisioned from code: Prometheus (default) and Loki. The fixed uids (prometheus, loki) are what the dashboards refer to.
 # INPUT: none. OUTPUT: two data sources in Grafana on start. No credentials: both are on the private Docker network.
 # ROLE IN THESIS: Dashboards-as-code base (docs/decisions/0016-observability-and-slos.md).
 # BEFORE -> AFTER: Before: an empty Grafana. After: it can query metrics and logs.
@@ -6,11 +6,13 @@ apiVersion: 1
 
 datasources:
   - name: Prometheus
+    uid: prometheus
     type: prometheus
     access: proxy
     url: http://prometheus:9090
     isDefault: true
   - name: Loki
+    uid: loki
     type: loki
     access: proxy
     url: http://loki:3100

@@ -224,8 +224,15 @@ async def run() -> None:
     metrics = {k: Counter(f"ehg_writer_{k}", f"writer counter {k}") for k in ("rx", "rows", "duplicate_packets", "redelivered", "db_errors", "terminated")}
     metrics["degraded"] = Gauge("ehg_writer_degraded", "1 while the database is unreachable")
     writer = Writer(PgStore(lambda: psycopg.connect(dsn, connect_timeout=5)), metrics)
+    from prometheus_client import REGISTRY
+
+    from backend.triage.slis import ConsumerLag
+    lag, last_lag = ConsumerLag(REGISTRY), 0.0
     print("ts-writer running")
     while True:
+        if time.monotonic() - last_lag >= 10:  # how far behind the bus this consumer is (ehg_consumer_pending{consumer="ts-writer"})
+            last_lag = time.monotonic()
+            await lag.observe("ts-writer", sub)
         try:
             msgs = await sub.fetch(100, timeout=1)
         except nats.errors.TimeoutError:

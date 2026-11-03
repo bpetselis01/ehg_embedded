@@ -25,6 +25,7 @@ import numpy as np
 from backend.ts_writer.writer import validate
 from gateway.tracking import GapTracker
 
+from backend.triage.slis import ConsumerLag, FleetSli
 from backend.triage.rules import AlertView, Config, RuleTracker, Snapshot, evaluate, node_score
 
 MAX_TRIES, RETRY_S, MARGIN_S = 5, 1.0, 2.0  # the gateway's resend budget (gateway/gateway.py) plus a margin
@@ -215,7 +216,7 @@ async def run() -> None:
     import nats
     import psycopg
     import uvicorn
-    from prometheus_client import Counter
+    from prometheus_client import CollectorRegistry, Counter
 
     from backend import bus
     from backend.jwtauth import from_env
@@ -230,10 +231,12 @@ async def run() -> None:
     store, registry = AlertStore(connect, audit), Registry(connect, audit)
     offset = os.environ.get("CLOCK_OFFSET_S")
     fleet = FleetMonitor(lambda node: (registry.node(node) or {}).get("assigned_gateway"), float(offset) if offset else None)
-    engine = Engine(fleet, store, sink=pg_health_sink(connect))
-    bad, dead = Counter("ehg_triage_bad_messages", "messages kept under EHG.BAD.*"), Counter("ehg_triage_dead_letters", "JetStream max-delivery advisories")
+    engine = Engine(fleet, store, sink=sli.wrap(pg_health_sink(connect)))
+    reg = CollectorRegistry()  # served by the API's /metrics (before this, the counters below were incremented but never exposed)
+    sli, lag = FleetSli(reg), ConsumerLag(reg)
+    bad, dead = Counter("ehg_triage_bad_messages", "messages kept under EHG.BAD.*", registry=reg), Counter("ehg_triage_dead_letters", "JetStream max-delivery advisories", registry=reg)
     host = os.environ.get("BIND_HOST", "127.0.0.1")
-    app = create_app(store=store, audit=audit, auth=from_env(), registry=registry, known_nodes=lambda: list(fleet.nodes), config=engine.cfg,
+    app = create_app(store=store, audit=audit, auth=from_env(), registry=registry, known_nodes=lambda: list(fleet.nodes), config=engine.cfg, metrics=reg,
                      ui_oidc={"authority": os.environ.get("OIDC_UI_AUTHORITY", os.environ.get("OIDC_ISSUER", "")), "client_id": os.environ.get("OIDC_UI_CLIENT_ID", "triage-ui")})
     nc = await nats.connect(os.environ.get("NATS_URL", "nats://nats:4222"), name="ehg-triage", max_reconnect_attempts=-1)
     js = nc.jetstream()
@@ -271,8 +274,14 @@ async def run() -> None:
                 print(f"triage: evaluation round failed ({type(e).__name__}: {e}); retrying in 1 s")
             await asyncio.sleep(1.0)
 
+    async def watch_lag():
+        """Every 10 s: how far behind the bus this consumer is."""
+        while True:
+            await lag.observe("triage", sub)
+            await asyncio.sleep(10)
+
     server = uvicorn.Server(uvicorn.Config(app, host=host, port=int(os.environ.get("TRIAGE_PORT", "8780")), log_level="info"))
-    await asyncio.gather(consume(), evaluate_loop(), server.serve())
+    await asyncio.gather(consume(), evaluate_loop(), watch_lag(), server.serve())
 
 
 if __name__ == "__main__":

@@ -1,5 +1,15 @@
 # Progress log
 
+## 2026-11-04: Unit 12, observability, SLOs, backups and the restore drill (written and unit-tested; never evaluated by Prometheus, Grafana or on the VM)
+
+- **Added:** `backend/triage/slis.py` (fleet gauges and consumer backlog), `deploy/observability/rules/slo.yml` + `alerts.yml` (6 recording rules, 12 alerts), `prometheus.yml` (rule files, Alertmanager, triage/bridge/ts-writer jobs), a read-only provisioned dashboard `pipeline-overview.json`,
+  `alertmanager.ntfy.example.yml` (not loaded), `deploy/backup/backup.sh` + `restore_drill.sh`, `docs/slo.md`, `docs/dr.md`, an amendment to decision 0017.
+- **Tested** (23 tests): every metric a rule or panel uses is defined in this repository (a rename cannot silently blind an alert); alerts hold no node ids or secrets; a real dump and restore on a second clean PostgreSQL with the audit chain verified;
+  checksum guard; never-overwrite; failed backup keeps the old freshness timestamp; rotation only touches its own directories; NaN (unknown) is never reported as zero.
+- **Defect found and fixed:** `ehg_triage_bad_messages` and `ehg_triage_dead_letters` were incremented but never exposed (the API served a different registry); they and the new gauges are now served from the service's registry. The writer also reports its backlog.
+- **Honest changes of plan:** pgBackRest (point-in-time recovery) was NOT built; a nightly `pg_dump` meets the 24 h RPO (decision 0017 amended). No Mosquitto or NATS exporter. The NATS stream is not backed up (stated in dr.md).
+- **NOT done / not verified:** promtool, a real Prometheus, Grafana and Alertmanager; restic; TimescaleDB restore calls; any failure drill (all "observed" cells in dr.md are empty); the nightly schedule; the bridge, ts-writer and triage services are still not in the cloud compose file, so their scrape targets are down until that is added.
+
 ## 2026-11-04: Unit 10, the triage page (tried in a browser against a stub API; never against Keycloak or a real database)
 
 - **Added:** `viewer/triage.html|css|js` (vanilla, no CDN, CSP-clean), served by the triage API at `/`, `/triage.js`, `/triage.css`, plus a public `/ui-config.json` (mode, banner, purpose, the sign-in server or the dev users); the platform image copies the three files; `tests/test_triage_page.py` (10 static and serving tests).

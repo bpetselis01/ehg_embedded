@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       # shellcheck is preinstalled on GitHub's Ubuntu runners (UNVERIFIED for this repository: this workflow has not run yet)
-      - run: shellcheck -s sh tools/pki.sh deploy/update.sh deploy/postgres/10-init-databases.sh
+      - run: shellcheck -s sh tools/pki.sh deploy/update.sh deploy/postgres/10-init-databases.sh deploy/backup/backup.sh deploy/backup/restore_drill.sh
   deployment-guards:
     runs-on: ubuntu-latest
     steps:
@@ -22,4 +22,4 @@ jobs:
       - uses: astral-sh/setup-uv@v10.3.2  # this action publishes exact tags only, no moving v10
       - run: uv sync --frozen
       # images pinned by digest, only 80/443/8883 published, host-mount allowlist, no secret-looking text, state and keys gitignored, Caddy routes/headers, realm without secrets
-      - run: uv run pytest -q tests/test_deploy_assets.py tests/test_platform_compose.py tests/test_caddy_config.py tests/test_realm_export.py tests/test_mqtt_tls_config.py
+      - run: uv run pytest -q tests/test_deploy_assets.py tests/test_platform_compose.py tests/test_caddy_config.py tests/test_realm_export.py tests/test_mqtt_tls_config.py tests/test_observability_rules.py

@@ -10,6 +10,11 @@ Accepted (Checkpoint 1, 2026-11-03; status of the build is stated in each record
 
 One free VM with no SLA cannot give multi-zone availability. What it can give is the ability to rebuild quickly and to prove that the backups restore, which is what a thesis can honestly measure.
 
+## Amendment (2026-11-04, Unit 12)
+
+pgBackRest was **not built**: it cannot be checked with the TimescaleDB image here, and a nightly `pg_dump` per database meets the declared RPO of about 24 hours. Point-in-time recovery is therefore **not available**. The backup scripts are `deploy/backup/backup.sh` and `restore_drill.sh`
+(tested on throwaway PostgreSQL servers; restic, TimescaleDB and the VM untested). See [dr.md](../dr.md). The decision text below is left as accepted.
+
 ## Decision
 
 - Postgres (all three databases) is backed up with **pgBackRest** (full, incremental and WAL archiving for point-in-time recovery); pgBackRest with the TimescaleDB image is **unverified** and checked first.
