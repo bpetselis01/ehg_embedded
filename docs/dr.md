@@ -48,7 +48,7 @@ After a real restore also run `eval/parity.py` between the restored store and th
 | Stop HAPI | The sync worker logs and retries; the facade answers 502; the pipeline is unaffected | none today (add a HAPI scrape) | not run |
 | Reboot the VM | Containers restart (`unless-stopped`); gateways reconnect with backoff | `EhgTargetDown` for a while | not run |
 | Gateway offline | `GATEWAY_OFFLINE` alert (the silence is the gateway's, not the node's) | triage alert | not run |
-| Revoked certificate | The CRL is read at broker start or SIGHUP only; the host job that fetches it is **not built**, so revocation does not yet reach the broker | none | not run; known gap |
+| Revoked certificate | The CRL is read at broker start or SIGHUP only; `deploy/crl-sync.sh` (cron, every 5 minutes) fetches, verifies and installs it and sends SIGHUP: written and tested, never run on the VM. A connection that is already open is not dropped by a reload | none | not run; known gap |
 | Expired certificate | The gateway cannot connect and must re-enrol (7-day life) | `EhgNoTelemetry` | not run |
 | Keycloak down | Existing tokens work until they expire (5 minutes); no new sign-in | none today | not run |
 

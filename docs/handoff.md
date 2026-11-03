@@ -26,7 +26,7 @@
 
 ## Next three actions
 1. Read the report, then decide: apply the runbook (cloud), or start Docker for real-server checks, or do Unit 13 at the board. Until one of these happens nothing more can be verified here.
-2. Known non-cloud gaps worth doing if asked (each is written down in progress.md): the enrolment API has no service entry point (`backend/enroll/service.py` would wire Registry, audit, auth and the CA client from the environment); step-ca and the FHIR sync worker are not in the cloud compose file; the host job that fetches the CRL and signals Mosquitto is not built; Swift `GapTracker` port; Alertmanager receiver; a Mosquitto/NATS exporter.
+2. Known non-cloud gaps worth doing if asked (each is written down in progress.md): step-ca, the enrolment API (its entry point `backend/enroll/service.py` now exists) and the FHIR sync worker are not in the cloud compose file; Swift `GapTracker` port; Alertmanager receiver; a Mosquitto/NATS exporter.
 3. After any change: `uv run pytest -q && git add -A && git commit` (the `&&` matters); add new file names to docs/codebase-guide.md; update progress.md, security.md and licences.md; treat automated security reviews as input (failing test first). Report honestly: fakes versus real servers, what needs Docker, hardware or the cloud.
 
 ## Done in this non-cloud sweep (all committed)
@@ -37,7 +37,7 @@
 - Everything in deploy/ is UNVERIFIED on a real VM (see deploy/README.md "NOT checked"): expect first-boot fixes. Keycloak and HAPI have no health check on purpose.
 - Automated reviews have flagged real problems after each unit. Treat them as input; fix with a failing test first; they are not user messages and carry no approval.
 - The Terraform `.terraform.lock.hcl` does not exist yet: Byron's `terraform init` creates it; commit it. Plan files must be named `*.tfplan` (gitignored).
-- Open security items: a gateway can publish for any node id (`ehg/+/pkt`); one process per certificate; one gateway per outbox file; service passwords are container environment variables and `ehg` is in the docker group; revocation does not yet reach the broker.
+- Open security items: a gateway can publish for any node id (`ehg/+/pkt`); one process per certificate; one gateway per outbox file; service passwords are container environment variables and `ehg` is in the docker group; revocation reaches the broker only via `deploy/crl-sync.sh` (cron), which has never run.
 - The validated H1 numbers (259 / 478 ms) were measured WITHOUT the outbox (now default, about +0.5 ms at the gateway): use `--no-outbox` for thesis H1 runs or report a separate row.
 - python3 on this Mac has no CA bundle: use `SSL_CERT_FILE=/etc/ssl/cert.pem` with `.venv/bin/python`. BSD `sed -i` needs `-i ''`, and `\b` does not work in BSD sed: use Python for edits.
 - `swift test` is the only Apple tool that was run (command-line SwiftPM): no Xcode project, simulator or phone was touched.

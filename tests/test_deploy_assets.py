@@ -545,3 +545,10 @@ def test_update_builds_the_local_image_and_accepts_an_exited_one_shot_job_but_no
     out = subprocess.run(["jq", "-r", "--arg", "want", "", program], input=lines, capture_output=True, text=True)
     assert out.returncode == 0, out.stderr
     assert sorted(out.stdout.split()) == ["crashed", "made", "sick", "starting"]
+
+
+def test_the_broker_gets_revocations_through_a_cron_job_that_runs_as_the_service_user():
+    text = CLOUD_INIT.read_text()
+    assert re.search(r"^\s+\*/5 \* \* \* \* ehg /opt/ehg/repo/deploy/crl-sync\.sh", text, re.M), "cron.d entries need a user column"
+    assert (DEPLOY / "crl-sync.sh").exists() and os.access(DEPLOY / "crl-sync.sh", os.X_OK)
+    assert "-v ca.crl" not in COMPOSE.read_text() and "/ca.crl:/mosquitto/pki/ca.crl:ro" in COMPOSE.read_text(), "the script writes INTO this single bind-mounted file"

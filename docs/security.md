@@ -44,7 +44,7 @@ Mapping of the HTTP APIs (triage, enrolment, FHIR facade) to the 2023 list, from
 | API9 Improper inventory management | OpenAPI documents are generated from the code and diffed in a test | `test_api_docs` |
 | API10 Unsafe consumption of APIs | Upstream answers are validated and failures become a 502 without details; the CA's answer is re-checked before a certificate is returned | `test_fhir_facade`, `test_enroll` |
 
-**Still not done, in one place:** none of this has run against Keycloak, step-ca, Caddy, HAPI, NATS or TimescaleDB; revocation does not reach the broker; a gateway can publish for any node id; service passwords are container environment variables; the audit log is not write-once; no scanner has been run; no SBOM exists; firmware still uses Nordic's development signing key.
+**Still not done, in one place:** none of this has run against Keycloak, step-ca, Caddy, HAPI, NATS or TimescaleDB; revocation reaches the broker only through the cron job that has never run; a gateway can publish for any node id; service passwords are container environment variables; the audit log is not write-once; no scanner has been run; no SBOM exists; firmware still uses Nordic's development signing key.
 
 ## Threat model: gateway to broker (MQTT QoS 1, JSON on `ehg/<node>/pkt`)
 
@@ -119,7 +119,9 @@ All four were real, all fixed with failing tests first (`tests/test_ts_writer.py
 - Honesty note: the tests for these two were written together with the fix in one step, so I did not see them fail first.
 - **A failed CA revocation was never retried (MEDIUM, fixed, third finding on this API):** the registry marked certificates revoked before the CA confirmed, so after a CA failure a repeated `/revoke` found nothing to do. A certificate now leaves the retry list only when the CA confirms (`ca_revoked_at`); repeating the request retries exactly the failures and sends nothing twice.
 - **Migration edited in place (MEDIUM, acknowledged):** `ca_revoked_at` was added to revision 0002 instead of a new revision. No database has ever applied 0002 (nothing is deployed, the branch is unpushed, test databases are throwaway), so no deployment can drift; the policy is now written in `backend/db/migrate.py`: from the first deployment an applied revision is frozen and every change is a new one. The review's second suggestion does not apply: `revoke_gateway` already commits the registry revocation BEFORE any CA call, so CA bookkeeping can never block it.
-- Still open: the broker reads its CRL only at start-up and on SIGHUP; the host-side job that fetches `GET /enroll-api/crl` and signals Mosquitto is not built, so a revocation takes effect at the broker only after that job (or a restart) runs.
+- Closed in code (Unit 11b follow-up), never run on the VM: `deploy/crl-sync.sh` (cron every 5 minutes from cloud-init) fetches `GET /enroll-api/crl`, refuses a list whose signature does not verify against the CA chain, that has expired, that is malformed, or whose CRL number is LOWER than the installed one (a replayed old list would un-revoke certificates),
+  writes it INTO the existing file (the compose file bind-mounts that single file, so a rename would leave the container on the old list), and signals Mosquitto only after a verified install. A revoked gateway is refused when it next connects; an open connection is not dropped by a reload.
+  **A test found a real hole while this was written:** `openssl crl -verify` prints "verify failure" for a list from another CA but still exits 0, so checking the exit status would have installed a forged list; the script checks the printed result (`tests/test_crl_sync.py`).
 
 ## Front door (Unit 11): findings of the automated review, 2026-11-03
 

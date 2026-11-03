@@ -8,7 +8,7 @@ OUTPUT: errors with names: 401 no/invalid token, 403 wrong role or a REVOKED gat
 HOW: The gateway id (the certificate CN) is the token's user name, validated against the id pattern; the CN in the CSR is ignored. Order: rate limit -> role -> registry (revoked?) -> CSR checks -> CA signs ->
   the answer is re-checked (backend/enroll/csr.py) -> only then the registry row is written. If any step fails nothing is recorded as enrolled. Every outcome is an audit row (enroll.issue / enroll.denied).
   Revoking marks the registry, revokes EVERY live certificate of the gateway at the CA (all serials are kept, not only the newest), and reports whether the broker's CRL needs refreshing: the broker reads its CRL on start-up and SIGHUP (docs/security.md), so a host-side job
-  that fetches GET /crl into the broker's ca.crl and signals Mosquitto is part of the deployment (not built here).
+  that fetches GET /crl into the broker's ca.crl and signals Mosquitto is part of the deployment (deploy/crl-sync.sh, run by cron from cloud-init; tested, never run on the VM).
 ROLE IN THESIS: The enrolment API of the certificate lifecycle (docs/security.md, decision 0013). UNVERIFIED against a real step-ca or Keycloak.
 BEFORE -> AFTER: Before: certificates by hand. After: an audited, rate-limited, revocable flow.
 """

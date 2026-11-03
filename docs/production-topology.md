@@ -92,7 +92,7 @@ App Store or TestFlight distribution; fleet-wide staged firmware rollout; write-
 | Capability | Free implementation | Status | Units |
 |---|---|---|---|
 | Device registry and provisioning | Postgres `registry` schema, enrolment API, step-ca | **Written**, tested with a local PostgreSQL and a fake CA; step-ca never run | 6, 7 |
-| Gateway identity and revocation | 7-day client certificates, CRL | **Written**; CRL reload tested on a local Mosquitto 2.1.2; the host job that delivers the CRL to the broker is NOT built | 2, 7 |
+| Gateway identity and revocation | 7-day client certificates, CRL | **Written**; CRL reload tested on a local Mosquitto 2.1.2; the host job that delivers the CRL to the broker (`deploy/crl-sync.sh`, cron every 5 minutes) is written and tested with real OpenSSL lists, never run on the VM | 2, 7 |
 | Over-the-air update | MCUboot and MCUmgr exist; own signing key; app-based update | Partly Existing; key Planned; app update Tier C; fleet rollout Design-only | 13, 15d |
 | Multi-subject data model | Pseudonymous `subject` per PhysioNet record | **Written** (registry tables), tested | 6, 7 |
 | Consent | Registry consent status, enforced in the API, the facade and the sync worker (no FHIR `Consent` resource is written) | **Written**, tested (a data-model demonstration, not a legal consent platform) | 8, 9 |

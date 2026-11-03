@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-11-04: enrolment service entry point and CRL delivery to the broker (written, tested; never run against step-ca, Keycloak or a broker container)
+
+- **Added:** `backend/enroll/service.py` (starts the enrolment API from environment variables; names every missing variable, refuses a malformed root fingerprint or a key file others can read; `/crl` is a 502 when the CA fails, never an empty list), `deploy/crl-sync.sh` plus a cron entry in cloud-init (every 5 minutes), the script added to the CI shellcheck job.
+- **Tested:** 10 + 8 tests, the CRL ones with real OpenSSL lists from `tools/pki.sh`: install in place (same inode), `.prev` copy, signal only after a verified install, forged list from another CA refused, older list refused, expired list refused, malformed or unreachable answer changes nothing, failing signal reported.
+- **Finding:** `openssl crl -verify` prints "verify failure" for a foreign list but exits 0; the first version of the script would have installed it. Fixed by checking the printed result (test `test_a_list_signed_by_another_ca_is_refused`).
+- **NOT done:** the enrolment API and step-ca are still not in the cloud compose file (step-ca is initialised by hand; its CRL endpoint path and format are assumptions); `crl-sync.sh` has never run against a live Mosquitto container or the real endpoint.
+
 ## 2026-11-04: Unit 11b, the cloud compose file completed as far as it can be without the cloud (never started)
 
 - **Added to `deploy/compose/docker-compose.cloud.yml`:** `migrate` (one-shot), `bridge`, `ts-writer`, `triage` (one image built on the VM from `backend/platform.Dockerfile`, whose base is now pinned by digest), `keycloak` 26.8.1 and `hapi` v7.6.0 (digests read from the registry API, arm64 present). 18 services; `docker compose config` resolves them.

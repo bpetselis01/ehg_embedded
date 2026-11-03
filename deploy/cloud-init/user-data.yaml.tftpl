@@ -101,6 +101,11 @@ write_files:
     permissions: "0644"
     content: |
       * * * * * root /usr/local/sbin/ehg-df-metrics.sh
+  - path: /etc/cron.d/ehg-crl-sync
+    permissions: "0644"
+    content: |
+      # every 5 minutes: fetch the revocation list from the enrolment API, verify it and tell the broker (deploy/crl-sync.sh; failures go to the system log)
+      */5 * * * * ehg /opt/ehg/repo/deploy/crl-sync.sh >/dev/null 2>&1
   - path: /opt/ehg/.gitconfig
     permissions: "0644"
     content: |
