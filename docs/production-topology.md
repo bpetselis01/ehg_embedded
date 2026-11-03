@@ -102,7 +102,7 @@ App Store or TestFlight distribution; fleet-wide staged firmware rollout; write-
 | Disaster recovery | pgBackRest, restic, a timed restore drill | Planned; RPO about 24 h; RTO to be measured | 12 |
 | Observability | Prometheus, Alertmanager, Loki, Grafana, Alloy, OCI alarm | Planned | 12 |
 | Service-level objectives | Prometheus recording rules; measured, no SLA | Planned | 12 |
-| Infrastructure as code | Terraform, cloud-init, Docker Compose | Planned | 4 |
+| Infrastructure as code | Terraform, cloud-init, Docker Compose | **Written and validated (`terraform validate`), never applied** (Unit 4); the compose file is partial until Units 6 to 9 | 4 |
 | Supply chain | Syft, Trivy, cosign, Dependabot, gitleaks | Planned | 14 |
 | Regulatory pack | Intended purpose, hazard analysis, traceability | Planned; "designed with reference to" only | 17 |
 

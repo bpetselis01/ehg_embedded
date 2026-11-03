@@ -4,7 +4,7 @@
 
 ## Status
 
-Accepted (Checkpoint 1, 2026-11-03; status of the build is stated in each record). Byron chose this target on 2026-11-03; building it starts at Unit 4. No cloud account exists yet.
+Accepted (Checkpoint 1, 2026-11-03). Byron chose this target on 2026-11-03. Unit 4 wrote the Terraform and cloud-init (validated, never applied); no cloud account exists yet.
 
 ## Context
 
@@ -22,6 +22,10 @@ messages a day), and the other hyperscaler free tiers were rejected as too small
 - A small AMD micro VM is an optional uptime probe. A restore onto an Azure free VM is **future work**, not built.
 - **Exit criteria** (move to a different free host or fall back to the local stack): the VM is reclaimed, the free allowance is cut again, Australian
   capacity cannot be obtained after reasonable retries, or the stack no longer fits in the free memory.
+
+## Verified in Unit 4 (2026-11-03)
+
+Oracle's own "Always Free Resources" page (fetched through a summarising tool, so re-read the page before relying on a number) states: Ampere A1 **1,500 OCPU-hours and 9,000 GB-hours a month = 2 OCPUs and 12 GB**, as one instance or two of 1 OCPU; **200 GB** boot plus block volume combined and **5** volume backups; **10 TB** a month outbound; Object Storage **20 GB** and **50,000** requests a month; Vault **150** secrets; Monitoring **500 million** ingestion points; Notifications **1 million** HTTPS and **1,000** email a month; Resource Manager **100** stacks and **2** concurrent jobs; **5** CAs and **150** certificates; up to **2** VCNs; the idle rule (95th percentile CPU, network and, for A1, memory all under 20% over 7 days); compute and volumes must be in the home region. Everything the prompt listed matched. Two differences: the page gives the minimum boot volume as 47 GB in one place and 50 GB in another (the code uses 50), and the page says nothing about the June 2026 halving of A1, so that history is **not confirmed by the page**.
 
 ## Consequences
 

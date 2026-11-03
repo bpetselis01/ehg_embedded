@@ -1,0 +1,26 @@
+# PURPOSE: Prometheus: what to scrape. Rules, recording rules for the SLOs and alerting arrive in Unit 12 (deploy/observability/).
+# INPUT: none. OUTPUT: metrics from every service that has a metrics endpoint, every 15 s, kept 15 days (set on the command line).
+# HOW: Targets are Docker service names on the private network. Mosquitto and NATS have no Prometheus exporter yet, so they are not scraped (Unit 12 adds exporters).
+# ROLE IN THESIS: Measured resource use and health of the cloud core (docs/decisions/0016-observability-and-slos.md).
+# BEFORE -> AFTER: Before: nothing scraped. After: the targets below.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs: [{ targets: ["prometheus:9090"] }]
+  - job_name: node
+    static_configs: [{ targets: ["node-exporter:9100"] }]
+  - job_name: cadvisor
+    static_configs: [{ targets: ["cadvisor:8080"] }]
+  - job_name: postgres
+    static_configs: [{ targets: ["postgres-exporter:9187"] }]
+  - job_name: loki
+    static_configs: [{ targets: ["loki:3100"] }]
+  - job_name: alloy
+    static_configs: [{ targets: ["alloy:12345"] }]
+  - job_name: alertmanager
+    static_configs: [{ targets: ["alertmanager:9093"] }]
+  - job_name: grafana
+    static_configs: [{ targets: ["grafana:3000"] }]

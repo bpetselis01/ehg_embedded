@@ -36,3 +36,15 @@ backend/pki/
 
 # gateway outbox (queued packets on disk)
 gateway/outbox*.db*
+
+# deployment secrets and Terraform state: never commit (only *.sops.yaml encrypted files and *.example files are tracked)
+deploy/**/.env*
+deploy/**/*.tfstate*
+deploy/**/terraform.tfvars
+deploy/**/.terraform/
+deploy/**/secrets/*
+!deploy/**/secrets/*.sops.yaml
+!deploy/**/secrets/*.example.yaml
+!deploy/**/secrets/README.md
+**/age.key
+*.agekey

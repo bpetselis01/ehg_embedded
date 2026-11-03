@@ -24,6 +24,7 @@ Status, run results and open items: [`docs/progress.md`](docs/progress.md).
 | [`eval/`](eval) | [`latency.py`](eval/latency.py) (H1), [`integrity.py`](eval/integrity.py) (H2 + H4 bit-exact) |
 | [`papers/`](papers) | [`INDEX.md`](papers/INDEX.md) (tracked) + open-access PDFs (not tracked) |
 | [`tests/`](tests) | pytest for the host code, plus [`test_docs.py`](tests/test_docs.py) (docs and wire-format copies match the code) |
+| [`deploy/`](deploy) | the Oracle cloud core as code: Terraform, cloud-init, compose, `update.sh`, SOPS secrets (written, never applied; see [`deploy/README.md`](deploy/README.md)) |
 | [`docs/decisions/`](docs/decisions) | why the main design choices were made |
 | [`docs/production-topology.md`](docs/production-topology.md) | the planned enterprise-style chain (sensor, BLE, mobile gateway, cellular, cloud, EHR), with each hop marked built, planned or design-only; [`docs/licences.md`](docs/licences.md) lists every component's licence |
 | [`docs/research/`](docs/research) | nRF / BLE / macOS environment notes with sources |

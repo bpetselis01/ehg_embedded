@@ -21,6 +21,7 @@ dependencies = [
 dev = [
     "pyserial>=3.5",
     "pytest>=8",
+    "python-hcl2>=8.1.4",
     "pyyaml>=6.0.3",
 ]
 

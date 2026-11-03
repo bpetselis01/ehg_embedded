@@ -82,7 +82,7 @@ def test_doc_paths_in_code_exist():
 
 def test_file_index_complete():
     guide = (ROOT / "docs/codebase-guide.md").read_text()
-    files = tracked(*(f"{d}/*.{ext}" for d in ("tools", "eval", "gateway", "viewer", "backend", "firmware")
+    files = tracked(*(f"{d}/*.{ext}" for d in ("tools", "eval", "gateway", "viewer", "backend", "firmware", "deploy")
                       for ext in ("py", "sh")))
     assert files
     missing = [str(f.relative_to(ROOT)) for f in files if f.name not in guide]

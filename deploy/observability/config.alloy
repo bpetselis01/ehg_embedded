@@ -1,0 +1,21 @@
+// PURPOSE: Grafana Alloy: ship every container's log file to Loki. Reads the JSON log files Docker writes under the data volume, so Alloy does NOT need the Docker socket
+//   (access to the socket is root-equivalent on the host).
+// INPUT: /var/lib/docker/containers/*/*-json.log (mounted read-only). OUTPUT: log lines pushed to http://loki:3100.
+// HOW: Lines carry the container id in their file path only; mapping ids to service names and parsing the JSON fields is Unit 12's job.
+// STATUS: UNVERIFIED against the pinned Alloy version (nobody has started it yet).
+// ROLE IN THESIS: Centralised logs (docs/decisions/0016-observability-and-slos.md).
+// BEFORE -> AFTER: Before: nothing collects logs. After: Loki has them.
+local.file_match "containers" {
+  path_targets = [{"__path__" = "/var/lib/docker/containers/*/*-json.log", "job" = "docker"}]
+}
+
+loki.source.file "containers" {
+  targets    = local.file_match.containers.targets
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

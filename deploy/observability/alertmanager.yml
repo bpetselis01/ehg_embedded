@@ -1,0 +1,9 @@
+# PURPOSE: Alertmanager with one receiver that does nothing. The real routing (ntfy or Telegram webhook, no sensitive content) is added in Unit 12.
+# INPUT: none. OUTPUT: none: alerts are accepted and dropped until a real receiver exists.
+# ROLE IN THESIS: Placeholder-free minimum so the container starts; the out-of-band "VM down" path is the OCI alarm (deploy/terraform/modules/monitoring).
+# BEFORE -> AFTER: Before: nothing. After Unit 12: webhook receivers.
+route:
+  receiver: "null"
+
+receivers:
+  - name: "null"

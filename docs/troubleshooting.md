@@ -68,3 +68,17 @@ Background: [decision 0009](decisions/0009-gateway-durable-outbox.md). Added 202
 | `gateway: gateway/outbox.db is in use by another gateway process` | Two gateways were started from the same folder; the outbox allows one process per file | Give the second its own file (`--outbox gateway/outbox2.db`), or `--no-outbox`. If no other gateway is running, check `pgrep -fl gateway.gateway` (the lock is released when its process ends) |
 | `[mqtt] cannot reach the broker at host:port; retrying. Packets wait in the outbox` | The broker is down or the address is wrong. With the outbox the gateway no longer exits at start-up | Start the broker (`cd backend && docker compose up -d`) or fix `--mqtt`/`--mqtt-port`. Nothing is lost meanwhile, up to the size cap |
 | Old packets from an earlier run appear in the database, marked `replayed` | `gateway/outbox.db` still held unconfirmed packets from that run (the outbox is on by default) and sent them at this start | Expected. Use `--exclude-replayed` in `eval/latency.py`. For a clean start delete `gateway/outbox.db*` before running |
+
+## Deployment code (deploy/)
+
+Background: [deploy/README.md](../deploy/README.md). Added 2026-11-03.
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `terraform validate`: `templatefile` ... "Invalid expression; Expected the start of an expression" | A literal dollar-brace in `user-data.yaml.tftpl` (even in a comment) is read as a Terraform expression | Write `$${` for a literal one, or reword. Shell variables in the script use `$name`, never `${name}` |
+| `terraform plan`: `admin_cidr must be a valid CIDR block and must not be 0.0.0.0/0` | By design: SSH may never be open to the internet | Use your own public address as `a.b.c.d/32` |
+| `terraform apply`: "Out of host capacity" for the A1 shape | Oracle has no free A1 capacity in that availability domain right now (common) | Set `availability_domain_index` to 1 or 2, or retry later. The home region cannot be changed |
+| `docker compose ... up` stops with "required variable X is missing a value" | The decrypted secrets are not loaded | Run through `deploy/update.sh` (it decrypts into `/run/ehg/runtime.env`), or `--bootstrap` after the age key is in place |
+| `update.sh`: "tag ... points at ..., not at ...: refusing" | The tag moved, or you gave the wrong hash | `git rev-parse TAG` on your Mac and pass that full hash. A moved tag should be investigated, not forced |
+| `update.sh`: "another update is running" | A previous run crashed and left `/opt/ehg/state/update.lock` | Make sure no update is running, then remove that directory |
+| `update.sh`: "sops is not installed" | cloud-init does not install it (no distribution package) | Install it by hand and verify its checksum (`deploy/secrets/README.md`) |

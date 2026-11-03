@@ -1,0 +1,236 @@
+# EHG cloud core: the services that can run today, on the Oracle Always Free VM (2 OCPU / 12 GB arm64).
+# Run (on the VM, by deploy/update.sh): docker compose --env-file /run/ehg/runtime.env --env-file /opt/ehg/etc/site.env -f deploy/compose/docker-compose.cloud.yml up -d
+#
+# PURPOSE: The cloud stack as one file: edge (Caddy), MQTT broker with mTLS, NATS JetStream bus, PostgreSQL + TimescaleDB, and the observability stack.
+#   It is deliberately PARTIAL: Keycloak, HAPI FHIR, step-ca and the Python workers arrive with Units 6 to 9 (their configuration does not exist yet).
+#   Their memory is reserved in tests/test_deploy_assets.py so the final stack is known to fit before it is built.
+# INPUT: /run/ehg/runtime.env (decrypted secrets: POSTGRES_PASSWORD, EHG_DB_PASSWORD, HAPI_DB_PASSWORD, KEYCLOAK_DB_PASSWORD, EXPORTER_DB_PASSWORD,
+#   GRAFANA_ADMIN_PASSWORD), /opt/ehg/etc/site.env (EHG_DOMAIN), certificates in EHG_PKI_DIR (default /opt/ehg/pki: ca-chain.crt, broker.crt, broker.key, ca.crl).
+#   A missing secret stops `up` with a message naming it (the "?" in the variable).
+# OUTPUT: the host publishes ONLY 80, 443 (Caddy) and 8883 (Mosquitto). Postgres, NATS, Grafana, Prometheus, Loki are on the private Docker network only.
+#   Grafana has no route until Unit 11 puts it behind Caddy and Keycloak. To look at it before then, tunnel to the container's own address
+#   (docker inspect gives it): ssh -L 3000:<container-ip>:3000 ubuntu@<vm>; see deploy/README.md.
+# HOW: Every image is pinned by version AND digest (all checked to have linux/arm64 on 2026-11-03). Every service has no-new-privileges and a memory limit;
+#   some also drop all capabilities and use a read-only root filesystem (hardening that nobody has been able to test yet: if a service will not start, look there first).
+#   Named volumes live in Docker's data-root on the 150 GB data volume (/srv/ehg-data/docker).
+#   A service that cannot run a health check (its image has no shell or wget) says so in the label ehg.healthcheck instead of silently having none.
+# STATUS: NEVER STARTED. Docker was not running when this was written; `docker compose config` is the only check done. Expect first-boot fixes.
+# ROLE IN THESIS: The cloud core of docs/production-topology.md, sized by docs/decisions/0010 and the budget in tests/test_deploy_assets.py.
+# BEFORE -> AFTER: Before: backend/docker-compose.yml on a laptop. After: this file on the VM, next to (not replacing) the local stack.
+name: ehg
+
+x-service: &service
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  caddy:
+    <<: *service
+    image: caddy:2.11.7-alpine@sha256:e70b164da81ef698b3ad19af799ea6086ce6d9e48ed4079eb9fe26f6fbf14ee5
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      EHG_DOMAIN: ${EHG_DOMAIN:?EHG_DOMAIN is not set (site.env)}
+    volumes:
+      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    mem_limit: 64m
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:2019/config/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  mosquitto:
+    <<: *service
+    image: eclipse-mosquitto:2.1.2-alpine@sha256:860aeb5d63ce509508f6dcfb2bc8a1c1dd2bc60555b562b45ce90e52d8dabb0f
+    ports:
+      - "8883:8883"
+    volumes:
+      - ../../backend/mosquitto/mosquitto.tls.conf:/mosquitto/config/mosquitto.conf:ro
+      - ../../backend/mosquitto/acl:/mosquitto/config/acl:ro
+      # single certificate files, never the PKI directory (it can hold CA private keys)
+      - ${EHG_PKI_DIR:-/opt/ehg/pki}/ca-chain.crt:/mosquitto/pki/ca-chain.crt:ro
+      - ${EHG_PKI_DIR:-/opt/ehg/pki}/broker.crt:/mosquitto/pki/broker.crt:ro
+      - ${EHG_PKI_DIR:-/opt/ehg/pki}/broker.key:/mosquitto/pki/broker.key:ro
+      - ${EHG_PKI_DIR:-/opt/ehg/pki}/ca.crl:/mosquitto/pki/ca.crl:ro
+      - mosquitto-data:/mosquitto/data
+    mem_limit: 64m
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 8883 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  nats:
+    <<: *service
+    image: nats:2.15.2-alpine@sha256:823e7f1d6d8ffe3b30dbd73d4a06bbb939acf94929f7fdf224404da7a05bafb5
+    command: ["-c", "/etc/nats/nats.conf"]
+    environment:
+      GOMEMLIMIT: 384MiB
+    volumes:
+      - ../nats/nats.conf:/etc/nats/nats.conf:ro
+      - nats-data:/data
+    cap_drop: [ALL]
+    read_only: true
+    mem_limit: 400m
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8222/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  postgres:
+    <<: *service
+    image: timescale/timescaledb-ha:pg16.15-ts2.31.0@sha256:98f88217cb7be56655f842d9920f90d0b4893b67b3463f93084548b433ed5c93
+    command: ["postgres", "-c", "shared_buffers=1GB", "-c", "effective_cache_size=3GB", "-c", "max_connections=100"]
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set (decrypt the secrets first)}
+      EHG_DB_PASSWORD: ${EHG_DB_PASSWORD:?EHG_DB_PASSWORD is not set}
+      HAPI_DB_PASSWORD: ${HAPI_DB_PASSWORD:?HAPI_DB_PASSWORD is not set}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?KEYCLOAK_DB_PASSWORD is not set}
+      EXPORTER_DB_PASSWORD: ${EXPORTER_DB_PASSWORD:?EXPORTER_DB_PASSWORD is not set}
+    volumes:
+      - ../postgres/10-init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro
+      - pg-data:/home/postgres/pgdata
+    mem_limit: 2048m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  prometheus:
+    <<: *service
+    image: prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    cap_drop: [ALL]
+    mem_limit: 384m
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9090/-/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  alertmanager:
+    <<: *service
+    image: prom/alertmanager:v0.34.2@sha256:39d8bb3966c694a124428a3a88fbcffd40bd069129ecd47c059f8a3f17c55f3b
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml", "--storage.path=/alertmanager"]
+    volumes:
+      - ../observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    cap_drop: [ALL]
+    read_only: true
+    mem_limit: 48m
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9093/-/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  loki:
+    <<: *service
+    image: grafana/loki:3.7.9@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ../observability/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+    cap_drop: [ALL]
+    mem_limit: 320m
+    labels:
+      ehg.healthcheck: "none: the Loki image has no shell or wget to run one in; Prometheus scrapes loki:3100 instead"
+
+  grafana:
+    <<: *service
+    image: grafana/grafana-oss:13.0.2@sha256:5dad0df181cb644a14e13617b913b261a54f7d4fd4510721dba420929f35bea2
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is not set}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - ../observability/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - grafana-data:/var/lib/grafana
+    cap_drop: [ALL]
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  alloy:
+    <<: *service
+    image: grafana/alloy:v1.21.3@sha256:8ab871206bd2d8f89277f53abffee5f452a293980788d52f85fa183a87a505a4
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
+    volumes:
+      - ../observability/config.alloy:/etc/alloy/config.alloy:ro
+      - /srv/ehg-data/docker/containers:/var/lib/docker/containers:ro
+      - alloy-data:/var/lib/alloy/data
+    mem_limit: 96m
+    labels:
+      ehg.healthcheck: "none: the Alloy image has no shell or wget; Prometheus scrapes alloy:12345 instead"
+
+  node-exporter:
+    <<: *service
+    image: prom/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
+    command: ["--path.procfs=/host/proc", "--path.sysfs=/host/sys", "--path.rootfs=/host/root", "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"]
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro,rslave
+    cap_drop: [ALL]
+    read_only: true
+    mem_limit: 32m
+    labels:
+      ehg.healthcheck: "none: the node-exporter image is a single static binary with no shell; Prometheus scrapes node-exporter:9100 instead"
+
+  cadvisor:
+    <<: *service
+    image: gcr.io/cadvisor/cadvisor:v0.55.1@sha256:3de2bd5203120b866d74a9b283b2ffb8ec382fbf9dc321814700c6ea6f44ec57
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /srv/ehg-data/docker:/var/lib/docker:ro
+    mem_limit: 96m
+    labels:
+      ehg.healthcheck: "none: the cAdvisor image has no shell or wget; Prometheus scrapes cadvisor:8080 instead"
+
+  postgres-exporter:
+    <<: *service
+    image: prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e
+    environment:
+      DATA_SOURCE_URI: postgres:5432/postgres?sslmode=disable
+      DATA_SOURCE_USER: ehg_exporter
+      DATA_SOURCE_PASS: ${EXPORTER_DB_PASSWORD:?EXPORTER_DB_PASSWORD is not set}
+    cap_drop: [ALL]
+    read_only: true
+    mem_limit: 32m
+    depends_on:
+      postgres:
+        condition: service_healthy
+    labels:
+      ehg.healthcheck: "none: the exporter image is a single static binary with no shell; Prometheus scrapes postgres-exporter:9187 instead"
+
+volumes:
+  caddy-data:
+  caddy-config:
+  mosquitto-data:
+  nats-data:
+  pg-data:
+  prometheus-data:
+  alertmanager-data:
+  loki-data:
+  grafana-data:
+  alloy-data:

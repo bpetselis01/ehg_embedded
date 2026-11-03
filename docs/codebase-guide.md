@@ -145,6 +145,10 @@ Step by step:
 | [`backend/docker-compose.cloud.yml`](../backend/docker-compose.cloud.yml) | optional override: broker on 8883 with TLS 1.3 and client certificates, ingest presents a certificate (no 1883) |
 | [`backend/mosquitto/mosquitto.tls.conf`](../backend/mosquitto/mosquitto.tls.conf), [`acl`](../backend/mosquitto/acl) | the TLS broker settings and the per-identity topic permissions used by the override |
 | [`tools/pki.sh`](../tools/pki.sh) | makes the private CA, broker and client certificates and the revocation list (`init`, `client`, `revoke`, `crl`) |
+| [`deploy/README.md`](../deploy/README.md) | the cloud core as code: Terraform, cloud-init, compose, secrets; what is checked and what is not |
+| [`deploy/update.sh`](../deploy/update.sh) | idempotent update of the VM to a tagged release with health check and rollback (`--dry-run` shows the steps) |
+| [`deploy/postgres/10-init-databases.sh`](../deploy/postgres/10-init-databases.sh) | first start of PostgreSQL: creates the databases and login roles |
+| [`tests/test_deploy_assets.py`](../tests/test_deploy_assets.py) | checks Terraform, cloud-init, compose, `update.sh` and that no secret or state can reach git |
 | [`tests/test_mqtt_tls_config.py`](../tests/test_mqtt_tls_config.py) | checks the TLS config, ACL, compose merge, PKI and (opt-in) a real local Mosquitto |
 | [`backend/.env.example`](../backend/.env.example) | shared names and passwords (copy to `.env`) |
 | [`backend/mosquitto/mosquitto.conf`](../backend/mosquitto/mosquitto.conf) | broker settings (keeps a queue on disk) |

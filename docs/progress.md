@@ -1,5 +1,20 @@
 # Progress log
 
+## 2026-11-03: Unit 4, infrastructure as code (written and validated, NOT applied; [deploy/README.md](../deploy/README.md))
+
+- **Verified first:** Oracle's Always Free page matches the prompt's numbers (2 OCPU / 12 GB A1, 200 GB volumes, 10 TB egress, 20 GB object storage, idle rule); see [decision 0010](decisions/0010-oracle-always-free-cloud-target.md) for the two differences (47 vs 50 GB minimum boot volume; the June 2026 halving is not on the page).
+  All 16 candidate images have `linux/arm64` (registry API, Docker not running), **including the non-HA `timescale/timescaledb`, which resolves that unverified item**. `eclipse-mosquitto:2` is 2.1.2 (image label), so the Homebrew tests match the image.
+- **Added:** `deploy/terraform` (root + 4 modules, provider `oracle/oci` pinned to 9.11.0), cloud-init template, `deploy/compose/docker-compose.cloud.yml` (12 services, every image pinned by version and digest), `deploy/update.sh`, Caddy/NATS/Postgres/observability config files, SOPS + age layout, `tests/test_deploy_assets.py`.
+  Secret and state patterns added to `.gitignore`; the file-index test now covers `deploy/`. New dev dependency: python-hcl2.
+- **Checked:** `terraform fmt` clean and `terraform validate` passes against the real provider schema (it caught one real bug: a literal dollar-brace in a template comment); `docker compose config` resolves, and a missing secret stops it naming the variable; only 80/443/8883 are published;
+  limits plus reserved later services total under the 9.5 GB ceiling; `update.sh` refuses unsafe input and its dry run prints every step; the secret scanner has its own self-test (which found a flag bug in the scanner itself).
+- **Deviations from the prompt:** the compose file is partial on purpose (Keycloak, HAPI, step-ca and the workers have no config until Units 6 to 9; their memory is reserved in a test); secrets reach containers as environment variables from a memory-only file, not Docker secrets;
+  node_exporter runs as a container, not a host package; Docker comes from Ubuntu's `docker.io` package; `sops` is installed by hand (no distribution package) and the recipient key in `deploy/.sops.yaml` is a placeholder until you supply yours.
+- **NOT done / not verified:** `terraform plan/apply`; the data-volume device path; the VM-down alarm (needs Oracle's monitoring plugin); any container starting (hardening flags, TimescaleDB-HA init, Loki/Alloy configs, healthchecks); `update.sh` on a real checkout and its rollback path; `shellcheck` (not installed); real memory use.
+  Terraform CLI licence text not read (BSL per the prompt). A newer HAPI (v8.0.0) exists; Unit 9 decides.
+- Tests: 202 pass and 10 skipped by default; with `EHG_INTEGRATION=1`, `mosquitto` and a cached provider (`TF_PLUGIN_CACHE_DIR`), 211 pass and 1 is skipped (`shellcheck` not installed).
+- Code under `deploy/` names later docs by unit ("the deployment runbook (Unit 5)") rather than by path, because `test_doc_paths_in_code_exist` rightly refuses paths to files that do not exist yet.
+
 ## 2026-11-03: outbox switched ON by default (Byron's decision at Checkpoint 2)
 
 - **Change:** `gateway --outbox` now defaults to `gateway/outbox.db`; `--no-outbox` restores the old in-memory path (the two flags exclude each other). Changing the default exposed two traps, both fixed with tests:

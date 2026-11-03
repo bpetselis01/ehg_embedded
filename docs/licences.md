@@ -27,7 +27,10 @@ Each UNVERIFIED row is checked in the unit that first uses the component, and th
 | pytest 9.1.1 (dev) | MIT | Tests | Permissive | Confirmed locally (package metadata) |
 | PyYAML 6.0.3 (dev, added in Unit 2) | MIT | Parses compose and cloud-init files in tests | Permissive | Confirmed locally (package metadata and classifier) |
 | OpenSSL 3.0.12 (command line, used by `tools/pki.sh` and the tests) | Not read; stated as Apache-2.0 for OpenSSL 3 in general | Makes the certificates | Free; a tool run locally, not shipped | UNVERIFIED |
-| Mosquitto 2.1.2 (Homebrew build used for the local tests) | Not read (EPL/EDL per the prompt) | Real-broker tests | Free to run locally | UNVERIFIED |
+| Mosquitto 2.1.2 (Homebrew build used for the local tests; same version as the `eclipse-mosquitto:2` image) | `EPL-2.0 OR BSD-3-Clause` | Real-broker tests; cloud broker | Free; the licence is read from the Docker image's own label `org.opencontainers.image.licenses` | Confirmed from the image label (2026-11-03); licence text not read |
+| python-hcl2 8.1.4 (dev, added in Unit 4) | MIT | Parses `.tf` files in tests | Permissive | Confirmed locally (package metadata and classifier) |
+| Terraform CLI 1.14.9 (installed here) | Business Source Licence 1.1 (per the prompt) | Validates and applies the IaC | Free for our own use | Version confirmed (`terraform version`); licence text NOT read: UNVERIFIED |
+| `oracle/oci` Terraform provider 9.11.0 | Not read | Oracle resources | Free to use | UNVERIFIED |
 | Eclipse Mosquitto | EPL/EDL (as stated in the prompt) | Edge MQTT broker | Open source, free to self-host | UNVERIFIED |
 | InfluxDB 2.7 (OSS) | Not stated in the prompt | Reference time-series store | Free to self-host | UNVERIFIED |
 | Grafana OSS | Apache-2.0 or AGPL-3.0 (the prompt says "check") | Dashboards | Free to self-host for own use; AGPL terms matter only if modified and offered to others | UNVERIFIED |
@@ -56,6 +59,21 @@ Each UNVERIFIED row is checked in the unit that first uses the component, and th
 | Trivy, Syft, cosign, gitleaks, tflint, shellcheck | Not stated in the prompt | Supply-chain and lint tooling | Free to run locally or in Actions | UNVERIFIED |
 | CocoaMQTT | MIT | Swift MQTT client | Permissive | UNVERIFIED |
 | Nordic iOS McuMgr library | Not stated; verify name and licence | Optional over-the-air update (Tier C) | Only if the licence allows | UNVERIFIED |
+
+## Container images pinned in `deploy/compose` (Unit 4)
+
+Each is pinned by version and digest; **all have a `linux/arm64` manifest** (checked 2026-11-03 through the registry API). Licences below are the prompt's or common knowledge unless stated: UNVERIFIED until the image labels or texts are read.
+
+| Image | Version | Licence (status) |
+|---|---|---|
+| `eclipse-mosquitto` | 2.1.2-alpine (same digest as `2`) | EPL-2.0 OR BSD-3-Clause (read from the image label) |
+| `nats` | 2.15.2-alpine | Apache-2.0 (UNVERIFIED) |
+| `caddy` | 2.11.7-alpine | Apache-2.0 (UNVERIFIED) |
+| `timescale/timescaledb-ha` | pg16.15-ts2.31.0 | PostgreSQL licence + TimescaleDB Community edition under the Tiger Data licence (UNVERIFIED; confirm `SHOW timescaledb.license;` in Unit 6). The non-HA `timescale/timescaledb:2.31.0-pg16` also has an arm64 manifest |
+| `prom/prometheus`, `prom/alertmanager`, `prom/node-exporter`, `prometheuscommunity/postgres-exporter` | v3.15.1, v0.34.2, v1.12.1, v0.20.1 | Apache-2.0 (UNVERIFIED) |
+| `grafana/loki`, `grafana/grafana-oss`, `grafana/alloy` | 3.7.9, 13.0.2, v1.21.3 | AGPL-3.0 for Loki and Grafana per the prompt ("check"), Alloy Apache-2.0 (all UNVERIFIED) |
+| `gcr.io/cadvisor/cadvisor` | v0.55.1 | Apache-2.0 (UNVERIFIED) |
+| Not yet in the compose file | `hapiproject/hapi` v7.6.0 (v8.0.0 also exists, both arm64), `quay.io/keycloak/keycloak` 26.8.1, `smallstep/step-ca` 0.30.2, `restic/restic` 0.19.1 | all arm64-checked; licences UNVERIFIED |
 
 ## Considered and not used
 

@@ -1,0 +1,9 @@
+# PURPOSE: The front door. For now it only proves the VM is reachable over HTTPS with a real certificate; Unit 11 replaces it with the real routes
+#   (triage page, FHIR, Keycloak, Grafana), headers and rate limits.
+# INPUT: the environment variable EHG_DOMAIN (the DNS name pointing at the VM). Caddy gets and renews its Let's Encrypt certificate by itself (HTTP-01 on port 80).
+# OUTPUT: https://EHG_DOMAIN/ answers with one line of text. Nothing else is routed, so nothing behind Caddy is exposed.
+# ROLE IN THESIS: The only web entry of the cloud core (docs/production-topology.md).
+# BEFORE -> AFTER: Before: no listener. After: ports 80 and 443 answer; port 8883 (MQTT) is Mosquitto's, not Caddy's.
+{$EHG_DOMAIN} {
+	respond "EHG cloud core: edge is up. Services are added unit by unit." 200
+}
