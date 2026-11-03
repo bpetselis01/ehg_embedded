@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-11-03: Unit 8, triage service (rules, audit chain, alert state, JWT auth, API, stream monitor) (decision [0011](decisions/0011-triage-service-pipeline-health-not-clinical.md)); not run against NATS or HAPI
+
+- **Added:** `backend/triage/rules.py` (rules, hysteresis, score, worklist: pure), `audit.py` (hash chain, `--verify`), `state.py` (lifecycle), `registry.py`, `app.py` (FastAPI), `stream.py` (NodeMonitor, FleetMonitor, Engine, service entry point), `backend/jwtauth.py`; migration 0002 (triage + registry schemas, restricted `ehg_triage` role, append-only triggers).
+- **Tested on a real PostgreSQL 14 (local, no Docker):** the audit chain detects edited, deleted and reordered rows and says plainly that deleting the newest rows is caught only by the off-VM head hash; concurrent writers form one gap-free chain; the application role cannot UPDATE, DELETE, TRUNCATE or alter the log; the alert lifecycle, required notes, auto-resolve (never of an escalated alert) and one-active-alert-per-rule; every API route against every role; JWT attacks (expired, wrong audience/issuer, `alg=none`, HS256-with-the-public-key built by hand, tampered, other key); degraded database as a clean 503; no secrets or traces in responses.
+- **Bugs found by the tests:** the first packet of any node looked like a "sequence restart" (GapTracker counts it as stream 1), which would have raised SEQ_RESTART on every new node; a `while` condition with the wrong precedence would have emptied the latency window on every snapshot (caught on re-reading, before it ran); several of my own test feeders produced gaps.
+- **Automated security review of the Unit 8 commit:** consent bypass through the worklist, alert list, alert detail and workflow actions: fixed and tested (see [security.md](security.md)).
+- **NOT done / not verified:** the stream service against a real NATS server; `/api/audit` FHIR mirroring (Unit 9); OIDC against a real Keycloak (JWKS fetch is untested); the triage service in the cloud compose (Unit 11, needs `AUTH_MODE=oidc` because dev mode refuses a non-loopback bind); dead-letter surfacing is a metric only (no alert rule for it).
+- Run locally (dev mode, loopback only): `AUTH_MODE=dev EHG_TRIAGE_DSN="host=localhost port=5433 dbname=ehg user=ehg_triage password=..." NATS_URL=nats://localhost:4222 uv run python -m backend.triage.stream`, then `curl -H "Authorization: Bearer dev-admin" localhost:8780/api/worklist`.
+
 ## 2026-11-03: Unit 6, data platform code (bridge, writer, migrations, parity) (decision [0012](decisions/0012-timescaledb-nats-data-platform.md)); parity proof NOT run
 
 - **Scope decision:** Byron asked for every unit that does not need the cloud; this is the first. The checkpoint ordering (Checkpoint 3 before Unit 6) is superseded by that instruction for the CODE; putting it on the VM still waits for the VM.

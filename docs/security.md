@@ -78,6 +78,12 @@ All four were real, all fixed with failing tests first (`tests/test_ts_writer.py
 - **The Influx writer's loop (MEDIUM):** one failing message stopped the loop. Now each message is isolated: unusable ones are terminated, a transient InfluxDB error is retried after 5 s.
 - Still open: a malformed MQTT message to the ORIGINAL `ingest` (MQTT path) is swallowed by paho's callback handling as before; the bridge's `EHG.BAD.*` messages are kept but nothing alerts on them yet (Unit 8's dead-letter surfacing).
 
+## Triage API (Unit 8): findings of the automated review, 2026-11-03
+
+- **Consent bypass through other routes (MEDIUM, 2 findings, fixed):** the consent rule was applied to node detail and trends only. The worklist (with each node's health sparkline), the alert list, alert detail and the workflow actions exposed or changed data about a node whose subject has no active consent.
+  Now a single gate covers every route that touches a node, whatever the caller's role: such nodes and their alerts are left out of the worklist and the list (the worklist reports `hidden_no_consent`), alert detail and every workflow action return 403, and each refusal is an audit row (`consent.denied`). Tests: `tests/test_triage_api.py`.
+- Open: aggregate numbers on `/metrics` (alert counts by state) include alerts on non-consented nodes; they identify no node or subject. The consent rule depends on the registry linking nodes to subjects; a node that is not registered is not gated (documented in `backend/triage/registry.py`).
+
 ## Known limit: a gateway can publish for any node id
 
 `topic write ehg/+/pkt` lets an authenticated gateway publish packets labelled with another node's id. Pinning a gateway to its nodes needs either a gateway id in the topic or message (a change to the documented `ehg/<node>/pkt` interface that `eval/` and the recorded runs rely on) or a check against a registry of which gateway serves which node.

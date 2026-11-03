@@ -105,8 +105,8 @@ def test_session_reports_the_user_the_banner_and_the_purpose(env):
 
 def test_worklist_is_ordered_and_includes_quiet_nodes(env):
     j = env.client.get("/api/worklist", headers=bearer("viewer")).json()
-    assert [(n["node"], n["band"]) for n in j["nodes"]] == [("EHG-3", "warning"), ("EHG-1", "stable"), ("EHG-2", "stable")]
-    assert j["nodes"][0]["score"] == 50 + 5 and all("sparkline" in n for n in j["nodes"])
+    assert [(n["node"], n["band"]) for n in j["nodes"]] == [("EHG-3", "warning"), ("EHG-1", "stable")], "EHG-2's subject has no active consent, so it is not listed"
+    assert j["hidden_no_consent"] == 1 and j["nodes"][0]["score"] == 50 + 5 and all("sparkline" in n for n in j["nodes"])
 
 
 # ---------------------------------------------------------------- workflow and errors
@@ -234,3 +234,28 @@ def test_dev_mode_shows_its_banner_and_works_on_loopback(env):
     c = TestClient(create_app(store=env.store, audit=env.audit, auth=A("dev"), registry=env.registry))
     j = c.get("/api/session", headers={"Authorization": "Bearer dev-viewer"}).json()
     assert "DEV MODE" in j["banner"] and j["role"] == "viewer"
+
+
+def test_a_node_without_consent_is_hidden_everywhere_not_just_on_its_own_page(env):
+    bad = env.store.open_alert("EHG-2", "NODE_OFFLINE", "critical", now=NOW)["id"]  # EHG-2's subject has consent_status 'none'
+    with psycopg.connect(env.dsn) as c:
+        c.execute("INSERT INTO ehg_health (time, node, delivery_pct) VALUES (%s, 'EHG-2', 42.0)", (NOW - timedelta(hours=1),))
+    wl = env.client.get("/api/worklist", headers=bearer("admin")).json()
+    assert "EHG-2" not in [n["node"] for n in wl["nodes"]] and wl["hidden_no_consent"] == 1 and "42.0" not in json.dumps(wl)
+    assert bad not in [a["id"] for a in env.client.get("/api/alerts", headers=bearer("admin")).json()["alerts"]]
+    assert env.client.get(f"/api/alerts/{bad}", headers=bearer("admin")).status_code == 403
+    for action, body in (("ack", {}), ("note", {"note": "x"}), ("escalate", {"note": "x"}), ("resolve", {"note": "x"})):
+        assert env.client.post(f"/api/alerts/{bad}/{action}", json=body, headers=bearer("admin")).status_code == 403, action
+    assert env.store.get(bad)["state"] == "open", "a refused action changes nothing"
+    denied = [r for r in env.audit.tail(50) if r["action"] == "consent.denied"]
+    assert len(denied) >= 5 and all(r["target"] == "node:EHG-2" for r in denied), "every refusal is audited"
+    assert "alert.read" not in [r["action"] for r in env.audit.tail(50) if r["target"] == f"alert:{bad}"]
+
+
+def test_consent_restored_makes_the_node_visible_again(env):
+    bad = env.store.open_alert("EHG-2", "FLATLINE", "warning", now=NOW)["id"]
+    assert env.client.get(f"/api/alerts/{bad}", headers=bearer("viewer")).status_code == 403
+    with psycopg.connect(env.dsn) as c:
+        c.execute("UPDATE registry.subject SET consent_status = 'active' WHERE id = 'tpehg2000'")
+    assert env.client.get(f"/api/alerts/{bad}", headers=bearer("viewer")).status_code == 200
+    assert "EHG-2" in [n["node"] for n in env.client.get("/api/worklist", headers=bearer("viewer")).json()["nodes"]]

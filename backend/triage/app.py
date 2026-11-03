@@ -9,7 +9,7 @@ OUTPUT: JSON. Errors have a name and a status: 401 no/invalid token, 403 role to
   (missing note, bad range, bad threshold), 503 database unavailable. A server error returns a plain message, never a stack trace. No response contains a secret.
   e.g. POST /api/alerts/17/escalate {"note": ""} -> 422 {"error": "escalate needs a note explaining why"}
 HOW: Every alert DETAIL read, transition, note, registry change, audit read/verify and configuration change writes an audit row (backend/triage/audit.py). Headers other than Authorization are never trusted.
-  Reads of a node whose registered subject has no active consent are refused (403). /readyz is 503 when the database or the bus consumer is unhealthy; /healthz only says the process is up.
+  Anything that touches a node whose registered subject has no active consent is refused (403, and the refusal is audited): node detail, trends, alert details, workflow actions; such nodes and their alerts are left out of the worklist and the alert list. /readyz is 503 when the database or the bus consumer is unhealthy; /healthz only says the process is up.
 ROLE IN THESIS: The operator-facing interface of the cloud core (docs/production-topology.md); the OpenAPI document is exported from this app in Unit 17.
 BEFORE -> AFTER: Before: no operator interface beyond Grafana. After: a role-protected, audited API.
 """
@@ -98,9 +98,14 @@ def create_app(*, store, audit, auth, registry, known_nodes=lambda: [], ready=la
             resp.headers["Cache-Control"] = "no-store"
         return resp
 
-    def consent_gate(node: str) -> None:
-        """Refuse reads for a node whose registered subject has no ACTIVE consent record (a node with no subject is not gated)."""
-        if registry.consent_ok(node) is False:
+    def visible(node: str) -> bool:
+        """False for a node whose registered subject has no ACTIVE consent record (a node with no subject is not gated)."""
+        return registry.consent_ok(node) is not False
+
+    def consent_gate(node: str, p) -> None:
+        """Refuse (and audit the refusal) for any read or change that touches a node without active consent, whatever the route or the caller's role."""
+        if not visible(node):
+            audit.append(p.user, p.role, "consent.denied", f"node:{node}", {})
             raise HTTPException(403, "no active consent record for this node's subject")
 
     @app.get("/api/session")
@@ -113,14 +118,15 @@ def create_app(*, store, audit, auth, registry, known_nodes=lambda: [], ready=la
         """Nodes, most urgent first, each with a 7-day delivery sparkline."""
         now = clock()
         rows = store.node_rows(now, known_nodes())
-        for r in rows:
+        shown = [r for r in rows if visible(r["node"])]  # a node without active consent is not listed at all, and no data about it is read
+        for r in shown:
             r["sparkline"] = registry.sparkline(r["node"], now)
-        return {"generated_at": now, "nodes": rows}
+        return {"generated_at": now, "nodes": shown, "hidden_no_consent": len(rows) - len(shown)}
 
     @app.get("/api/nodes/{node_id}")
     def node_detail(node_id: str, p=Depends(who("viewer"))):
         """One node: registry entry, open alerts, latest health."""
-        consent_gate(node_id)
+        consent_gate(node_id, p)
         return {"node": node_id, "registry": registry.node(node_id), "consent": registry.consent_ok(node_id), "alerts": [a for a in store.list_alerts(node=node_id) if a["state"] != "resolved"],
                 "health": registry.latest_health(node_id)}
 
@@ -129,7 +135,7 @@ def create_app(*, store, audit, auth, registry, known_nodes=lambda: [], ready=la
         """Delivery and latency history; says if the data do not span the range."""
         if range not in RANGES:
             raise HTTPException(422, f"range must be one of {', '.join(RANGES)}")
-        consent_gate(node_id)
+        consent_gate(node_id, p)
         return registry.trend(node_id, range, clock())
 
     @app.get("/api/alerts")
@@ -137,19 +143,21 @@ def create_app(*, store, audit, auth, registry, known_nodes=lambda: [], ready=la
         """Alerts, newest first."""
         if state is not None and state not in STATES:
             raise HTTPException(422, f"state must be one of {', '.join(STATES)}")
-        return {"alerts": store.list_alerts(state=state)}
+        return {"alerts": [x for x in store.list_alerts(state=state) if visible(x["node"])]}
 
     @app.get("/api/alerts/{alert_id}")
     def alert_detail(alert_id: int, p=Depends(who("viewer"))):
         """One alert with its history. Reading it is audited."""
         a = store.get(alert_id)
+        consent_gate(a["node"], p)
         audit.append(p.user, p.role, "alert.read", f"alert:{alert_id}", {})
         return a
 
     def act(action: str):
         """Route for one workflow action."""
         def handler(alert_id: int, body: NoteBody, p=Depends(who("operator"))):
-            """Apply the action; errors map to 404 / 409 / 422."""
+            """Apply the action; errors map to 404 / 409 / 422 (and 403 if the alert's node has no active consent)."""
+            consent_gate(store.get(alert_id)["node"], p)
             return store.transition(alert_id, action, p.user, p.role, body.note, clock())
         return handler
     for action in ("ack", "escalate", "resolve", "note"):
