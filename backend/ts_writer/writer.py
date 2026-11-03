@@ -18,9 +18,19 @@ BEFORE -> AFTER: Before: ingest.py wrote InfluxDB. After: this also fills Timesc
 
 import asyncio
 import json
+import math
 import os
 import time
 from datetime import datetime, timezone
+
+from backend import bus
+
+EPOCH_MIN, EPOCH_MAX = 946_684_800, 4_102_444_800  # 2000-01-01 .. 2100-01-01: anything else is a broken clock or garbage
+MAX_FRAMES, MAX_CHANNELS, INT32 = 10_000, 64, 2**31 - 1
+
+
+class BadData(Exception):
+    """The database rejected the DATA (not the connection): retrying the same message can never succeed."""
 
 RAW_SQL = ("INSERT INTO ehg_raw (time, node, record_id, seq, frame_idx, ch, v) VALUES (%s, %s, %s, %s, %s, %s, %s) "
            "ON CONFLICT DO NOTHING")
@@ -33,8 +43,43 @@ def ts(t: float) -> datetime:
     return datetime.fromtimestamp(t, tz=timezone.utc)
 
 
+def _epoch(v, name: str) -> float:
+    """A finite time in seconds since 1970, between 2000 and 2100."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not EPOCH_MIN <= v <= EPOCH_MAX:
+        raise ValueError(f"{name} must be seconds since 1970 between 2000 and 2100, got {v!r}")
+    return float(v)
+
+
+def validate(m: dict) -> None:
+    """Raise ValueError unless every field the writer uses is present, of the right type and in range (so no later step can raise or store garbage)."""
+    if not isinstance(m, dict):
+        raise ValueError("message is not a JSON object")
+    if not bus.valid_id(m.get("node_id")):
+        raise ValueError(f"node_id {m.get('node_id')!r} is not a safe id")
+    for name, lo, hi in (("seq", 0, INT32), ("frame_idx", 0, INT32 - MAX_FRAMES), ("t_inject", 0, 2**32 - 1), ("flags", 0, 255)):
+        if not bus.valid_int(m.get(name), lo, hi):
+            raise ValueError(f"{name} must be an integer in {lo}..{hi}, got {m.get(name)!r}")
+    fs = m.get("fs_hz")
+    if isinstance(fs, bool) or not isinstance(fs, (int, float)) or not math.isfinite(fs) or not 0 < fs <= 100_000:
+        raise ValueError(f"fs_hz must be a number in (0, 100000], got {fs!r}")
+    for name in ("t_inject_host", "t_gw_rx", "t_mqtt_pub"):
+        _epoch(m.get(name), name)
+    if not isinstance(m.get("record_id"), (str, int)) or isinstance(m.get("record_id"), bool) or len(str(m["record_id"])) > 64:
+        raise ValueError("record_id must be a short string or integer")
+    samples = m.get("samples")
+    if not isinstance(samples, list) or not 1 <= len(samples) <= MAX_FRAMES:
+        raise ValueError(f"samples must be 1..{MAX_FRAMES} frames")
+    width = len(samples[0]) if isinstance(samples[0], list) else 0
+    if not 1 <= width <= MAX_CHANNELS:
+        raise ValueError(f"each frame needs 1..{MAX_CHANNELS} channels")
+    for frame in samples:
+        if not isinstance(frame, list) or len(frame) != width or not all(bus.valid_int(v, -INT32 - 1, INT32) for v in frame):
+            raise ValueError("every frame must be a list of the same number of integer samples (32-bit range)")
+
+
 def rows_for(m: dict) -> tuple[list[tuple], dict]:
-    """(ehg_raw rows, the ehg_pkt fields without t_ingest_rx/t_db_ack) for one message. Raises KeyError/ValueError/TypeError if the message is malformed."""
+    """(ehg_raw rows, the ehg_pkt fields without t_ingest_rx/t_db_ack) for one message. Raises ValueError if the message is malformed in any way."""
+    validate(m)
     node, seq, fs = m["node_id"], int(m["seq"]), float(m["fs_hz"])
     raw = [(ts(m["t_inject_host"] + i / fs), node, str(m["record_id"]), seq, int(m["frame_idx"]) + i, ch, int(v))
            for i, frame in enumerate(m["samples"]) for ch, v in enumerate(frame)]
@@ -54,6 +99,7 @@ class PgStore:
         """Insert raw rows, stamp t_db_ack, insert packet rows, COMMIT. Returns (raw rows newly written, packet rows newly written)."""
         if self._conn is None or self._conn.closed:
             self._conn = self._connect()
+        import psycopg
         try:
             with self._conn.transaction():
                 cur = self._conn.cursor()
@@ -68,6 +114,8 @@ class PgStore:
                                           pkt["t_inject_host"], pkt["t_gw_rx"], pkt["t_mqtt_pub"], t_rx, t_ack))
                     new_pkt += cur.rowcount
             return new_raw, new_pkt
+        except psycopg.errors.DataError as e:  # the transaction was rolled back; the connection is fine, the DATA is not
+            raise BadData(f"{type(e).__name__}: {e}") from e
         except Exception:
             try:
                 self._conn.close()
@@ -97,6 +145,27 @@ class Writer:
         if "degraded" in self.m:
             self.m["degraded"].set(value)
 
+    async def _one_by_one(self, good, batch) -> None:
+        """After a data error: store each message alone, terminate only the ones the database refuses, acknowledge the rest. A connection problem still means 'degraded'."""
+        for i, (msg, item) in enumerate(zip(good, batch)):
+            try:
+                new_raw, new_pkt = await asyncio.to_thread(self.store.write, [item])
+            except BadData as e:
+                self._inc("terminated")
+                self.log(f"writer: message on {msg.subject} rejected by the database ({e}); terminated (see the dead-letter advisory)")
+                await msg.term()
+                continue
+            except Exception as e:  # noqa: BLE001
+                self._inc("db_errors")
+                self._degraded(1)
+                self.log(f"writer: DEGRADED while retrying singly ({type(e).__name__}: {e}); {len(good) - i} messages kept in NATS")
+                for rest in good[i:]:
+                    await rest.nak(delay=self._backoff[0])
+                return
+            self._inc("rows", new_raw)
+            self._inc("duplicate_packets", 1 - new_pkt)
+            await msg.ack()
+
     async def process(self, msgs) -> None:
         """Parse, write and acknowledge one batch. Unparseable -> term; database error -> nak with backoff, nothing acknowledged."""
         batch, good = [], []
@@ -106,7 +175,7 @@ class Writer:
                 self._inc("redelivered")
             try:
                 raw, pkt = rows_for(json.loads(msg.data))
-            except (ValueError, KeyError, TypeError) as e:
+            except Exception as e:  # noqa: BLE001  (ANY failure to understand one message ends that message, never the loop or its neighbours)
                 self._inc("terminated")
                 self.log(f"writer: cannot parse a message on {msg.subject} ({type(e).__name__}: {e}); terminated (see the dead-letter advisory)")
                 await msg.term()
@@ -117,6 +186,10 @@ class Writer:
             return
         try:
             new_raw, new_pkt = await asyncio.to_thread(self.store.write, batch)
+        except BadData as e:
+            self.log(f"writer: a batch of {len(good)} was rejected by the database as bad data ({e}); retrying one message at a time")
+            await self._one_by_one(good, batch)
+            return
         except Exception as e:  # noqa: BLE001  (any database failure: keep the messages, say so)
             self._inc("db_errors")
             self._degraded(1)

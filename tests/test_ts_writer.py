@@ -168,3 +168,65 @@ def test_sql_two_batches_overlapping_store_the_union_once(store):
     store.write(batch_of(message(seq=1), message(seq=2)))
     store.write(batch_of(message(seq=2), message(seq=3)))
     assert count(store, "ehg_pkt") == 3 and count(store, "ehg_raw") == 90
+
+
+# ---------------------------------------------------------------- poison messages (automated security review, 2026-11-03)
+
+POISON = [
+    {"fs_hz": 0}, {"fs_hz": -20}, {"fs_hz": float("nan")}, {"fs_hz": 10**9}, {"t_inject_host": 1e30}, {"t_inject_host": float("nan")}, {"t_inject_host": float("inf")},
+    {"t_inject_host": 5.0}, {"t_gw_rx": "soon"}, {"seq": 2**40}, {"seq": 1.5}, {"seq": True}, {"seq": "40"}, {"t_inject": -1}, {"t_inject": 2**33}, {"flags": 999},
+    {"node_id": "bad.node"}, {"node_id": "x" * 65}, {"node_id": "a\x00b"}, {"node_id": 7}, {"record_id": "r" * 100},
+    {"samples": [[1.5, 2, 3]]}, {"samples": [[True, 2, 3]]}, {"samples": [[2**40, 0, 0]]}, {"samples": [[1, 2], [1, 2, 3]]}, {"samples": []}, {"samples": [[0] * 65]},
+    {"samples": [[0, 0, 0]] * 20000},
+]
+
+
+@pytest.mark.parametrize("bad", POISON, ids=lambda b: str(b)[:40])
+def test_every_kind_of_malformed_message_is_terminated_and_never_stops_its_neighbours(bad):
+    store, logs = FakeStore(), []
+    w = Writer(store, log=logs.append)
+    broken = message(seq=40)
+    broken.update(bad)
+    poison, good = FakeMsg(broken), FakeMsg(message(seq=41))
+    run(w, [poison, good])
+    assert poison.calls == ["term"] and good.calls == ["ack"], "only the offending message is terminated"
+    assert w.counters["terminated"] == 1 and len(store.batches) == 1 and len(store.batches[0]) == 1
+
+
+def test_not_a_json_object_is_terminated_too():
+    w = Writer(FakeStore(), log=lambda *_: None)
+    msgs = [FakeMsg(None, raw=b"[1, 2, 3]"), FakeMsg(None, raw=b"null"), FakeMsg(None, raw=b"\xff\xfe"), FakeMsg(None, raw=b'{"node_id": 1}')]
+    run(w, msgs)
+    assert [m.calls for m in msgs] == [["term"]] * 4
+
+
+class OneBadRow(FakeStore):
+    """Rejects any batch containing seq 13 as bad DATA (not a connection problem)."""
+
+    def write(self, batch):
+        from backend.ts_writer.writer import BadData
+        if any(pkt["seq"] == 13 for _, pkt, _ in batch):
+            raise BadData("value out of range")
+        return super().write(batch)
+
+
+def test_a_data_error_is_retried_one_message_at_a_time_and_only_the_bad_one_is_terminated():
+    store, logs = OneBadRow(), []
+    w = Writer(store, log=logs.append)
+    msgs = [FakeMsg(message(seq=s)) for s in (12, 13, 14)]
+    run(w, msgs)
+    assert [m.calls for m in msgs] == [["ack"], ["term"], ["ack"]], "the neighbours of the poison message are stored and acknowledged"
+    assert w.counters["degraded"] == 0 and w.counters["db_errors"] == 0, "bad data is not an outage"
+    assert any("rejected by the database" in str(x) for x in logs)
+
+
+def test_sql_data_error_becomes_baddata_and_the_connection_stays_usable(store):
+    from backend.ts_writer.writer import BadData
+    bad = message(seq=2)
+    bad["samples"][0][0] = 2**40  # bypasses rows_for validation on purpose: the database itself must refuse and the store must say "bad data"
+    raw, pkt = rows_for(message(seq=2))
+    raw[0] = raw[0][:6] + (2**40,)
+    with pytest.raises(BadData):
+        store.write([(raw, pkt, 1.0)])
+    assert store.write(batch_of(message(seq=1))) == (30, 1)
+    assert count(store, "ehg_raw") == 30

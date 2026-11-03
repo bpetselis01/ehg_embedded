@@ -7,6 +7,7 @@
   `backend/ingest/ingest.py` gains `INGEST_SOURCE=jetstream` (the influx-writer), `backend/platform.Dockerfile` and `backend/docker-compose.platform.yml` (profile `platform`; default stack unchanged, checked with `docker compose config`), `tests/conftest.py` (throwaway local PostgreSQL).
 - **Tests added:** bridge ack ordering and crash-redelivery with a fake JetStream, writer rows/idempotency/atomicity on a real PostgreSQL 14, outage handling, loud failure of the TimescaleDB revision without the extension, backend_client shapes, parity checks for every kind of difference.
 - **Mistake caught:** I wrote a full-length image digest for NATS in the platform override from a 12-character prefix, i.e. an invented value; replaced with the real registry digest before committing. A neighbouring test claimed more than it checked and was rewritten with exact expectations.
+- **Automated security review of the Unit 6 commit, 4 findings (poison messages in the writer, per-message data errors, subject injection in the bridge, the Influx writer loop), all fixed with tests first** (details in [security.md](security.md)). Migrations are now 0001 plain tables, 0002 triage and registry (needs the `ehg_triage` role), 0003 TimescaleDB.
 - **NOT done / not verified:** anything against a real NATS server or TimescaleDB; the parity proof and the data-platform memory on the VM (Checkpoint 4); the `timescaledb-ha` init script; the platform images were never built.
 
 ## 2026-11-03: Unit 5, Oracle runbook (written; NOT run: it is yours to execute) ([deployment.md](deployment.md))

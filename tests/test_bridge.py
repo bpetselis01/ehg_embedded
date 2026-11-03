@@ -136,3 +136,44 @@ def test_mqtt_env_defaults_and_refusal_of_half_tls():
     for env in ({"MQTT_TLS": "1"}, {"MQTT_CA": "x"}, {"MQTT_TLS": "1", "MQTT_CA": "a", "MQTT_CERT": "b"}):
         with pytest.raises(SystemExit):
             mqtt_settings(env)
+
+
+# ---------------------------------------------------------------- subject injection and field checks (automated security review, 2026-11-03)
+
+@pytest.mark.parametrize("node", ["a.b", "EHG-1 x", ">", "*", "EHG-1\n", "x" * 65, "", "EHG.PKT.EHG-1", "ünï"])
+def test_a_node_id_that_could_change_the_subject_is_refused_and_kept_under_bad(node):
+    js, acks = FakeJetStream(), []
+    b = Bridge(js.publish)
+    deliver(b, "ehg/EHG-1/pkt", json.dumps({"node_id": node, "seq": 1, "t_inject": 2}).encode(), acks)
+    assert [s for s, _, _ in js.stored] == ["EHG.BAD.invalid_node"] and len(acks) == 1 and b.counters["bad"] == 1
+
+
+def test_the_node_in_the_payload_must_match_the_node_in_the_topic():
+    js, acks = FakeJetStream(), []
+    b = Bridge(js.publish)
+    deliver(b, "ehg/EHG-1/pkt", packet(node="EHG-2"), acks)
+    assert [s for s, _, _ in js.stored] == ["EHG.BAD.node_mismatch"] and len(acks) == 1
+
+
+@pytest.mark.parametrize("seq, t_inject", [("40", 1), (1.5, 1), (True, 1), (None, 1), (1, "9"), (1, 2.5), (2**40, 1), (-1, 1), (1, -5), (1, 2**33)])
+def test_sequence_and_tick_fields_must_be_integers_in_range(seq, t_inject):
+    js, acks = FakeJetStream(), []
+    b = Bridge(js.publish)
+    deliver(b, "ehg/EHG-1/pkt", json.dumps({"node_id": "EHG-1", "seq": seq, "t_inject": t_inject}).encode(), acks)
+    assert [s for s, _, _ in js.stored] == ["EHG.BAD.invalid_field"] and len(acks) == 1
+
+
+@pytest.mark.parametrize("gateway", ["gw.1", "gw 1", ">", "*", "g" * 65])
+def test_a_gateway_id_that_could_change_the_subject_is_refused(gateway):
+    js, acks = FakeJetStream(), []
+    b = Bridge(js.publish)
+    deliver(b, f"ehg/_gw/{gateway}/status", b"online", acks)
+    assert [s for s, _, _ in js.stored] == ["EHG.BAD.invalid_gateway"] and len(acks) == 1
+
+
+def test_valid_ids_with_dashes_and_underscores_still_route_normally():
+    js, acks = FakeJetStream(), []
+    b = Bridge(js.publish)
+    deliver(b, "ehg/SIM-0000/pkt", packet(node="SIM-0000"), acks)
+    deliver(b, "ehg/_gw/ehg-gw-01/status", b"online", acks)
+    assert [s for s, _, _ in js.stored] == ["EHG.PKT.SIM-0000", "EHG.GW.ehg-gw-01"]

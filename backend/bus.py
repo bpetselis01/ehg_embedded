@@ -3,7 +3,7 @@
 PURPOSE: One definition of the internal bus (decision 0012), so the services cannot disagree about subject names, duplicate suppression or redelivery limits.
 INPUT: a decoded packet message (the JSON the gateway publishes, docs/interface-spec.md 4).
   e.g. {"node_id": "EHG-93C0", "seq": 40, "t_inject": 655360, ...}
-OUTPUT: subject_for(msg) -> "EHG.PKT.EHG-93C0"; msg_id(msg) -> "EHG-93C0:40:655360" (the Nats-Msg-Id header); stream_config() and consumer_config(name) for nats-py.
+OUTPUT: valid_id(x) / valid_int(x, lo, hi) (input checks shared with the bridge and the writer: a message that fails them is never turned into a subject); subject_for(msg) -> "EHG.PKT.EHG-93C0"; msg_id(msg) -> "EHG-93C0:40:655360" (the Nats-Msg-Id header); stream_config() and consumer_config(name) for nats-py.
   Subjects: EHG.PKT.<node> = packets, EHG.GW.<gateway> = gateway status (online/offline), EHG.BAD.<reason> = messages that could not be understood (kept, never dropped).
 HOW: Packets are keyed node:seq:t_inject, the same key ingest uses to drop duplicates, so JetStream's duplicate window is a second layer of the same rule.
   The stream is on FILE storage with age and size limits. Consumers are durable, pull-based, explicit-ack, 30 s ack wait, at most 5 deliveries; a message that hits the
@@ -13,6 +13,8 @@ ROLE IN THESIS: The seam between the edge broker and the stores (docs/decisions/
 BEFORE -> AFTER: Before: backend/ingest/ingest.py subscribed to MQTT directly. After: the bridge puts every message on this stream; any number of consumers read it.
 """
 
+import re
+
 from nats.js.api import AckPolicy, ConsumerConfig, DeliverPolicy, DiscardPolicy, RetentionPolicy, StorageType, StreamConfig
 
 STREAM = "EHG"
@@ -21,6 +23,19 @@ DEAD_LETTER_ADVISORY = f"$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.{STREAM}.>"
 MAX_DELIVER, ACK_WAIT_S = 5, 30
 DUPLICATE_WINDOW_S = 3600  # an hour: a gateway replaying after an outage resends within this window
 MAX_AGE_S, MAX_BYTES = 7 * 86400, 8 * 2**30  # a week or 8 GB of replay history; the stores hold the long-term data
+
+
+ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")  # one NATS subject token: no dots, wildcards, spaces or control characters
+
+
+def valid_id(value) -> bool:
+    """True for a node or gateway id that is safe to put in a NATS subject (and in a database column)."""
+    return isinstance(value, str) and ID_RE.fullmatch(value) is not None
+
+
+def valid_int(value, lo: int, hi: int) -> bool:
+    """True for a real integer (not a bool, not a float, not a string) within lo..hi."""
+    return isinstance(value, int) and not isinstance(value, bool) and lo <= value <= hi
 
 
 def subject_for(msg: dict) -> str:

@@ -5,7 +5,7 @@ PURPOSE: Decouple the edge broker from the stores. Mosquitto keeps the message u
 INPUT: MQTT topics ehg/+/pkt (QoS 1, persistent session, manual acknowledgement) and ehg/_gw/+/status; MQTT_* and NATS_URL environment variables.
   e.g. topic ehg/EHG-93C0/pkt, payload {"node_id": "EHG-93C0", "seq": 40, "t_inject": 655360, ...}
 OUTPUT: JetStream messages: EHG.PKT.EHG-93C0 with header Nats-Msg-Id: EHG-93C0:40:655360; EHG.GW.<gateway> for status; EHG.BAD.<reason> for anything unreadable
-  (stored, not dropped). A /metrics page (Prometheus text) on BRIDGE_METRICS_PORT (default 9201) with counters rx, published, duplicates, bad, errors.
+  (stored, not dropped): not_json, missing_fields, invalid_node, node_mismatch, invalid_field, invalid_gateway, unexpected_topic. A /metrics page (Prometheus text) on BRIDGE_METRICS_PORT (default 9201) with counters rx, published, duplicates, bad, errors.
   e.g. counters {"rx": 3, "published": 2, "duplicates": 1, "bad": 0, "errors": 0} after one message arrived twice.
 HOW: handle() publishes to JetStream, waits for the PubAck, and only then calls ack(). If publishing fails, ack() is not called, the exception is counted and re-raised, so the
   MQTT client never acknowledges and the broker redelivers. If the process dies between the PubAck and ack(), the redelivery carries the same Nats-Msg-Id and JetStream drops it
@@ -59,14 +59,23 @@ class Bridge:
         """Subject and headers for a topic/payload; unreadable packets go to EHG.BAD.<reason> instead of being dropped."""
         parts = topic.split("/")
         if len(parts) == 4 and parts[:2] == ["ehg", "_gw"] and parts[3] == "status":
+            if not bus.valid_id(parts[2]):
+                return f"{bus.BAD_PREFIX}.invalid_gateway", {}
             return f"{bus.GW_PREFIX}.{parts[2]}", {}
         if len(parts) == 3 and parts[0] == "ehg" and parts[2] == "pkt":
             try:
                 msg = json.loads(payload)
-                if not isinstance(msg, dict) or any(k not in msg for k in REQUIRED):
-                    return f"{bus.BAD_PREFIX}.missing_fields", {}
-            except ValueError:
+            except ValueError:  # includes bad UTF-8
                 return f"{bus.BAD_PREFIX}.not_json", {}
+            if not isinstance(msg, dict) or any(k not in msg for k in REQUIRED):
+                return f"{bus.BAD_PREFIX}.missing_fields", {}
+            # the node id becomes part of a subject, so it must be exactly one safe token, and it must be the node the topic names
+            if not bus.valid_id(msg["node_id"]) or not bus.valid_id(parts[1]):
+                return f"{bus.BAD_PREFIX}.invalid_node", {}
+            if msg["node_id"] != parts[1]:
+                return f"{bus.BAD_PREFIX}.node_mismatch", {}
+            if not (bus.valid_int(msg["seq"], 0, 2**31 - 1) and bus.valid_int(msg["t_inject"], 0, 2**32 - 1)):
+                return f"{bus.BAD_PREFIX}.invalid_field", {}
             return bus.subject_for(msg), {"Nats-Msg-Id": bus.msg_id(msg)}
         return f"{bus.BAD_PREFIX}.unexpected_topic", {}
 

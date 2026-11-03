@@ -112,6 +112,24 @@ def mqtt_settings(env=os.environ):
     return host, int(env.get("MQTT_PORT", 8883)), ctx
 
 
+async def consume(msgs) -> None:
+    """Store each message; acknowledge only after the (synchronous) InfluxDB write returned. One message can never stop the others:
+    a message that can never be stored is terminated, a transient failure (InfluxDB down) is retried later."""
+    import asyncio
+
+    for m in msgs:
+        try:
+            await asyncio.to_thread(handle, m.data)
+        except (ValueError, KeyError, TypeError, AttributeError) as e:  # not a usable packet: redelivering it would never help
+            print(f"ingest: cannot store a message ({type(e).__name__}: {e}); terminated")
+            await m.term()
+        except Exception as e:  # noqa: BLE001  (InfluxDB unreachable and the like)
+            print(f"ingest: write failed ({type(e).__name__}: {e}); will retry")
+            await m.nak(delay=5)
+        else:
+            await m.ack()
+
+
 async def run_jetstream() -> None:
     """INGEST_SOURCE=jetstream: read the internal bus instead of MQTT (the "influx-writer" of decision 0012, used for the parity proof).
 
@@ -131,9 +149,7 @@ async def run_jetstream() -> None:
             msgs = await sub.fetch(50, timeout=1)
         except nats.errors.TimeoutError:
             continue
-        for m in msgs:
-            await asyncio.to_thread(handle, m.data)  # the InfluxDB write is synchronous; acknowledge only after it returned
-            await m.ack()
+        await consume(msgs)
 
 
 def main():

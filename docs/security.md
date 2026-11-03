@@ -69,6 +69,15 @@ Each later unit adds its boundary and updates the Status column. Nothing here sa
 - **Still true, and not fixed:** the services' passwords are environment variables of those services (visible in `docker inspect` to anyone in the `docker` group, and in the container's `/proc/<pid>/environ`); Docker secrets or `_FILE` variables would be better where the image supports them. The `ehg` service user is in the `docker` group, which is root-equivalent on the VM.
   Hardening flags (`cap_drop`, `read_only`) have never been run.
 
+## Data platform (Unit 6): findings of the automated review, 2026-11-03
+
+All four were real, all fixed with failing tests first (`tests/test_ts_writer.py`, `test_bridge.py`, `test_platform_compose.py`):
+- **Poison messages in the writer (HIGH):** only three exception types were caught per message, so `fs_hz: 0` (a ZeroDivisionError), an absurd timestamp (OverflowError) or similar could escape and stall the loop for everyone. Now ANY failure on one message terminates that message only, and `rows_for` validates every field it uses first (safe node id, integers in range, finite times between 2000 and 2100, 1 to 10,000 frames of 1 to 64 equal-length integer channels in the 32-bit range).
+- **One bad row stalling a whole batch (MEDIUM):** a database DATA error used to be treated like an outage (nak the batch, retry forever). Now it is told apart (`BadData`): the batch is retried one message at a time and only the refused message is terminated; a real connection problem is still "degraded".
+- **Subject injection in the bridge (MEDIUM):** `node_id` was put straight into a NATS subject, so a value containing `.`, `>` or `*` could publish onto subjects it should not. Node and gateway ids must now be one safe token (`[A-Za-z0-9_-]{1,64}`), the payload node must equal the node in the MQTT topic, `seq` and `t_inject` must be real integers in range; anything else is kept under `EHG.BAD.<reason>` and acknowledged.
+- **The Influx writer's loop (MEDIUM):** one failing message stopped the loop. Now each message is isolated: unusable ones are terminated, a transient InfluxDB error is retried after 5 s.
+- Still open: a malformed MQTT message to the ORIGINAL `ingest` (MQTT path) is swallowed by paho's callback handling as before; the bridge's `EHG.BAD.*` messages are kept but nothing alerts on them yet (Unit 8's dead-letter surfacing).
+
 ## Known limit: a gateway can publish for any node id
 
 `topic write ehg/+/pkt` lets an authenticated gateway publish packets labelled with another node's id. Pinning a gateway to its nodes needs either a gateway id in the topic or message (a change to the documented `ehg/<node>/pkt` interface that `eval/` and the recorded runs rely on) or a check against a registry of which gateway serves which node.

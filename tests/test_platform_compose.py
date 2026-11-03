@@ -84,3 +84,32 @@ def test_ingest_reads_jetstream_only_when_asked_and_keeps_the_mqtt_default(monke
 
 def test_ingest_dockerfile_has_the_nats_client():
     assert "nats-py" in (ROOT / "backend/ingest/Dockerfile").read_text()
+
+
+def test_a_poison_message_in_the_influx_writer_loop_is_terminated_and_a_transient_error_is_retried(monkeypatch):
+    ing = load_ingest(monkeypatch)
+    from types import SimpleNamespace
+    calls = []
+
+    class M:
+        def __init__(self, data):
+            self.data = data
+
+        async def ack(self):
+            calls.append((self.data, "ack"))
+
+        async def term(self):
+            calls.append((self.data, "term"))
+
+        async def nak(self, delay=None):
+            calls.append((self.data, ("nak", delay)))
+
+    def fake_handle(payload):
+        if payload == b"poison":
+            raise KeyError("node_id")
+        if payload == b"influx-down":
+            raise ConnectionError("influx unreachable")
+    monkeypatch.setattr(ing, "handle", fake_handle)
+    asyncio.run(ing.consume([M(b"poison"), M(b"influx-down"), M(b"fine")]))
+    assert calls == [(b"poison", "term"), (b"influx-down", ("nak", 5)), (b"fine", "ack")], "one message's failure must not stop the others"
+    assert SimpleNamespace is not None
