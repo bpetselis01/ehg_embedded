@@ -1,5 +1,15 @@
 # Progress log
 
+## 2026-11-03: baseline before enterprise work ([claude-code-prompt-thesis-b-hardening.md](claude-code-prompt-thesis-b-hardening.md), Unit 0)
+
+- **Frozen:** tag `baseline-pre-enterprise` on `9ba4ad7`; work happens on `feat/enterprise-topology` (never `main`, not pushed).
+  `uv run pytest -q`: 81 passed on the baseline, 83 after adding [`tests/test_handoff.py`](../tests/test_handoff.py).
+- **Resume pin:** [`handoff.md`](handoff.md) is the session-limit pin (overwritten each session, never a history).
+- **No-hardware baseline run (`--simulate 1 --sim-loss 0.01`, `eval/integrity.py`, `eval/latency.py`) NOT done:** the Docker daemon
+  was not running and Docker Desktop is not started or restarted from here (it hosts another project). Run it before Unit 2 merges.
+- **6 h TPEHG soak (H2) and first H3 (≥ 8 boards): not done, skipped for now** (Byron's decision, 2026-11-03). Consequence: there is
+  no soak on the untouched baseline commit, so later units could contaminate a soak run on this branch. Unit 16 repeats both on the cloud chain.
+
 ## 2026-10-26: documentation made correct, traceable and checked ([plans/codebase-docs-plan.md](plans/codebase-docs-plan.md))
 
 - **Stale facts fixed:** `main.c` header gave the old serial speed (it is 460800), the codebase guide said the firmware never holds
