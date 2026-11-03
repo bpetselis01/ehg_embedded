@@ -8,7 +8,7 @@ OUTPUT: InfluxDB bucket `ehg` (docs/interface-spec.md 5), 2 measurements:
   ehg_raw  1 point per frame. time = injection time of that frame (host clock).
            tags node_id, record_id; fields c0..cN (int, raw ADC units), seq, frame_idx
   ehg_pkt  1 point per packet. time = injection time of frame 0.
-           fields seq, n_frames, retrans, t_inject_dev (raw ticks, offline drift fit), t_inject_host,
+           fields seq, n_frames, retrans, replayed (sent again from a gateway outbox), t_inject_dev (raw ticks, offline drift fit), t_inject_host,
            t_gw_rx, t_mqtt_pub, t_ingest_rx, t_db_ack
            t_db_ack = stamped after the synchronous ehg_raw write returns = samples queryable = H1 end point.
   e.g. that message as InfluxDB rows (line protocol: measurement,tags fields time-in-ns; i = integer).
@@ -80,7 +80,7 @@ def on_message(client, userdata, msg):
     t_db_ack = time.time()
     write.write(BUCKET, record=(
         Point("ehg_pkt").tag("node_id", m["node_id"])
-        .field("seq", m["seq"]).field("n_frames", len(m["samples"])).field("retrans", bool(m["flags"] & 1))
+        .field("seq", m["seq"]).field("n_frames", len(m["samples"])).field("retrans", bool(m["flags"] & 1)).field("replayed", bool(m.get("replayed", False)))
         .field("t_inject_dev", m["t_inject"]).field("t_inject_host", m["t_inject_host"]).field("t_gw_rx", m["t_gw_rx"])
         .field("t_mqtt_pub", m["t_mqtt_pub"]).field("t_ingest_rx", t_ingest_rx).field("t_db_ack", t_db_ack)
         .time(ns(m["t_inject_host"]), WritePrecision.NS)))

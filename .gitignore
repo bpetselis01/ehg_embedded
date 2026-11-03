@@ -33,3 +33,6 @@ backend/pki/
 *.key
 *.pem
 *.p12
+
+# gateway outbox (queued packets on disk)
+gateway/outbox*.db*

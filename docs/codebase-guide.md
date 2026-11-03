@@ -140,6 +140,7 @@ Step by step:
 | [`gateway/packet.py`](../gateway/packet.py) | packet byte layout (copy 2 of 2) |
 | [`gateway/tracking.py`](../gateway/tracking.py) | missing-packet tracker and clock converter |
 | [`gateway/gateway.py`](../gateway/gateway.py) | Bluetooth (or simulated) → MQTT bridge |
+| [`gateway/outbox.py`](../gateway/outbox.py) | optional on-disk queue (`--outbox`): a packet is deleted only when the broker confirms it |
 | [`backend/docker-compose.yml`](../backend/docker-compose.yml) | starts broker, database, ingest and Grafana |
 | [`backend/docker-compose.cloud.yml`](../backend/docker-compose.cloud.yml) | optional override: broker on 8883 with TLS 1.3 and client certificates, ingest presents a certificate (no 1883) |
 | [`backend/mosquitto/mosquitto.tls.conf`](../backend/mosquitto/mosquitto.tls.conf), [`acl`](../backend/mosquitto/acl) | the TLS broker settings and the per-identity topic permissions used by the override |

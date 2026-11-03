@@ -6,6 +6,7 @@
   uv run python -m gateway.gateway --simulate 3    # 3 software nodes, no BLE (backend tests, H3 load)
   uv run python -m gateway.gateway --simulate 1 --mqtt-tls --ca backend/pki/ca-chain.crt \\
       --cert backend/pki/clients/ehg-gw-01.crt --key backend/pki/clients/ehg-gw-01.key   # cloud profile: TLS 1.3 + client cert, port 8883
+  uv run python -m gateway.gateway --outbox gateway/outbox.db --gateway-id ehg-gw-01   # survive broker outages and restarts (docs/decisions/0009)
 
 PURPOSE: Laptop-side bridge. Packets from the board (Bluetooth) -> database side (MQTT).
 INPUT: 1 BLE notification per packet = bytes in the wire format (header + int16 samples + CRC;
@@ -153,8 +154,20 @@ def tls_context(ca: str, cert: str, key: str) -> ssl.SSLContext:
     return ctx
 
 
+class PahoTransport:
+    """The outbox's view of paho: send() hands one QoS 1 message over and returns its message id (the PUBACK token), or None if paho refused."""
+
+    def __init__(self, client):
+        self.client = client
+
+    def send(self, topic, payload):
+        """Publish at QoS 1; the id comes back to the outbox in on_publish when the broker acknowledges."""
+        info = self.client.publish(topic, payload, qos=1)
+        return info.mid if info.rc == 0 else None
+
+
 def make_publisher(args):
-    """Return (publish, close). Publishes to MQTT, or just prints when --no-mqtt."""
+    """Return (publish, close). Publishes to MQTT, or just prints when --no-mqtt. With --outbox every message goes through a disk queue first."""
     if args.no_mqtt:
         def show(node_id, msg):
             print(f"{node_id} seq={msg['seq']} frame={msg['frame_idx']} first={msg['samples'][0]}")
@@ -162,20 +175,67 @@ def make_publisher(args):
     import paho.mqtt.client as mqtt
     c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"ehg-gateway-{int(time.time())}")
     c.max_queued_messages_set(0)  # unbounded: never drop at the gateway
+    status_topic = f"ehg/_gw/{args.gateway_id}/status" if args.gateway_id else None
+    if status_topic:
+        c.will_set(status_topic, "offline", qos=1, retain=True)  # the broker publishes this if we vanish without saying goodbye
+    ob = None
+    if args.outbox:
+        from gateway.outbox import Outbox
+        ob = Outbox(args.outbox, PahoTransport(c), max_bytes=int(args.outbox_max_mb * 2**20))
+        c.reconnect_delay_set(1, 60)  # paho doubles the wait from 1 s up to 60 s (it offers no jitter option)
+        c.on_publish = lambda cl, u, mid, rc, p: ob.acked(mid)
     if args.mqtt_tls:
         c.tls_set_context(tls_context(args.ca, args.cert, args.key))
         # paho runs the TLS handshake inside its network thread, so a refused certificate raises nowhere: say so out loud
-        c.on_connect = lambda cl, u, f, rc, p: print(f"[mqtt] connected over TLS ({rc})" if not rc.is_failure else f"[mqtt] broker refused the connection: {rc}")
         c.on_connect_fail = lambda cl, u: print("[mqtt] connection failed (TLS handshake or network); retrying. Check --ca/--cert/--key, the broker name and the CRL")
-        c.on_disconnect = lambda cl, u, f, rc, p: print(f"[mqtt] disconnected ({rc})")
-    c.connect(args.mqtt, args.mqtt_port)
+    if args.mqtt_tls or ob or status_topic:
+        def on_connect(cl, u, f, rc, p):
+            if args.mqtt_tls:
+                print(f"[mqtt] connected over TLS ({rc})" if not rc.is_failure else f"[mqtt] broker refused the connection: {rc}")
+            if rc.is_failure:
+                return
+            if status_topic:
+                cl.publish(status_topic, "online", qos=1, retain=True)
+            if ob:
+                print(f"[outbox] connected; {ob.pending()} waiting on disk")
+                ob.set_connected(True)
+
+        def on_disconnect(cl, u, f, rc, p):
+            if args.mqtt_tls:
+                print(f"[mqtt] disconnected ({rc})")
+            if ob:
+                ob.set_connected(False)
+                print(f"[outbox] link down; {ob.pending()} on disk, kept until the broker confirms them")
+        c.on_connect, c.on_disconnect = on_connect, on_disconnect
+    if ob:
+        c.connect_async(args.mqtt, args.mqtt_port)  # a broker that is down at start-up must not stop the gateway: paho keeps retrying
+    else:
+        c.connect(args.mqtt, args.mqtt_port)
     c.loop_start()
 
     def publish(node_id, msg):
+        topic = f"ehg/{node_id}/pkt"
+        if ob:
+            ob.add(node_id, msg["seq"], msg["t_inject"], topic, json.dumps(msg))  # t_mqtt_pub is stamped when it is actually sent
+            return
         msg["t_mqtt_pub"] = time.time()
-        c.publish(f"ehg/{node_id}/pkt", json.dumps(msg), qos=1)
+        c.publish(topic, json.dumps(msg), qos=1)
 
-    return publish, c.loop_stop
+    def close():
+        if status_topic or ob:
+            if status_topic:
+                try:
+                    c.publish(status_topic, "offline", qos=1, retain=True).wait_for_publish(2)  # a clean exit does not trigger the last will
+                except (RuntimeError, ValueError):
+                    pass
+            c.loop_stop()
+            if ob:
+                print(f"[outbox] closing: {ob.stats()}")
+                ob.close()
+        else:
+            c.loop_stop()
+
+    return publish, close
 
 
 # ---------------------------------------------------------------- BLE source
@@ -277,6 +337,9 @@ def parse_args(argv=None):
     ap.add_argument("--ca", help="CA chain that signed the broker certificate (backend/pki/ca-chain.crt)")
     ap.add_argument("--cert", help="this gateway's client certificate (backend/pki/clients/ehg-gw-01.crt)")
     ap.add_argument("--key", help="the private key of --cert")
+    ap.add_argument("--outbox", metavar="PATH", help="keep every message in this SQLite file until the broker confirms it (off by default); e.g. gateway/outbox.db")
+    ap.add_argument("--outbox-max-mb", type=float, default=512, help="size cap of the outbox; over it the OLDEST unsent packets are dropped, loudly")
+    ap.add_argument("--gateway-id", help="publish retained online/offline status on ehg/_gw/<id>/status (with a last will); must equal the certificate CN under TLS")
     ap.add_argument("--no-mqtt", action="store_true")
     ap.add_argument("--simulate", type=int, default=0, help="N software nodes instead of BLE")
     ap.add_argument("--sim-record", default="data/converted/tpehgdb/tpehg1007.npz")
