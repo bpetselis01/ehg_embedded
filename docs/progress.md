@@ -1,5 +1,9 @@
 # Progress log
 
+## 2026-11-04: `.dockerignore` for the repository-root build context
+
+- **Added:** `.dockerignore` (keys, certificates, `.env`, `backend/pki`, `deploy/secrets`, data, the git history and local tooling are not sent to the Docker builder), and a test that it lists those and does not exclude anything the Dockerfile copies. `CLAUDE.md` is listed in `.gitignore` in this repository, so my edit to it (three wire-format copies) is local and not in any commit.
+
 ## 2026-11-04: front-door review by reading (CSP vs Keycloak and Grafana; Grafana sub-path), fixed
 
 - **Found (never run, from knowledge of how the products behave, so not verified):** (1) the Caddyfile put one strict Content-Security-Policy on EVERY response; Caddy's `header` replaces what the upstream sent, so Keycloak's sign-in pages and Grafana (which need inline scripts and styles and send their own policy) would very probably have broken. The policy is now a snippet applied only to what the triage service serves (the page, `/api`, `/fhir`).

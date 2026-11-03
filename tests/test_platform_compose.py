@@ -176,3 +176,19 @@ def test_every_module_the_services_import_is_in_the_image_or_installed_into_it()
             else:
                 assert top in installed, f"{f} imports {top}, which the image does not install"
     assert len(seen) >= 15, seen
+
+
+def test_the_build_context_excludes_secrets_and_keys_but_not_what_the_image_copies():
+    """The build context is the repository root; a .dockerignore keeps keys, secrets and local data out, and must not exclude anything the Dockerfile COPYs."""
+    import fnmatch
+    ignore = [l.strip() for l in (ROOT / ".dockerignore").read_text().splitlines() if l.strip() and not l.startswith("#")]
+    for must in (".git", "data", "**/*.key", "**/*.pem", "**/.env", "backend/pki", "deploy/secrets", ".venv"):
+        assert must in ignore, f".dockerignore must list {must}"
+
+    def ignored(path: str) -> bool:
+        return any(fnmatch.fnmatch(path, pat) or fnmatch.fnmatch(path, pat.replace("**/", "")) or path == pat or path.startswith(pat.rstrip("/") + "/") for pat in ignore)
+    for f in image_files():
+        assert not ignored(f), f"{f} is copied by the Dockerfile but excluded by .dockerignore"
+    for secret in ("backend/pki/clients/ehg-bridge.key", "deploy/secrets/secrets.sops.yaml", "backend/.env", "data/converted/tpehgdb/tpehg1007.npz", "ca/x.pem"):
+        assert ignored(secret), f"{secret} must not reach the build context"
+
