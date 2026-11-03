@@ -79,7 +79,7 @@
   `tests/test_ios_wire_format.py` (vectors are current; Python parses them; Swift constants, offsets and check order match Python; opt-in run of `swift test`), and the wire-format rule in CLAUDE.md now names three copies.
 - **Tested:** `swift test` (command-line SwiftPM, Swift 6.4, 6 tests, all pass): every vector decodes to identical values and re-encodes to identical bytes; every bad vector is refused for the same reason; every truncation and every single-bit flip of a valid packet is refused; CRC check value 0x29B1.
   No Xcode project was opened, no simulator or phone was used.
-- **NOT done (needs Byron, an Apple ID and the iPhone):** the app target `ios/EHGGateway` (CoreBluetooth, MQTT client, background behaviour), gap tracking and RESEND in Swift, the feasibility spike and `docs/ios-gateway-feasibility.md`, free-signing limits, any cellular measurement. The Swift side of `GapTracker` is not ported.
+- **NOT done (needs Byron, an Apple ID and the iPhone):** the app target `ios/EHGGateway` (CoreBluetooth, MQTT client, background behaviour), gap tracking and RESEND in Swift, the feasibility spike and `docs/ios-gateway-feasibility.md`, free-signing limits, any cellular measurement. (Superseded: `GapTracker` and `ClockMap` were ported later the same day, see the entry above; RESEND scheduling is still not.)
 
 ## 2026-11-04: Unit 12, observability, SLOs, backups and the restore drill (written and unit-tested; never evaluated by Prometheus, Grafana or on the VM)
 

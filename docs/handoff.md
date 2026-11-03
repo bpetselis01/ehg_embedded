@@ -7,7 +7,7 @@
 - Branch / last commit: feat/enterprise-topology, see `git log -1`. Nothing pushed. Tag `baseline-pre-enterprise` marks the start.
 
 ## State of the repo
-- Tests: `uv run pytest -q` = 781 passed, 14 skipped. With `EHG_INTEGRATION=1 TF_PLUGIN_CACHE_DIR=<cache> SSL_CERT_FILE=/etc/ssl/cert.pem` = 777 passed, 3 skipped (a real Mosquitto broker, the Terraform validate against the real provider schema, `swift test`); skipped for lack of the tool: Caddy, TimescaleDB, shellcheck, and the real HAPI test (needs a running Docker daemon).
+- Tests: `uv run pytest -q` = 788 passed, 14 skipped. With `EHG_INTEGRATION=1 TF_PLUGIN_CACHE_DIR=<cache> SSL_CERT_FILE=/etc/ssl/cert.pem` = 777 passed, 3 skipped (a real Mosquitto broker, the Terraform validate against the real provider schema, `swift test`); skipped for lack of the tool: Caddy, TimescaleDB, shellcheck, and the real HAPI test (needs a running Docker daemon).
 - Uncommitted changes: none once the last commit is made.
 - Docker / compose: the Docker daemon is not running and I must not start it (another project, Supabase, lives there). `docker compose config` resolves the default stack (4 services), the `platform` profile (10) and the cloud file (18). Nothing has ever been started.
 - Background processes or runs: none.
@@ -26,7 +26,7 @@
 
 ## Next three actions
 1. Read the report, then decide: apply the runbook (cloud), or start Docker for real-server checks, or do Unit 13 at the board. Until one of these happens nothing more can be verified here.
-2. Known non-cloud gaps worth doing if asked (each is written down in progress.md): step-ca, the enrolment API (its entry point `backend/enroll/service.py` now exists) and the FHIR sync worker are not in the cloud compose file; Swift `GapTracker` port; Alertmanager receiver; a Mosquitto/NATS exporter.
+2. Known non-cloud gaps worth doing if asked (each is written down in progress.md): step-ca, the enrolment API (its entry point `backend/enroll/service.py` now exists) and the FHIR sync worker are not in the cloud compose file; the RESEND scheduling (1 s retry, at most 5 tries) in Swift (`GapTracker` and `ClockMap` ARE ported); Alertmanager receiver; a gateway-to-node-id ACL generator; a Mosquitto/NATS exporter.
 3. After any change: `uv run pytest -q && git add -A && git commit` (the `&&` matters); add new file names to docs/codebase-guide.md; update progress.md, security.md and licences.md; treat automated security reviews as input (failing test first). Report honestly: fakes versus real servers, what needs Docker, hardware or the cloud.
 
 ## Done in this non-cloud sweep (all committed)
