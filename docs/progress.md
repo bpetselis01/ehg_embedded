@@ -1,5 +1,17 @@
 # Progress log
 
+## 2026-11-03: Unit 3, durable gateway outbox ([decision 0009](decisions/0009-gateway-durable-outbox.md)); Checkpoint 2 pending
+
+- **Added:** [`gateway/outbox.py`](../gateway/outbox.py) (SQLite WAL, mode 0600, write first, delete on PUBACK, oldest first, at most 100 in flight, disk cap, durable-write fallback),
+  `gateway --outbox PATH --outbox-max-mb --gateway-id` (retained `online`/`offline` status with a last will), `replayed` stored by ingest, `eval/latency.py --exclude-replayed`. Off by default; without the flags the publish path is the same code as before.
+- **Tested:** 19 tests in [`tests/test_outbox.py`](../tests/test_outbox.py): broker down then up (in order, once), restart replay, backlog before new traffic, in-flight limit, disconnect with unacknowledged messages, stale PUBACKs, lost PUBACK duplicate (ingest writes once), disk cap, database error fallback, file mode and WAL, defaults unchanged.
+  **Against a real Mosquitto 2.1.2 over TLS** (`EHG_INTEGRATION=1`): `gateway --simulate 1 --outbox`, broker stopped for 5 s mid-run and restarted: at least 5 packets piled up on disk, a persistent reader received **every seq from 0 with no gap**, the late ones marked `replayed` with a fresh `t_mqtt_pub` (the longest wait at least 4 s).
+- **Overhead (throwaway benchmark, not a CI assertion; this Mac, Python 3.13):** per packet, JSON stamp alone vs `add()` (insert + send; the PUBACK delete runs in paho's thread): 3 ch x 10 frames median 5.6 us vs 36 us (p99 85 us, worst 1.2 ms);
+  16 ch x 100 frames median 84 us vs 133 us (p99 304 us, worst 2.6 ms). Packets arrive every 0.5 s or slower, so this is under 0.03 % of the interval; the rare ms-scale outliers are SQLite WAL checkpoints.
+- **Deviation from the prompt:** no backoff jitter (paho 2.1 has no option); documented in the ADR.
+- **NOT done / not verified:** `eval/integrity.py` reporting `missing ranges: []` after the outage (needs Influx, i.e. Docker; the test checks gap-free delivery at the broker instead); the outbox on a real BLE node; behaviour with a very long outage on the real disk cap beyond the unit test; "H1 unchanged with the outbox on" is not measured (no Docker, no board).
+  Tests now: 140 pass and 8 are skipped without a broker; with `EHG_INTEGRATION=1` and `mosquitto` installed, 148 pass (about 50 s).
+
 ## 2026-11-03: Unit 2, MQTT over TLS 1.3 with client certificates (optional cloud profile; [decision 0008](decisions/0008-mqtt-mtls-and-topic-acls.md))
 
 - **Added:** [`tools/pki.sh`](../tools/pki.sh) (offline root, intermediate, broker and client certificates, revoke, CRL; ECDSA P-256), [`backend/mosquitto/mosquitto.tls.conf`](../backend/mosquitto/mosquitto.tls.conf) + [`acl`](../backend/mosquitto/acl),

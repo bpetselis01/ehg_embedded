@@ -420,6 +420,20 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
+def spawn_broker(conf: Path, port: int) -> subprocess.Popen:
+    """Start mosquitto with this config and wait until it accepts connections (also used to restart it after an outage)."""
+    proc = subprocess.Popen(["mosquitto", "-c", str(conf)], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        try:
+            socket.create_connection(("127.0.0.1", port), timeout=0.5).close()
+            return proc
+        except OSError:
+            time.sleep(0.1)
+    proc.kill()
+    pytest.fail("mosquitto did not start: " + proc.stderr.read().decode())
+
+
 @pytest.fixture
 def broker(tmp_path):
     """Mosquitto started with backend/mosquitto/mosquitto.tls.conf (only paths and the port rewritten) and the real ACL."""
@@ -431,20 +445,11 @@ def broker(tmp_path):
     conf = conf.replace("/mosquitto/data/", str(tmp_path / "data") + "/").replace("listener 8883", f"listener {port}")
     (tmp_path / "data").mkdir()
     (tmp_path / "m.conf").write_text(conf)
-    proc = subprocess.Popen(["mosquitto", "-c", str(tmp_path / "m.conf")], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-    deadline = time.time() + 10
-    while time.time() < deadline:
-        try:
-            socket.create_connection(("127.0.0.1", port), timeout=0.5).close()
-            break
-        except OSError:
-            time.sleep(0.1)
-    else:
-        proc.kill()
-        pytest.fail("mosquitto did not start: " + proc.stderr.read().decode())
-    yield type("Broker", (), {"pki": p, "port": port, "proc": proc})
-    proc.terminate()
-    proc.wait(10)
+    b = type("Broker", (), {"pki": p, "port": port, "conf": tmp_path / "m.conf"})
+    b.proc = spawn_broker(b.conf, port)
+    yield b
+    b.proc.terminate()
+    b.proc.wait(10)
 
 
 def mqtt_client(b, cn: str):

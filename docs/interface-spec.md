@@ -76,10 +76,14 @@ older frames are dropped (`late`), a missing one is skipped (`starved`, frame_id
 
 `{node_id, seq, frame_idx, t_inject, t_inject_host, n_ch, fs_hz, record_id, flags, samples: [[...]], t_gw_rx, t_mqtt_pub}`
 
+Optional `"replayed": true` (added in Unit 3, only when the gateway runs with `--outbox`): the message did not go out the moment the gateway had it (it waited through a broker outage, a restart or the in-flight limit). `t_gw_rx` is the original receive time and `t_mqtt_pub` is stamped when it is actually sent, so the latency of a replayed message is NOT H1 latency (`eval/latency.py --exclude-replayed`). Consumers must treat a missing `replayed` as false.
+
+Gateway status (only with `--gateway-id ID`): retained `ehg/_gw/ID/status`, payload `online` (on connect) or `offline` (the broker's last will, or a clean exit), QoS 1.
+
 ## 5. InfluxDB schema (bucket `ehg`)
 
 - `ehg_raw`: one point per frame. Tags `node_id`, `record_id`. Fields `c0..c{n-1}` (int), `seq`, `frame_idx`. Time = injection time of the frame.
-- `ehg_pkt`: one point per packet. Fields `seq, n_frames, retrans, t_inject_dev, t_inject_host, t_gw_rx, t_mqtt_pub, t_ingest_rx, t_db_ack`.
+- `ehg_pkt`: one point per packet. Fields `seq, n_frames, retrans, replayed, t_inject_dev, t_inject_host, t_gw_rx, t_mqtt_pub, t_ingest_rx, t_db_ack`.
 
 **Proposed classifier hook:** the classifier reads `ehg_raw` for a `node_id` over a 60 s window with a 30 s step (Flux query in [`eval/backend_client.py:query_frames`](../eval/backend_client.py)), converts to mV with the gain above, runs unchanged, and writes the label to measurement `ehg_label` (tags `node_id`, fields `label`, `score`, `window_start`). A separate subscriber like this is also how report §8.4 describes the hook.
 

@@ -4,7 +4,7 @@
 
 ## Status
 
-Accepted (Checkpoint 1, 2026-11-03; status of the build is stated in each record). Implemented by Unit 3 (Python) and Unit 15 (Swift).
+Accepted (Checkpoint 1, 2026-11-03). Python outbox implemented by Unit 3 on 2026-11-03 (off by default; enabling it by default is Byron's call at Checkpoint 2). Swift outbox is Unit 15, not built.
 
 ## Context
 
@@ -20,6 +20,9 @@ Over a cellular link, outages are expected, not exceptional.
   `eval/latency.py` can exclude replayed messages. Duplicate delivery is already harmless because writes are keyed on (node, seq).
 - A disk cap (`--outbox-max-mb`, default 512) drops the oldest rows loudly and counts them, so a loss stays identifiable.
 - The outbox is **off by default** (`--outbox PATH` turns it on). Whether to enable it by default is Byron's decision at Checkpoint 2.
+- What "replayed" means (as built): the message was not sent in the same `add()` call that stored it, or it is being sent again after a disconnect or restart. `attempts` counts re-sends only, so a live message that is acknowledged leaves the row at 0 (one write less on the hot path).
+- Backoff is paho's `reconnect_delay_set(1, 60)`: it doubles from 1 s to 60 s but offers **no jitter** (the prompt asked for jitter; paho 2.1 has no option for it). A single gateway has no thundering-herd problem; revisit for a fleet. With `--outbox` the first connection uses `connect_async`, so a broker that is down at start-up does not stop the gateway.
+- `--gateway-id ID` (independent of the outbox) publishes retained `online`/`offline` on `ehg/_gw/ID/status` with a last will; under TLS the id must equal the certificate CN or the ACL refuses it.
 - The BLE callback never blocks on the outbox. A retained status topic `ehg/_gw/<gateway_id>/status` with a Last Will marks the gateway online or offline.
 - The iOS gateway gets the same behaviour: SQLite in a file with Data Protection class `completeUntilFirstUserAuthentication`.
 

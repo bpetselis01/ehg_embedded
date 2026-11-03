@@ -311,3 +311,75 @@ def test_latency_can_drop_replayed_packets():
     from eval.latency import without_replayed
     pkts = [{"seq": 1}, {"seq": 2, "replayed": True}, {"seq": 3, "replayed": False}]
     assert [p["seq"] for p in without_replayed(pkts)] == [1, 3]
+
+
+# ---------------------------------------------------------------- the whole thing against a real broker (opt-in: EHG_INTEGRATION=1 and mosquitto installed)
+
+from test_mqtt_tls_config import broker, client_context, needs_broker, needs_openssl, spawn_broker  # noqa: E402,F401  (broker is a fixture)
+
+SIM_RECORD = "data/converted/tpehgdb/tpehg1007.npz"
+
+
+@needs_openssl
+@needs_broker
+def test_broker_outage_loses_nothing_and_replays_in_order(broker, tmp_path):
+    """gateway --simulate 1 --outbox into the real TLS broker; the broker is stopped for 5 s mid-run and started again.
+    A persistent reader must then see every seq from 0 with no gap, and the late ones must be marked replayed."""
+    import signal
+    import subprocess
+    import sys
+    import threading
+    import time
+    from pathlib import Path
+
+    import paho.mqtt.client as mqtt
+
+    root = Path(__file__).parents[1]
+    if not (root / SIM_RECORD).exists():
+        pytest.skip("data/converted not present (README step 0)")
+    got = []
+    reader = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="ehg-viewer", clean_session=False)
+    reader.tls_set_context(client_context(broker.pki, "ehg-viewer"))
+    subscribed = threading.Event()
+    reader.on_connect = lambda cl, u, f, rc, p: cl.subscribe("ehg/+/pkt", qos=1)
+    reader.on_subscribe = lambda *a: subscribed.set()
+    reader.on_message = lambda cl, u, m: got.append(json.loads(m.payload))
+    reader.reconnect_delay_set(1, 2)
+    reader.connect("localhost", broker.port)
+    reader.loop_start()
+    assert subscribed.wait(5)
+
+    db = tmp_path / "gw.db"
+    p = broker.pki
+    cmd = [sys.executable, "-m", "gateway.gateway", "--simulate", "1", "--sim-record", SIM_RECORD, "--mqtt", "localhost", "--mqtt-port", str(broker.port),
+           "--mqtt-tls", "--ca", str(p / "ca-chain.crt"), "--cert", str(p / "clients/ehg-gw-01.crt"), "--key", str(p / "clients/ehg-gw-01.key"),
+           "--outbox", str(db), "--gateway-id", "ehg-gw-01"]
+    gw = subprocess.Popen(cmd, cwd=root, env={**os.environ, "PYTHONUNBUFFERED": "1"}, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+    def waiting() -> int:
+        return sqlite3.connect(f"file:{db}?mode=ro", uri=True).execute("select count(*) from outbox").fetchone()[0]
+
+    time.sleep(6)
+    broker.proc.terminate()
+    broker.proc.wait(10)
+    time.sleep(5)                       # about 10 packets (2 per second) pile up on disk
+    queued = waiting()
+    broker.proc = spawn_broker(broker.conf, broker.port)
+    deadline = time.time() + 45
+    while waiting() > 3 and time.time() < deadline:  # a few packets are always in flight in a live stream
+        time.sleep(0.5)
+    time.sleep(2)
+    gw.send_signal(signal.SIGINT)
+    out = gw.communicate(timeout=20)[0]
+    reader.loop_stop()
+    reader.disconnect()
+
+    assert queued >= 5, f"packets should have accumulated on disk during the outage, found {queued}\n{out}"
+    seqs = sorted({m["seq"] for m in got})
+    assert seqs and seqs == list(range(len(seqs))), f"gap in the delivered seqs: missing {sorted(set(range(seqs[-1] + 1)) - set(seqs))}\n{out}"
+    assert len(seqs) >= 20
+    replayed = [m for m in got if m.get("replayed")]
+    assert len(replayed) >= 5 and all(m["t_mqtt_pub"] > m["t_gw_rx"] for m in replayed), "replays carry a publish time later than their receive time"
+    assert max(m["t_mqtt_pub"] - m["t_gw_rx"] for m in replayed) >= 4, "the packets that waited out the 5 s outage show it in their publish time"
+    assert all("replayed" not in m for m in got if m["seq"] < 5), "packets sent while the link was up are not marked"
+    assert "link down" in out and "[outbox] connected" in out, out

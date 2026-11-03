@@ -52,3 +52,16 @@ Background: [security.md](security.md), [decision 0008](decisions/0008-mqtt-mtls
 | A gateway, viewer or ingest keeps getting disconnected and reconnecting | Two processes use the same certificate, so the broker sees the same client id (forced to the CN) and each kicks the other off | One certificate per process: `tools/pki.sh client ehg-gw-02`, then add its two lines to `backend/mosquitto/acl` |
 | `docker compose up` creates an empty directory called `broker.crt` (or similar) inside `backend/pki` | The cloud override mounts single files, and Docker makes a directory when the source file does not exist yet | Remove the directory, run `tools/pki.sh init` first, then `up` |
 | `mosquitto_pub --tls-version tlsv1.2` appears to succeed against the TLS 1.3 broker | The client's option does not force the version as a probe would | Probe with `openssl s_client -tls1_2 -connect localhost:8883 -CAfile backend/pki/ca-chain.crt -cert … -key …`: it ends in `alert protocol version` |
+
+## Gateway outbox
+
+Background: [decision 0009](decisions/0009-gateway-durable-outbox.md). Added 2026-11-03.
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `[outbox] FULL (cap …): dropped N oldest unsent packets of EHG-… (seq a..b)` | The broker was unreachable for so long that the file passed `--outbox-max-mb` | Those packets are lost and `eval/integrity.py` will show the gap `a..b`. Fix the link, or raise the cap (disk permitting) |
+| `[outbox] ERROR writing …: … sending … WITHOUT durability` | The disk write failed (full disk, permissions, a locked file) | Free space or fix the path. Packets still go out while the link is up, but nothing is queued for an outage |
+| `[outbox] link down; N on disk` repeats | The broker is unreachable or refusing the certificate | Expected during an outage; the packets are kept. For a refusal see the TLS section above. Backoff is 1, 2, 4 … 60 s (no jitter) |
+| The database has packets twice, or `retrans` and `replayed` both appear | A reconnect resends what was not yet acknowledged; ingest keeps one copy per (node, seq, t_inject) | Nothing to fix. `replayed` is not the same as `retrans` (`retrans` = the board re-sent it over Bluetooth) |
+| H1 looks much worse after an outage | Replayed packets waited on disk, so their end-to-end time includes the outage | `uv run python eval/latency.py --node … --exclude-replayed` (the default run prints the live-only figure beside the total) |
+| `gateway/outbox.db` is left behind after a run | Unconfirmed packets stay on disk by design and go out at the next start | Start the gateway with the same `--outbox` path to flush it; delete the file only if you accept losing those packets |
