@@ -19,6 +19,7 @@ the file index and the duplicated facts). Historical records are dated and descr
 | [troubleshooting.md](troubleshooting.md) | known failures: symptom, cause, fix | current |
 | [decisions/](decisions/) | why the main design choices were made (one short record each; 0007 to 0017 accepted at Checkpoint 1, 2026-11-03; most are not built yet) | current |
 | [security.md](security.md) | threat model and controls table (status per control); what was tested for the TLS cloud profile and what was not | current (grows per unit) |
+| [deployment.md](deployment.md) | click-by-click runbook for the Oracle VM (you run it), the recorded decisions, and a log of what you actually saw | plan; log empty until you run it |
 | [production-topology.md](production-topology.md) | the planned enterprise-style chain, hop by hop, with what is built, planned or design-only | plan (2026-11-03) |
 | [licences.md](licences.md) | licence, edition and status (confirmed or UNVERIFIED) of every component used or considered | current |
 | [claude-code-prompt-thesis-b-hardening.md](claude-code-prompt-thesis-b-hardening.md) | the full specification for the enterprise-style evolution (units, checkpoints, rules) | plan (2026-11-03) |

@@ -1,7 +1,7 @@
 # PURPOSE: Tells SOPS which age key may decrypt the files in deploy/secrets/. This file is safe to commit: it holds a PUBLIC key only.
 # INPUT: your age PUBLIC key. Make a key pair on your Mac with `age-keygen -o ~/ehg-age.key`; it prints the public key ("age1..."). Paste it below.
 #   The PRIVATE key file (~/ehg-age.key) is never committed and never stays in this repository: copy it once to the VM at /opt/ehg/secrets/age.key (the deployment runbook, Unit 5).
-# OUTPUT: `sops --encrypt deploy/secrets/secrets.example.yaml > deploy/secrets/secrets.sops.yaml` (after filling in real values) makes the encrypted file you commit.
+# OUTPUT: lets `sops edit deploy/secrets/secrets.sops.yaml` work later. To CREATE the encrypted file, deploy/secrets/README.md passes the same public key with --age (untested: sops was not installed).
 # STATUS: the recipient below is a PLACEHOLDER. Until you replace it, encryption will fail (by design: a placeholder must not protect real secrets).
 # ROLE IN THESIS: Secrets in git without plaintext (docs/security.md, decision 0013).
 # BEFORE -> AFTER: Before: a placeholder. After: your public key; only the holder of the private key can read deploy/secrets/*.sops.yaml.

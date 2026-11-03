@@ -13,7 +13,7 @@ Docker was not running when it was written, and the cloud steps are yours (`terr
 | [`caddy/`](caddy), [`nats/`](nats), [`postgres/`](postgres), [`observability/`](observability) | Config files mounted by the compose file |
 | [`.sops.yaml`](.sops.yaml), [`secrets/`](secrets) | SOPS + age: only encrypted files are committed. The recipient key in `.sops.yaml` is a **placeholder** until you put your own public key there |
 
-## The order of things (details come with `docs/deployment.md` in Unit 5)
+## The order of things (the full runbook is [`docs/deployment.md`](../docs/deployment.md); tick-box version: [`runbook/checklist.md`](runbook/checklist.md))
 
 1. Decide on the Oracle account and the DNS name with me first (the sign-up needs a phone number and a credit card for verification; never upgrade to Pay-As-You-Go).
 2. `cd deploy/terraform && cp terraform.tfvars.example terraform.tfvars`, fill it in, `terraform init`, **`terraform plan` and read it**, then `terraform apply`. Commit the `.terraform.lock.hcl` that `init` creates.

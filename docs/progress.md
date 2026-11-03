@@ -1,5 +1,17 @@
 # Progress log
 
+## 2026-11-03: Unit 5, Oracle runbook (written; NOT run: it is yours to execute) ([deployment.md](deployment.md))
+
+- **Decisions recorded** (asked one at a time): hostname **DuckDNS + Caddy**; home region **Sydney `ap-sydney-1`**; repository **stays private** (so the VM clones over SSH with a read-only deploy key). **The Oracle card question was deferred by Byron ("skip this step first") and is still PENDING:** the runbook says not to start sign-up until it is decided, and nothing assumes consent.
+- **Added:** [`docs/deployment.md`](deployment.md) (15 steps, the expected `terraform plan` of 14 resources, negative checks, a list of what could not be checked, an empty log), [`deploy/runbook/checklist.md`](../deploy/runbook/checklist.md) and [`log-template.md`](../deploy/runbook/log-template.md).
+  Changes the private repo needed: cloud-init writes `/opt/ehg/.gitconfig` (deploy key, strict host keys); `update.sh --services "caddy mosquitto"` starts only the edge subset (tested; the jq health filter was exercised on sample output); the tfvars example shows the SSH repo URL.
+  Checked on the way: GitHub's `api.github.com/meta` publishes SSH host keys and SHA256 fingerprints (used for `known_hosts`, with the fingerprint to be compared against GitHub's documentation).
+- **Mistakes caught here:** `sops --encrypt secrets.yaml` would not match the creation rule in `.sops.yaml` (its regex expects `*.sops.yaml`), so the instructions now pass the recipient with `--age` (untested: sops is not installed); a plan file called `tfplan` would not have been gitignored, so plans are named `ehg.tfplan` (`*.tfplan` is ignored and tested);
+  a test now fails if the runbook's resource count, its step 10 or its recorded decisions drift from the code.
+- **Two more automated security-review findings on the earlier Unit 4 commits were fixed** (host mounts and the metadata service; host logs reaching Loki): see [security.md](security.md).
+- **NOT done / not verified:** every step of the runbook; the Oracle console labels; `sops` commands; the broker reading `broker.key` in its container (the runbook gives a likely fix, untested). Nothing was pushed to GitHub; the tag and branch must be pushed by Byron.
+- Tests: 215 pass, 10 skipped by default.
+
 ## 2026-11-03: Unit 4, infrastructure as code (written and validated, NOT applied; [deploy/README.md](../deploy/README.md))
 
 - **Verified first:** Oracle's Always Free page matches the prompt's numbers (2 OCPU / 12 GB A1, 200 GB volumes, 10 TB egress, 20 GB object storage, idle rule); see [decision 0010](decisions/0010-oracle-always-free-cloud-target.md) for the two differences (47 vs 50 GB minimum boot volume; the June 2026 halving is not on the page).

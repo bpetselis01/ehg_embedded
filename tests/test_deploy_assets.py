@@ -368,10 +368,25 @@ def test_compose_config_resolves_and_a_missing_secret_stops_it_by_name():
     assert bad.returncode != 0 and "POSTGRES_PASSWORD" in bad.stderr
 
 
+# ---------------------------------------------------------------- the runbook agrees with the code
+
+def test_runbook_matches_the_code():
+    doc = (ROOT / "docs/deployment.md").read_text()
+    resources = sum(len(re.findall(r'^resource "', f.read_text(), re.M)) for f in TF.rglob("*.tf"))
+    assert int(re.search(r"(\d+) resources to add", doc).group(1)) == resources, "the runbook's plan count must equal the resources in the Terraform code"
+    assert f"**{resources} to add, 0 to change, 0 to destroy**" in (DEPLOY / "runbook/checklist.md").read_text()
+    assert re.search(r"^### 10\. Deploy key", doc, re.M) and "step 10 of the deployment runbook" in CLOUD_INIT.read_text(), "cloud-init points at step 10"
+    assert "-out=ehg.tfplan" in doc, "plan files must be named *.tfplan so they are gitignored"
+    for decision in ("DuckDNS", "ap-sydney-1", "Private", "PENDING"):
+        assert decision in doc, f"the recorded decision {decision!r} is missing"
+    assert "allow write access" in doc.lower() and "unticked" in doc, "the deploy key must be read-only"
+    assert "intermediate/" in doc and "root/" in doc, "the runbook must say the CA keys never go to the VM"
+
+
 # ---------------------------------------------------------------- secrets and state never reach git
 
 @pytest.mark.parametrize("path, ignored", [
-    ("deploy/terraform/terraform.tfstate", True), ("deploy/terraform/terraform.tfstate.backup", True), ("deploy/terraform/terraform.tfvars", True),
+    ("deploy/terraform/terraform.tfstate", True), ("deploy/terraform/terraform.tfstate.backup", True), ("deploy/terraform/terraform.tfvars", True), ("deploy/terraform/ehg.tfplan", True),
     ("deploy/terraform/.terraform/providers/x", True), ("deploy/secrets/secrets.yaml", True), ("deploy/secrets/runtime.env", True),
     ("deploy/compose/.env", True), ("deploy/age.key", True), ("keys/ehg.agekey", True),
     ("deploy/terraform/terraform.tfvars.example", False), ("deploy/secrets/secrets.sops.yaml", False), ("deploy/secrets/secrets.example.yaml", False),

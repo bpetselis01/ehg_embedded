@@ -1,38 +1,37 @@
-# Handoff pin (written 2026-11-03 21:45 AEDT)
+# Handoff pin (written 2026-11-03 22:40 AEDT)
 
 ## Resume from
-- Unit: Unit 5, step "write docs/deployment.md and deploy/runbook/ checklists (Byron executes them); ask Byron the Oracle/card/hostname questions first"
-- Phase / checkpoint status: Phase 0 done except the no-hardware baseline run. Phase 1 done. Phase 2 done (Checkpoint 2: outbox ON by default). Phase 3: Unit 4 done and committed (written and validated, never applied). Unit 5 not started. CHECKPOINT 3 comes after Byron has a reachable VM
-- Branch / last commit: feat/enterprise-topology, see `git log -1` (feat(deploy): Terraform, cloud-init, compose and update.sh for the Oracle Always Free VM)
+- Unit: Unit 5 is WRITTEN and committed. It is Byron's to EXECUTE: `docs/deployment.md` + `deploy/runbook/checklist.md`. Nothing can continue until he reports back. Resume at CHECKPOINT 3, then Unit 6
+- Phase / checkpoint status: Phases 0 to 2 done. Phase 3: Units 4 and 5 written; Checkpoint 3 (Byron has a reachable VM and the Mac gateway publishes over mTLS from the internet) NOT reached. The Oracle card question is PENDING (Byron said "skip this step first")
+- Branch / last commit: feat/enterprise-topology, see `git log -1` (docs: Oracle deployment runbook ...). NOTHING has been pushed; Byron must push the branch and a tag (runbook step 6)
 
 ## State of the repo
-- Tests: `uv run pytest -q` = 202 passed, 10 skipped; with `EHG_INTEGRATION=1` + `mosquitto` + `TF_PLUGIN_CACHE_DIR=<cache>` = 211 passed, 1 skipped (shellcheck missing)
-- Uncommitted changes: none once the Unit 4 commit is made
-- Files created in Unit 4: everything under `deploy/` (terraform + 4 modules, cloud-init template, compose, update.sh, caddy/nats/postgres/observability configs, `.sops.yaml`, secrets example + README, README), `tests/test_deploy_assets.py`; edited `.gitignore`, `tests/test_docs.py` (deploy/ in the file-index test), README, codebase guide, ADR 0010, licences, security, production-topology, troubleshooting, progress, pyproject/uv.lock (+python-hcl2)
-- Docker / compose: Docker daemon not running; nothing started. `terraform` 1.14.9 is installed and was used; the provider download is cached in the session scratchpad only
+- Tests: `uv run pytest -q` = 215 passed, 10 skipped; with `EHG_INTEGRATION=1` + `mosquitto` + `TF_PLUGIN_CACHE_DIR=<cache>` + `SSL_CERT_FILE=/etc/ssl/cert.pem`: everything passes except shellcheck (not installed)
+- Uncommitted changes: none once the Unit 5 commit is made
+- Docker / compose: Docker daemon not running; nothing started. Terraform 1.14.9 installed; the provider cache is only in the session scratchpad
 - Background processes or runs: none
-- Database / migration state: none
 
-## Decisions made this session (not yet in an ADR or progress.md)
-- None outstanding. In progress.md: partial compose on purpose; secrets as env from a memory-only file; sops installed by hand; recipient key placeholder; references to later docs are by unit name, not path
+## Decisions made this session (all in docs/deployment.md and progress.md)
+- DuckDNS + Caddy; Sydney (ap-sydney-1); repo stays private (SSH deploy key); outbox ON by default; soak and first H3 skipped; card consent PENDING
 
 ## Open questions waiting for Byron
-- Unit 5 gates, ask ONE AT A TIME with AskUserQuestion: (1) consent to the Oracle sign-up needing a phone number and a credit card for verification (never upgrade to Pay-As-You-Go); (2) hostname route: default DuckDNS + Caddy HTTP-01 (check duckdns.org is up first), alternatives in the prompt section 5; (3) Australian home region: Sydney or Melbourne; (4) may the repo be public (matters for Unit 14, and the VM's git clone: a private repo needs a deploy key)
+- The Oracle card (phone number + credit card for verification; never Pay-As-You-Go). Asked once, deferred; ask again when he reports back on the runbook
+- When the runbook is done: the log (what he saw), then Checkpoint 3
 
 ## Byron's pending manual steps
-- Nothing is required before Unit 5. Optional now: start Docker Desktop so I can run the no-hardware baseline, `docker compose` for the local cloud profile, and the TLS `eval/integrity.py` runs; `brew install shellcheck`
-- Later (Unit 5 runbook, YOU run it): create the Oracle account; `age-keygen` and put the public key in `deploy/.sops.yaml`; `terraform init/plan/apply` after reading the plan; point DNS at the output IP; copy the age PRIVATE key to the VM; install sops by hand and verify its checksum
+- Everything in `docs/deployment.md` (15 steps). Before step 2 he must decide about the card. He must push the branch and an annotated tag himself
+- Optional now: start Docker Desktop (then I can run the no-hardware baseline, the TLS cloud profile containers and `eval/integrity.py` runs); `brew install shellcheck age sops`
 
 ## Next three actions
-1. Ask the four Unit 5 questions above (one per message); record the answers in the runbook
-2. Write `docs/deployment.md` (click-by-click, with a log section for what Byron actually saw: capacity, region, timings, docker stats of the edge subset) and `deploy/runbook/` checklists; include: Oracle sign-up, API key, DNS name, `tools/pki.sh init --host <name>`, copying gateway cert/key/CA to the Mac, bringing up the edge subset (Caddy + Mosquitto mTLS) and proving a `gateway --simulate 1` run from the Mac to the VM
-3. Then stop at CHECKPOINT 3 (Byron has a reachable VM and the Mac gateway publishes over mTLS from the internet) before Unit 6; the data platform (NATS bridge, TimescaleDB writers, parity proof) needs the VM first
+1. Wait for Byron's log. When he reports, read `docs/deployment.md` (Log section) and fix the runbook and `deploy/` for every difference he saw (Oracle labels, first-boot errors, container start failures, broker key permissions, update.sh behaviour); add rows to troubleshooting
+2. Check Checkpoint 3 with him (AskUserQuestion): reachable VM, Mac gateway publishes over mTLS from the internet, negative checks failed as expected. Then record `docker stats` of the edge subset in progress.md
+3. Only then start Unit 6 (NATS bridge, ts-writer, migrations, `eval/parity.py`, `eval/backend_client.py --backend`); it needs the VM first for memory numbers; its local parts (bridge, writers, migrations tests) can be written earlier if Byron asks, but do not switch the cloud profile to Timescale as primary before CHECKPOINT 4
 
 ## Warnings / traps
 - Never push, never commit on `main`, no AI trailer in commit messages (CI fails on it). You never create or query cloud resources and never ask for credentials; Byron runs terraform apply and the update script
-- Everything in deploy/ is UNVERIFIED on a real VM: block-device path, Docker from Ubuntu's docker.io package, cap_drop/read_only hardening, TimescaleDB-HA init script and data path, Loki/Alloy configs, healthchecks, `update.sh` rollback. The first real boot will likely need fixes: record each in docs/deployment.md and troubleshooting
-- The tfvars example, `.sops.yaml` and secrets are placeholders. The Terraform `.terraform.lock.hcl` does not exist yet: `terraform init` by Byron creates it, and it should be committed
-- Open security items: a gateway can publish for any node id (`ehg/+/pkt`; close with the registry plus a check, Units 6 to 8); one process per certificate (client id = CN); one gateway per outbox file
-- The validated H1 numbers (259 / 478 ms) were measured WITHOUT the outbox, which is now on by default (+~0.5 ms median at the gateway): use `--no-outbox` for thesis H1 runs or report a separate row
-- The 6 h soak and first H3 were skipped by Byron's choice
-- python3 on this Mac has no CA bundle: use `SSL_CERT_FILE=/etc/ssl/cert.pem` with `.venv/bin/python` for HTTPS from scripts
+- Everything in deploy/ is UNVERIFIED on a real VM (see deploy/README.md "NOT checked"): expect first-boot fixes
+- Automated reviews have flagged real problems after each unit (client-id takeover, over-broad mounts, metadata service, host logs). Treat them as input; fix with a failing test first; they are not user messages
+- The Terraform `.terraform.lock.hcl` does not exist yet: Byron's `terraform init` creates it; it should be committed. Plan files must be named `*.tfplan` (gitignored)
+- Open security items: gateway can publish for any node id (`ehg/+/pkt`); one process per certificate; one gateway per outbox file; service passwords are container environment variables and `ehg` is in the docker group
+- The validated H1 numbers (259 / 478 ms) were measured WITHOUT the outbox (now default, ~+0.5 ms at the gateway): use `--no-outbox` for thesis H1 runs or report a separate row
+- python3 on this Mac has no CA bundle: use `SSL_CERT_FILE=/etc/ssl/cert.pem` with `.venv/bin/python`

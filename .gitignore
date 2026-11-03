@@ -48,3 +48,4 @@ deploy/**/secrets/*
 !deploy/**/secrets/README.md
 **/age.key
 *.agekey
+deploy/**/*.tfplan
