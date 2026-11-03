@@ -59,7 +59,7 @@ Sign in at duckdns.org (it offered Google, GitHub, Twitter, Persona and Reddit o
 age-keygen -o ~/ehg-age.key && chmod 600 ~/ehg-age.key      # prints "Public key: age1..."; back this file up OFF this computer
 ```
 
-Put the public key in [`deploy/.sops.yaml`](../deploy/.sops.yaml), then follow [`deploy/secrets/README.md`](../deploy/secrets/README.md) to make `deploy/secrets/secrets.sops.yaml` (random values: `openssl rand -base64 24`).
+Put the public key in [`deploy/.sops.yaml`](../deploy/.sops.yaml), then follow [`deploy/secrets/README.md`](../deploy/secrets/README.md) to make `deploy/secrets/secrets.sops.yaml` (random values: `openssl rand -hex 24`: hex, not base64, because the passwords go into URLs and connection strings). The list now also has `KEYCLOAK_ADMIN_PASSWORD` and the three client secrets `TRIAGE_API_CLIENT_SECRET`, `ENROLL_API_CLIENT_SECRET`, `FHIR_SYNC_CLIENT_SECRET` (see `deploy/secrets/secrets.example.yaml`).
 Commit the **encrypted** file and `.sops.yaml` only. The encrypt command passes the recipient with `--age`; it is untested because sops was not installed here.
 
 ### 6. SSH keys
@@ -135,11 +135,14 @@ On the Mac (the signing keys never go to the VM):
 tools/pki.sh init --host yourname.duckdns.org --out ~/ehg-pki
 ```
 
-Move `~/ehg-pki/root/root.key` to offline storage now. Copy **only** these four files to the VM, into `/opt/ehg/pki/` (create it owned by `ehg`, mode 700): `ca-chain.crt`, `broker.crt`, `broker.key`, `ca.crl`. Never copy `intermediate/` or `root/`.
+Move `~/ehg-pki/root/root.key` to offline storage now. Copy **only** these seven files to the VM, into `/opt/ehg/pki/` (create it owned by `ehg`, mode 700): `ca-chain.crt`, `broker.crt`, `broker.key`, `ca.crl`, and the bridge's own identity `clients/ehg-bridge.crt` and `clients/ehg-bridge.key` (copy them to `/opt/ehg/pki/ehg-bridge.crt` and `.key`; the bridge container runs as UID 10001, so `sudo chown ehg:10001 /opt/ehg/pki/ehg-bridge.key && sudo chmod 640 ...`, **untested**). Never copy `intermediate/` or `root/`.
 The broker container runs as its own user: if it logs "Unable to load server key file", make the key readable to it with `sudo chown ehg:1883 /opt/ehg/pki/broker.key && sudo chmod 640 /opt/ehg/pki/broker.key` (UID/GID 1883 is the Mosquitto image's user; **untested**) and note that in the log.
 Your gateway certificate stays on the Mac: `~/ehg-pki/clients/ehg-gw-01.{crt,key}` (valid 30 days; renewal is manual until Unit 7).
 
 ### 13. Start the edge subset (Caddy and Mosquitto only)
+
+Since Unit 11b the compose file also holds the Python services (`migrate`, `bridge`, `ts-writer`, `triage`), Keycloak and HAPI. **They have never been started anywhere**, so this runbook still brings up only the edge first; start the rest only after step 14 works, one service at a time
+(`update.sh --services "postgres nats"`, then `"migrate ts-writer"`, `bridge`, `triage`, and last `keycloak hapi`, which together need about 3.7 GB), and expect first-start fixes. Not in the file at all: step-ca, the enrolment API and the FHIR sync worker (`deploy/README.md`).
 
 ```sh
 sudo -H -u ehg /opt/ehg/repo/deploy/update.sh --bootstrap --services "caddy mosquitto"

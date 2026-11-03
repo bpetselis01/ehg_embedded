@@ -6,7 +6,7 @@
 # STATUS: UNVERIFIED, never built (Docker was not running).
 # ROLE IN THESIS: Packaging of docs/decisions/0012-timescaledb-nats-data-platform.md.
 # BEFORE -> AFTER: Before: only the ingest image existed. After: the platform services share this one.
-FROM python:3.13-slim
+FROM python:3.13-slim@sha256:ae14d4ce8771606477a81446e7ef429edd6762305fc50c84507c1041fa8285d1
 RUN pip install --no-cache-dir "nats-py>=2.16,<3" "psycopg[binary]>=3.3,<4" "alembic>=1.20,<2" "sqlalchemy>=2.1,<3" "prometheus-client>=0.26,<1" "paho-mqtt>=2.1,<3" \
     "fastapi>=0.162,<1" "uvicorn>=0.54,<1" "pyjwt[crypto]>=2.15,<3" "numpy>=2,<3" "httpx>=0.28,<1" \
     && useradd --system --uid 10001 --no-create-home ehg

@@ -12,7 +12,7 @@
 #   e.g. deploy/update.sh --ssh ubuntu@ehg-demo.duckdns.org --tag v0.2.0 --commit 6f1c2a9d0b3e4f5a6b7c8d9e0f1a2b3c4d5e6f70
 # OUTPUT: exit 0 = every service running (and healthy where it has a health check). Exit 1 = it failed and the previous release was put back (or says why it could not).
 #   The previous commit is kept in /opt/ehg/state/previous. Decrypted secrets exist only in /run/ehg/runtime.env (memory, mode 600), never on disk.
-# HOW: take a lock; fetch the tag; refuse if the tag does not point at --commit; check out that commit; decrypt the secrets with sops + age; docker compose pull;
+# HOW: take a lock; fetch the tag; refuse if the tag does not point at --commit; check out that commit; decrypt the secrets with sops + age; docker compose pull (not the image we build) and docker compose build;
 #   docker compose up -d; wait until the services are healthy; on timeout or error check out the previous commit and bring it up again.
 #   `sops` is NOT installed by cloud-init (no distribution package): install it by hand and check its checksum (the deployment runbook, Unit 5). This script says so if it is missing.
 # STATUS: UNVERIFIED on a real VM. --dry-run and the argument checks are tested (tests/test_deploy_assets.py).
@@ -89,7 +89,7 @@ wait_healthy() {
     waited=0
     while [ "$waited" -lt "$TIMEOUT" ]; do
         bad=$(docker compose --env-file "$RUNTIME_ENV" --env-file "$EHG_HOME/etc/site.env" -f "$REPO/$COMPOSE_FILE" ps --all --format json \
-              | jq -r --arg want "$SERVICES" 'select(($want == "") or (.Service as $s | ($want | split(" ") | index($s)) != null)) | select((.State != "running") or ((.Health // "") != "" and .Health != "healthy")) | .Service' | sort -u | tr '\n' ' ')
+              | jq -r --arg want "$SERVICES" 'select(($want == "") or (.Service as $s | ($want | split(" ") | index($s)) != null)) | select(((.State != "running") and ((.State != "exited") or ((.ExitCode // 1) != 0))) or ((.Health // "") != "" and .Health != "healthy")) | .Service' | sort -u | tr '\n' ' ')
         [ -z "$bad" ] && { say "all services are up"; return 0; }
         sleep 5; waited=$((waited + 5))
     done
@@ -99,7 +99,8 @@ wait_healthy() {
 
 deploy_current() {
     decrypt_secrets || return $?
-    compose pull
+    compose pull --ignore-buildable
+    compose build
     # shellcheck disable=SC2086 # $SERVICES is a validated list of service names and must split into words
     compose up -d --remove-orphans $SERVICES
     wait_healthy

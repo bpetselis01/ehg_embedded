@@ -4,6 +4,7 @@ unsafe input and has a dry run, and no secret-looking text or state file can rea
 
 Opt-in (EHG_INTEGRATION=1, needs network): `terraform init` + `terraform validate` against the real Oracle provider schema, and shellcheck."""
 
+import json
 import os
 import re
 import shutil
@@ -23,11 +24,13 @@ UPDATE_SH = DEPLOY / "update.sh"
 INTEGRATION = os.environ.get("EHG_INTEGRATION") == "1"
 
 # Services that arrive with later units (their config does not exist yet). Their memory is reserved NOW so the finished stack is known to fit (MiB).
-RESERVED_MIB = {"hapi (Unit 9)": 2300, "keycloak (Unit 7)": 1360, "step-ca (Unit 7)": 100, "bridge, ts-writer, triage, fhir-sync, enroll (Units 6-9)": 500}
+RESERVED_MIB = {"step-ca (Unit 7)": 100, "enroll + fhir-sync (Units 7, 9; not in the compose file yet)": 192}
 BUDGET_MIB = int(9.5 * 1024)  # the whole-stack ceiling: ~9.5 GB of the 12 GB, leaving the OS, Docker and headroom
-EXPECTED_SERVICES = {"caddy", "mosquitto", "nats", "postgres", "prometheus", "alertmanager", "loki", "grafana", "alloy", "node-exporter", "cadvisor", "postgres-exporter"}
+EXPECTED_SERVICES = {"caddy", "mosquitto", "nats", "postgres", "prometheus", "alertmanager", "loki", "grafana", "alloy", "node-exporter", "cadvisor", "postgres-exporter",
+                     "migrate", "bridge", "ts-writer", "triage", "keycloak", "hapi"}
 SECRET_ENV = {"EHG_DOMAIN": "x.example", "POSTGRES_PASSWORD": "x", "EHG_DB_PASSWORD": "x", "HAPI_DB_PASSWORD": "x", "KEYCLOAK_DB_PASSWORD": "x",
-              "EXPORTER_DB_PASSWORD": "x", "TRIAGE_DB_PASSWORD": "x", "GRAFANA_ADMIN_PASSWORD": "x"}
+              "EXPORTER_DB_PASSWORD": "x", "TRIAGE_DB_PASSWORD": "x", "GRAFANA_ADMIN_PASSWORD": "x", "KEYCLOAK_ADMIN_PASSWORD": "x",
+              "TRIAGE_API_CLIENT_SECRET": "x", "ENROLL_API_CLIENT_SECRET": "x", "FHIR_SYNC_CLIENT_SECRET": "x"}
 
 
 def deploy_files() -> list[Path]:
@@ -289,8 +292,12 @@ def test_compose_has_exactly_the_planned_services():
 
 def test_every_image_is_pinned_by_version_and_digest_for_arm64_hosts():
     for name, svc in services().items():
+        if "build" in svc:  # the Python services: built on the VM from the repository; the base image of that build is what must be pinned (checked below)
+            assert svc["image"] == "ehg-platform:cloud" and svc["pull_policy"] == "build", name
+            continue
         assert re.fullmatch(r"[\w./-]+:[\w.-]+@sha256:[0-9a-f]{64}", svc["image"]), f"{name}: {svc['image']} must be repo:tag@sha256:digest"
         assert ":latest" not in svc["image"]
+    assert re.search(r"^FROM [\w./-]+:[\w.-]+@sha256:[0-9a-f]{64}$", (ROOT / "backend/platform.Dockerfile").read_text(), re.M), "the base image of the built image must be pinned by digest"
 
 
 def test_only_80_443_8883_are_published_and_nothing_dangerous_is_mounted():
@@ -334,7 +341,10 @@ def test_only_caddy_and_mosquitto_have_a_route_to_the_internet():
 def test_every_service_is_hardened_limited_and_health_checked_or_says_why_not():
     for name, svc in services().items():
         assert "no-new-privileges:true" in svc["security_opt"], name
-        assert svc["restart"] == "unless-stopped", name
+        if svc.get("labels", {}).get("ehg.oneshot") == "true":
+            assert svc["restart"] == "no", f"{name}: a one-shot job must not restart forever"
+        else:
+            assert svc["restart"] == "unless-stopped", name
         assert "mem_limit" in svc, f"{name}: every service needs a memory limit"
         has_check = "healthcheck" in svc
         reason = str(svc.get("labels", {}).get("ehg.healthcheck", ""))
@@ -453,3 +463,85 @@ def test_sops_config_holds_a_public_key_or_a_placeholder_only():
     needed = set(re.findall(r"\$\{([A-Z_]+_PASSWORD)(?::\?|\})", COMPOSE.read_text())) | {"POSTGRES_PASSWORD"}
     assert needed <= set(example), f"secrets.example.yaml lacks {needed - set(example)}"
     assert all(str(v).startswith("CHANGE-ME") for v in example.values())
+
+
+# ---------------------------------------------------------------- the Python services, Keycloak and HAPI (Unit 11b)
+
+PYTHON_SERVICES = {"migrate", "bridge", "ts-writer", "triage"}
+
+
+def test_python_services_share_one_built_image_with_no_privileges_and_a_read_only_root():
+    for name in PYTHON_SERVICES:
+        svc = services()[name]
+        assert svc["build"]["dockerfile"] == "backend/platform.Dockerfile" and svc["build"]["context"] == "../..", name
+        assert svc["read_only"] is True and svc["cap_drop"] == ["ALL"] and svc["networks"] == ["internal"], name
+    text = "\n".join(l for l in (ROOT / "backend/platform.Dockerfile").read_text().splitlines() if not l.startswith("#"))  # the header may say what is NOT copied
+    assert "USER 10001" in text and not re.search(r"\.env|\.key|\.pem|secret", text, re.I)
+
+
+def test_migrations_run_once_and_the_services_that_need_the_schema_wait_for_them():
+    svcs = services()
+    assert svcs["migrate"]["restart"] == "no" and svcs["migrate"]["command"][-2:] == ["upgrade", "head"]
+    for name in ("ts-writer", "triage"):
+        assert svcs[name]["depends_on"]["migrate"]["condition"] == "service_completed_successfully", name
+    for name in ("bridge", "ts-writer", "triage"):
+        assert svcs[name]["depends_on"]["nats"]["condition"] == "service_healthy", name
+
+
+def test_each_service_gets_only_its_own_database_role_and_passwords_come_from_the_secrets():
+    svcs = services()
+    assert "user=ehg " in svcs["ts-writer"]["environment"]["EHG_DB_DSN"] and "user=ehg_triage " in svcs["triage"]["environment"]["EHG_TRIAGE_DSN"]
+    assert "${TRIAGE_DB_PASSWORD:?" in svcs["triage"]["environment"]["EHG_TRIAGE_DSN"] and "${EHG_DB_PASSWORD:?" in svcs["ts-writer"]["environment"]["EHG_DB_DSN"]
+    assert svcs["keycloak"]["environment"]["KC_DB_USERNAME"] == "keycloak" and "${KEYCLOAK_DB_PASSWORD:?" in svcs["keycloak"]["environment"]["KC_DB_PASSWORD"]
+    assert "${HAPI_DB_PASSWORD:?" in svcs["hapi"]["environment"]["HAPI_DB_PASSWORD"]
+
+
+def test_the_triage_service_runs_with_real_sign_in_never_dev_mode_and_reaches_keycloak_privately():
+    env = services()["triage"]["environment"]
+    assert env["AUTH_MODE"] == "oidc" and env["OIDC_AUDIENCE"] == "triage-api"
+    assert env["OIDC_JWKS_URL"].startswith("http://keycloak:8080/auth/realms/ehg/") and env["OIDC_ISSUER"].endswith("/auth/realms/ehg")
+    assert env["FHIR_BASE_URL"] == "http://hapi:8080/fhir"
+    assert "dev" not in COMPOSE.read_text().lower().replace("device", "").replace("develop", "").replace("deploy", "").split("auth_mode")[1][:12]
+
+
+def test_the_bridge_mounts_only_its_own_certificate_files():
+    mounts = services()["bridge"]["volumes"]
+    assert sorted(m.split(":")[1].rsplit("/", 1)[-1] for m in mounts) == ["ca-chain.crt", "ehg-bridge.crt", "ehg-bridge.key"]
+    assert not any("ehg-ingest" in m or "broker.key" in m or m.rstrip("/").endswith("/pki") for m in mounts)
+
+
+def test_every_placeholder_in_the_realm_file_is_supplied_to_keycloak():
+    realm = (DEPLOY / "keycloak/realm-ehg.json").read_text()
+    needed = set(re.findall(r"\$\{([A-Z_]+)\}", realm))
+    assert {"EHG_DOMAIN", "TRIAGE_API_CLIENT_SECRET", "ENROLL_API_CLIENT_SECRET", "FHIR_SYNC_CLIENT_SECRET"} <= needed
+    env = services()["keycloak"]["environment"]
+    assert needed <= set(env), f"not passed to Keycloak: {needed - set(env)}"
+    assert "realm-ehg.json:/opt/keycloak/data/import/realm-ehg.json:ro" in " ".join(services()["keycloak"]["volumes"])
+
+
+def test_services_that_cannot_be_probed_say_why_instead_of_a_guessed_check():
+    for name in ("keycloak", "hapi"):
+        assert "healthcheck" not in services()[name] and services()[name]["labels"]["ehg.healthcheck"].startswith("none: "), name
+
+
+def test_every_secret_the_compose_file_needs_is_in_the_example_and_nothing_else_is_required():
+    example = set(yaml.safe_load((DEPLOY / "secrets/secrets.example.yaml").read_text()))
+    required = set(re.findall(r"\$\{([A-Z_]+):\?", COMPOSE.read_text())) - {"EHG_DOMAIN"}
+    assert required <= example, f"missing from deploy/secrets/secrets.example.yaml: {required - example}"
+    assert "openssl rand -hex 24" in (DEPLOY / "secrets/secrets.example.yaml").read_text(), "passwords go into URLs, so they must be hex"
+
+
+def test_update_builds_the_local_image_and_accepts_an_exited_one_shot_job_but_not_a_crashed_service():
+    text = UPDATE_SH.read_text()
+    body = text[text.index("deploy_current() {"):]
+    assert "compose pull --ignore-buildable" in body and body.index("compose pull --ignore-buildable") < body.index("compose build") < body.index("compose up -d")
+    if shutil.which("jq") is None:
+        pytest.skip("jq not installed")
+    program = re.search(r"jq -r --arg want \"\$SERVICES\" '([^']+)'", text).group(1)
+    lines = "\n".join(json.dumps(x) for x in (
+        {"Service": "ok", "State": "running", "Health": "healthy"}, {"Service": "nocheck", "State": "running", "Health": ""},
+        {"Service": "job", "State": "exited", "ExitCode": 0, "Health": ""}, {"Service": "crashed", "State": "exited", "ExitCode": 1, "Health": ""},
+        {"Service": "sick", "State": "running", "Health": "unhealthy"}, {"Service": "starting", "State": "running", "Health": "starting"}, {"Service": "made", "State": "created", "Health": ""}))
+    out = subprocess.run(["jq", "-r", "--arg", "want", "", program], input=lines, capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    assert sorted(out.stdout.split()) == ["crashed", "made", "sick", "starting"]

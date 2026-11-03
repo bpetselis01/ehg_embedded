@@ -25,6 +25,7 @@ import numpy as np
 from backend.ts_writer.writer import validate
 from gateway.tracking import GapTracker
 
+from backend.triage.fhir_api import upstream_from_env
 from backend.triage.slis import ConsumerLag, FleetSli
 from backend.triage.rules import AlertView, Config, RuleTracker, Snapshot, evaluate, node_score
 
@@ -236,7 +237,7 @@ async def run() -> None:
     sli, lag = FleetSli(reg), ConsumerLag(reg)
     bad, dead = Counter("ehg_triage_bad_messages", "messages kept under EHG.BAD.*", registry=reg), Counter("ehg_triage_dead_letters", "JetStream max-delivery advisories", registry=reg)
     host = os.environ.get("BIND_HOST", "127.0.0.1")
-    app = create_app(store=store, audit=audit, auth=from_env(), registry=registry, known_nodes=lambda: list(fleet.nodes), config=engine.cfg, metrics=reg,
+    app = create_app(store=store, audit=audit, auth=from_env(), registry=registry, known_nodes=lambda: list(fleet.nodes), config=engine.cfg, metrics=reg, fhir_upstream=upstream_from_env(os.environ),
                      ui_oidc={"authority": os.environ.get("OIDC_UI_AUTHORITY", os.environ.get("OIDC_ISSUER", "")), "client_id": os.environ.get("OIDC_UI_CLIENT_ID", "triage-ui")})
     nc = await nats.connect(os.environ.get("NATS_URL", "nats://nats:4222"), name="ehg-triage", max_reconnect_attempts=-1)
     js = nc.jetstream()

@@ -39,6 +39,12 @@ class Upstream:
         return body
 
 
+def upstream_from_env(env) -> "Upstream | None":
+    """The FHIR server named by FHIR_BASE_URL (optional FHIR_TOKEN), or None so the /fhir routes do not exist at all."""
+    url = env.get("FHIR_BASE_URL", "").strip()
+    return Upstream(url, env.get("FHIR_TOKEN") or None) if url else None
+
+
 def router(upstream, who, audit, registry) -> APIRouter:
     """`who(min_role)` is the app's authentication dependency factory. All routes are GET-only."""
     r = APIRouter(prefix="/fhir")

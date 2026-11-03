@@ -141,3 +141,9 @@ def test_fhir_responses_are_never_cached_including_errors(env):
                     ("/fhir/Observation?node=EHG-2", bearer("viewer")), ("/fhir/Observation?node=bad.id", bearer("viewer")), ("/fhir/Observation?node=EHG-1", {})):
         r = env.client.get(path, headers=h)
         assert r.headers.get("cache-control") == "no-store", f"{path} -> {r.status_code}"
+
+
+def test_the_service_configures_the_facade_from_the_environment():
+    from backend.triage.fhir_api import upstream_from_env
+    assert upstream_from_env({}) is None and upstream_from_env({"FHIR_BASE_URL": "  "}) is None, "no server configured: no /fhir routes"
+    assert upstream_from_env({"FHIR_BASE_URL": "http://hapi:8080/fhir"}) is not None

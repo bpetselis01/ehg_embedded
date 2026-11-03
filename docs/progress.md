@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-11-04: Unit 11b, the cloud compose file completed as far as it can be without the cloud (never started)
+
+- **Added to `deploy/compose/docker-compose.cloud.yml`:** `migrate` (one-shot), `bridge`, `ts-writer`, `triage` (one image built on the VM from `backend/platform.Dockerfile`, whose base is now pinned by digest), `keycloak` 26.8.1 and `hapi` v7.6.0 (digests read from the registry API, arm64 present). 18 services; `docker compose config` resolves them.
+  The triage service now serves the FHIR facade when `FHIR_BASE_URL` is set (it was not wired before), and `update.sh` builds the local image and accepts an exited one-shot job (`ExitCode` 0) while still failing a crashed service (tested with the real jq filter). Four new secrets are in the example (`KEYCLOAK_ADMIN_PASSWORD` and three client secrets); passwords must now be hex.
+- **Tested:** 10 new structural tests (shared built image, no privileges, migrations before writers, one role per service, real sign-in only, the bridge mounts only its own certificate, every realm placeholder is supplied to Keycloak, every required secret is in the example, the update order, the jq filter).
+- **Honest gaps:** Keycloak and HAPI have NO health check on purpose (the right probes are unverified and a wrong one would roll back every release); step-ca, the enrolment API (it has no service entry point) and the FHIR sync worker are still not in the file; memory: about 3.7 GB for Keycloak + HAPI + the Python services counted against the 9.5 GB ceiling (limits, not measurements);
+  the Python services' read-only root and dropped capabilities are untested; nothing has been started.
+
 ## 2026-11-04: Unit 15 (the part that needs no phone): Swift wire-format package and golden vectors
 
 - **Added:** `tools/gen_packet_vectors.py` and `tests/fixtures/packet_vectors.json` (8 valid and 7 invalid packets from `gateway/packet.py`: 16- and 24-bit, one channel, no frames, the retransmission flag, extreme sample values and header fields, every refusal reason), the Swift package `ios/EHGWire` (decoder, encoder, CRC-16),

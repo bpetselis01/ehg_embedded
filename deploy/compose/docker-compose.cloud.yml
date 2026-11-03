@@ -2,10 +2,10 @@
 # Run (on the VM, by deploy/update.sh): docker compose --env-file /run/ehg/runtime.env --env-file /opt/ehg/etc/site.env -f deploy/compose/docker-compose.cloud.yml up -d
 #
 # PURPOSE: The cloud stack as one file: edge (Caddy), MQTT broker with mTLS, NATS JetStream bus, PostgreSQL + TimescaleDB, and the observability stack.
-#   It is deliberately PARTIAL: Keycloak, HAPI FHIR, step-ca and the Python workers arrive with Units 6 to 9 (their configuration does not exist yet).
-#   Their memory is reserved in tests/test_deploy_assets.py so the final stack is known to fit before it is built.
-# INPUT: /run/ehg/runtime.env (decrypted secrets: POSTGRES_PASSWORD, EHG_DB_PASSWORD, HAPI_DB_PASSWORD, KEYCLOAK_DB_PASSWORD, EXPORTER_DB_PASSWORD,
-#   GRAFANA_ADMIN_PASSWORD), /opt/ehg/etc/site.env (EHG_DOMAIN), certificates in EHG_PKI_DIR (default /opt/ehg/pki: ca-chain.crt, broker.crt, broker.key, ca.crl).
+#   It is still PARTIAL: step-ca, the enrolment API and the FHIR sync worker are NOT in it (the enrolment API has no service entry point yet; step-ca is initialised by hand; the sync worker needs the converted
+#   recordings' gain and baseline, which are not on the VM). Their memory is reserved in tests/test_deploy_assets.py so the finished stack is known to fit.
+# INPUT: /run/ehg/runtime.env (decrypted secrets: POSTGRES_PASSWORD, EHG_DB_PASSWORD, HAPI_DB_PASSWORD, KEYCLOAK_DB_PASSWORD, EXPORTER_DB_PASSWORD, TRIAGE_DB_PASSWORD,
+#   KEYCLOAK_ADMIN_PASSWORD, TRIAGE_API_CLIENT_SECRET, ENROLL_API_CLIENT_SECRET, FHIR_SYNC_CLIENT_SECRET, GRAFANA_ADMIN_PASSWORD; generate with openssl rand -hex 24, because passwords go into URLs and connection strings), /opt/ehg/etc/site.env (EHG_DOMAIN), certificates in EHG_PKI_DIR (default /opt/ehg/pki: ca-chain.crt, broker.crt, broker.key, ca.crl).
 #   A missing secret stops `up` with a message naming it (the "?" in the variable).
 # OUTPUT: the host publishes ONLY 80, 443 (Caddy) and 8883 (Mosquitto). Postgres, NATS, Grafana, Prometheus, Loki are on the private Docker network only.
 #   Grafana has no route until Unit 11 puts it behind Caddy and Keycloak. To look at it before then, tunnel to the container's own address
@@ -29,6 +29,18 @@ x-service: &service
   restart: unless-stopped
   security_opt:
     - no-new-privileges:true
+
+# The Python services share one image, BUILT on the VM from this repository (backend/platform.Dockerfile; its base image is pinned by digest). update.sh builds it before `up`.
+x-python: &python
+  <<: *service
+  networks: [internal]
+  build:
+    context: ../..
+    dockerfile: backend/platform.Dockerfile
+  image: ehg-platform:cloud
+  pull_policy: build
+  read_only: true
+  cap_drop: [ALL]
 
 services:
   caddy:
@@ -247,6 +259,147 @@ services:
         condition: service_healthy
     labels:
       ehg.healthcheck: "none: the exporter image is a single static binary with no shell; Prometheus scrapes postgres-exporter:9187 instead"
+
+  migrate:
+    <<: *python
+    restart: "no"
+    command: ["python", "-m", "backend.db.migrate", "upgrade", "head"]
+    environment:
+      EHG_DB_URL: postgresql+psycopg://ehg:${EHG_DB_PASSWORD:?EHG_DB_PASSWORD is not set}@postgres:5432/ehg
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: 128m
+    labels:
+      ehg.oneshot: "true"
+      ehg.healthcheck: "none: a one-shot job; it must exit 0 once the schema is current (update.sh accepts an exited service with exit code 0)"
+
+  bridge:
+    <<: *python
+    command: ["python", "-m", "backend.bridge.bridge"]
+    environment:
+      NATS_URL: nats://nats:4222
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "8883"
+      MQTT_TLS: "1"
+      MQTT_CA: /pki/ca-chain.crt
+      MQTT_CERT: /pki/ehg-bridge.crt
+      MQTT_KEY: /pki/ehg-bridge.key
+      BRIDGE_METRICS_PORT: "9201"
+    volumes:
+      # single certificate files of this component only, never the PKI directory
+      - ${EHG_PKI_DIR:-/opt/ehg/pki}/ca-chain.crt:/pki/ca-chain.crt:ro
+      - ${EHG_PKI_DIR:-/opt/ehg/pki}/ehg-bridge.crt:/pki/ehg-bridge.crt:ro
+      - ${EHG_PKI_DIR:-/opt/ehg/pki}/ehg-bridge.key:/pki/ehg-bridge.key:ro
+    depends_on:
+      nats:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+    mem_limit: 96m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9201/metrics', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  ts-writer:
+    <<: *python
+    command: ["python", "-m", "backend.ts_writer.writer"]
+    environment:
+      NATS_URL: nats://nats:4222
+      EHG_DB_DSN: host=postgres port=5432 dbname=ehg user=ehg password=${EHG_DB_PASSWORD:?EHG_DB_PASSWORD is not set}
+      WRITER_METRICS_PORT: "9202"
+    depends_on:
+      nats:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9202/metrics', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  triage:
+    <<: *python
+    command: ["python", "-m", "backend.triage.stream"]
+    environment:
+      AUTH_MODE: oidc
+      OIDC_ISSUER: https://${EHG_DOMAIN:?EHG_DOMAIN is not set (site.env)}/auth/realms/ehg
+      OIDC_UI_AUTHORITY: https://${EHG_DOMAIN}/auth/realms/ehg
+      OIDC_AUDIENCE: triage-api
+      OIDC_JWKS_URL: http://keycloak:8080/auth/realms/ehg/protocol/openid-connect/certs
+      EHG_TRIAGE_DSN: host=postgres port=5432 dbname=ehg user=ehg_triage password=${TRIAGE_DB_PASSWORD:?TRIAGE_DB_PASSWORD is not set}
+      NATS_URL: nats://nats:4222
+      FHIR_BASE_URL: http://hapi:8080/fhir
+      BIND_HOST: 0.0.0.0
+      TRIAGE_PORT: "8780"
+    depends_on:
+      nats:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    mem_limit: 192m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8780/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  keycloak:
+    <<: *service
+    networks: [internal]
+    image: quay.io/keycloak/keycloak:26.8.1@sha256:3f3c5f8e03c614774b4bd9173b88391fefa4153bfc010d8012d59ad825377332
+    command: ["start", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?KEYCLOAK_DB_PASSWORD is not set}
+      KC_HOSTNAME: https://${EHG_DOMAIN:?EHG_DOMAIN is not set (site.env)}/auth
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD is not set}
+      JAVA_OPTS_KC_HEAP: -XX:MaxRAMPercentage=65
+      # filled into realm-ehg.json at import (the file holds placeholders only)
+      EHG_DOMAIN: ${EHG_DOMAIN}
+      TRIAGE_API_CLIENT_SECRET: ${TRIAGE_API_CLIENT_SECRET:?TRIAGE_API_CLIENT_SECRET is not set}
+      ENROLL_API_CLIENT_SECRET: ${ENROLL_API_CLIENT_SECRET:?ENROLL_API_CLIENT_SECRET is not set}
+      FHIR_SYNC_CLIENT_SECRET: ${FHIR_SYNC_CLIENT_SECRET:?FHIR_SYNC_CLIENT_SECRET is not set}
+    volumes:
+      - ../keycloak/realm-ehg.json:/opt/keycloak/data/import/realm-ehg.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    cap_drop: [ALL]
+    mem_limit: 1360m
+    labels:
+      ehg.healthcheck: "none: the right probe (the management port, /health/ready) was not verified and a wrong one would roll back every release; sign-in itself is the check"
+
+  hapi:
+    <<: *service
+    networks: [internal]
+    image: hapiproject/hapi:v7.6.0@sha256:4771a178e764896c83881c1b3a52bd487e53d06e1acc3653ea0db0c6f6b2b8a1
+    environment:
+      SPRING_CONFIG_LOCATION: file:///app/config/application.yaml
+      HAPI_DB_PASSWORD: ${HAPI_DB_PASSWORD:?HAPI_DB_PASSWORD is not set}
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=70
+    volumes:
+      - ../hapi/application.yaml:/app/config/application.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    cap_drop: [ALL]
+    mem_limit: 2300m
+    labels:
+      ehg.healthcheck: "none: believed to be a distroless image with no shell or wget (not verified); readiness is seen through the triage facade (/fhir/metadata answers 502 while HAPI is down)"
 
 networks:
   edge: {}

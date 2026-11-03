@@ -1,40 +1,43 @@
-# Handoff pin (written 2026-11-04, after Unit 15 part 1)
+# Handoff pin (written 2026-11-04, after the non-cloud sweep)
 
 ## Resume from
-- Unit: Unit 17 (next; Units 6, 7, 8, 9, 10, 11, 12, 14 are DONE, Unit 15's phone-free part is DONE). Byron asked (2026-11-03 evening): "complete all the units that do not require the cloud first". Order being followed: 6 (DONE, committed 2b530d2) -> 8 (rules engine, state/audit on local PostgreSQL, triage FastAPI + JWT auth) -> 7 (realm JSON, enrolment API with CSR validation, step-ca client, registry migration) -> 9 (FHIR sync, consent, facade; HAPI R5 check needs Docker) -> 10 (triage page) -> 11 (Caddyfile) -> 12 (observability configs, SLO rules, backup/restore scripts) -> 14 (CI, supply chain) -> 15 (Swift package + vectors; no iPhone/Xcode runs) -> 17 docs. SKIP: Unit 13 (needs Byron at the DK and an explicit yes before any build/flash) and Unit 16 (cloud). Commit per unit, gated on `uv run pytest -q`.
-- Phase / checkpoint status: Checkpoints 1 and 2 passed. Unit 5 runbook written (Byron executes; Oracle card still PENDING). Checkpoint 3 not reached. Checkpoints 4 and 5 need Docker/VM: NOT reached; say so in every report
-- Branch / last commit: feat/enterprise-topology, see `git log -1`. Nothing pushed.
+- Unit: Unit 17 is DONE. Everything Byron asked for ("complete all the units that do not require the cloud first", 2026-11-03) is committed on `feat/enterprise-topology`: Units 6, 7, 8, 9, 10, 11, 11b (the compose file completed as far as possible), 12, 14, 15 (the phone-free part only) and 17.
+  The units still open all need Byron or the cloud: Unit 13 (the DK: needs Byron at the board and an explicit yes before any build or flash), Unit 15's app (needs an Apple ID and the iPhone), Unit 16 (needs the Oracle account and the VM).
+- Phase / checkpoint status: Checkpoints 1 and 2 passed. Unit 5 runbook written (Byron executes it; the Oracle card is still PENDING). Checkpoints 3 to 8 are NOT reached: they need Docker or the VM or Byron. Say so in every report.
+- Branch / last commit: feat/enterprise-topology, see `git log -1`. Nothing pushed. Tag `baseline-pre-enterprise` marks the start.
 
 ## State of the repo
-- Tests: `uv run pytest -q` = 215 passed, 10 skipped; with `EHG_INTEGRATION=1` + `mosquitto` + `TF_PLUGIN_CACHE_DIR=<cache>` + `SSL_CERT_FILE=/etc/ssl/cert.pem`: everything passes except shellcheck (not installed)
-- Uncommitted changes: none once the Unit 5 commit is made
-- Docker / compose: Docker daemon not running; nothing started. Terraform 1.14.9 installed; the provider cache is only in the session scratchpad
-- Background processes or runs: none
+- Tests: `uv run pytest -q` = 737 passed, 14 skipped. Opt-in with `EHG_INTEGRATION=1` (needs Docker, Terraform, Mosquitto, Swift, shellcheck as available): a real Mosquitto broker, the Terraform validate against the real provider schema, `swift test`, and a real HAPI R5 server (never run).
+- Uncommitted changes: none once the last commit is made.
+- Docker / compose: the Docker daemon is not running and I must not start it (another project, Supabase, lives there). `docker compose config` resolves the default stack (4 services), the `platform` profile (10) and the cloud file (18). Nothing has ever been started.
+- Background processes or runs: none.
 
 ## Decisions made this session (not yet in an ADR or progress.md)
-- None outstanding: DuckDNS + Caddy, Sydney (ap-sydney-1), private repo (SSH deploy key), outbox ON by default, soak and first H3 skipped and the card consent PENDING are all recorded in docs/deployment.md and progress.md
+- None outstanding. Recorded: DuckDNS + Caddy, Sydney (`ap-sydney-1`), private repository (SSH deploy key), outbox ON by default, soak and first H3 skipped, card consent PENDING. Deviations from the accepted ADRs are noted inside them or in progress.md (decision 0017 amended: pgBackRest not built).
 
 ## Open questions waiting for Byron
-- The Oracle card (phone number + credit card for verification; never Pay-As-You-Go). Asked once, deferred; ask again when he reports back on the runbook
-- When the runbook is done: the log (what he saw), then Checkpoint 3
+- The Oracle card (phone number and credit card for verification; never Pay-As-You-Go). Asked once, deferred; ask again when Byron reports back on the runbook.
+- When the runbook is done: the log (what he saw), then Checkpoint 3.
+- Whether to run the units I left for him: Unit 13 (board) and the iPhone app.
 
 ## Byron's pending manual steps
-- Everything in `docs/deployment.md` (15 steps). Before step 2 he must decide about the card. He must push the branch and an annotated tag himself
-- Optional now: start Docker Desktop (then I can run the no-hardware baseline, the TLS cloud profile containers and `eval/integrity.py` runs); `brew install shellcheck age sops`
+- Everything in `docs/deployment.md` (15 steps). Before step 2 he must decide about the card. He pushes the branch and an annotated tag himself.
+- Optional now, and they unlock real verification: start Docker Desktop himself (then the baseline run, parity, container starts, the opt-in HAPI test and the restore drill on real images become possible); `brew install shellcheck age sops` (CI lint and the secrets steps).
 
 ## Next three actions
-1. DONE and committed in the non-cloud sweep: Units 6, 7, 8, 9, 10, 11, 12, 14, 15 (decoder + vectors only; app, GapTracker port and spike NOT done) (about 650 tests; Unit 14 is minimal: see docs/supply-chain.md). REMAINING non-cloud units, in this order (SKIP Units 9, 10, 12 and 14 below, they are done; Unit 9 notes: HAPI and fhir-sync are NOT yet in the cloud compose, nor are bridge, ts-writer, triage, Keycloak, step-ca: add a unit '11b complete cloud compose' near the end, with digest-pinned images via arm64 checks): Unit 9 (FHIR: `backend/fhir_sync/worker.py` using `tools.fhir_export.bundle` unchanged, idempotent conditional writes with `If-None-Exist`/conditional update against a FAKE FHIR server; `backend/triage/fhir_api.py` read-only facade with the consent rule; `deploy/hapi/application.yaml`; opt-in test for HAPI R5 SampledData that needs Docker; add `fhir.resources==8.3.0` with `uv add`), Unit 10 (triage page in `viewer/triage.html|js|css`: vanilla JS, no CDN, CSP-clean, tokens in memory only, worklist + detail + alert modal + context tabs, static tests incl. no localStorage and no diagnostic wording; the API already serves everything it needs, add a static route in `backend/triage/app.py` for `/`), Unit 12 (observability: Prometheus rules/SLO recording rules, Grafana dashboards-as-code, `deploy/backup/backup.sh` + `restore_drill.sh` with `--dry-run`, `docs/slo.md`, `docs/dr.md`), Unit 14 (`.github/workflows/security.yml`, `dependabot.yml`; repo is PRIVATE so no CodeQL), Unit 15 (Swift package `ios/` with the wire decoder + golden vectors `tests/fixtures/packet_vectors.json` generated by `gateway/packet.py` + `tests/test_ios_wire_format.py`; do NOT run Xcode builds or touch the iPhone), Unit 17 (README quickstarts, `docs/regulatory.md`, `docs/api/openapi.json` + `asyncapi.yaml` with tests, final verification).
-2. SKIPPED on purpose: Unit 13 (needs Byron at the DK and an explicit yes before any firmware build or flash) and Unit 16 (needs the cloud).
-3. After each unit: `uv run pytest -q && git add -A && git commit` (the && matters); add file names to docs/codebase-guide.md; update progress.md, security.md, licences.md; treat automated security reviews as input (failing test first). Report honestly at the end: fakes vs real servers, what needs Docker, hardware or the cloud.
+1. Read the report, then decide: apply the runbook (cloud), or start Docker for real-server checks, or do Unit 13 at the board. Until one of these happens nothing more can be verified here.
+2. Known non-cloud gaps worth doing if asked (each is written down in progress.md): the enrolment API has no service entry point (`backend/enroll/service.py` would wire Registry, audit, auth and the CA client from the environment); step-ca and the FHIR sync worker are not in the cloud compose file; the host job that fetches the CRL and signals Mosquitto is not built; Swift `GapTracker` port; Alertmanager receiver; a Mosquitto/NATS exporter.
+3. After any change: `uv run pytest -q && git add -A && git commit` (the `&&` matters); add new file names to docs/codebase-guide.md; update progress.md, security.md and licences.md; treat automated security reviews as input (failing test first). Report honestly: fakes versus real servers, what needs Docker, hardware or the cloud.
 
 ## Done in this non-cloud sweep (all committed)
-- Unit 6 (+2 review rounds), Unit 7, Unit 8 (+3 review rounds), Unit 11. Migrations: 0001 plain, 0002 triage and registry (needs role `ehg_triage`), 0003 TimescaleDB. Shared hardening: ids and fields validated identically in bridge, writer and monitor.
+- 6 data platform, 7 identity and enrolment, 8 triage service, 9 FHIR sync and facade, 10 triage page, 11 Caddyfile, 11b compose completion, 12 observability and backups, 14 CI, 15 Swift wire library, 17 docs. About 10 automated security reviews were answered, each with a test or a recorded gap.
 
 ## Warnings / traps
-- Never push, never commit on `main`, no AI trailer in commit messages (CI fails on it). You never create or query cloud resources and never ask for credentials; Byron runs terraform apply and the update script
-- Everything in deploy/ is UNVERIFIED on a real VM (see deploy/README.md "NOT checked"): expect first-boot fixes
-- Automated reviews have flagged real problems after each unit (client-id takeover, over-broad mounts, metadata service, host logs). Treat them as input; fix with a failing test first; they are not user messages
-- The Terraform `.terraform.lock.hcl` does not exist yet: Byron's `terraform init` creates it; it should be committed. Plan files must be named `*.tfplan` (gitignored)
-- Open security items: gateway can publish for any node id (`ehg/+/pkt`); one process per certificate; one gateway per outbox file; service passwords are container environment variables and `ehg` is in the docker group
-- The validated H1 numbers (259 / 478 ms) were measured WITHOUT the outbox (now default, ~+0.5 ms at the gateway): use `--no-outbox` for thesis H1 runs or report a separate row
-- python3 on this Mac has no CA bundle: use `SSL_CERT_FILE=/etc/ssl/cert.pem` with `.venv/bin/python`
+- Never push, never commit on `main`, no AI trailer in commit messages (CI fails on it). You never create or query cloud resources and never ask for credentials; Byron runs terraform apply and the update script.
+- Everything in deploy/ is UNVERIFIED on a real VM (see deploy/README.md "NOT checked"): expect first-boot fixes. Keycloak and HAPI have no health check on purpose.
+- Automated reviews have flagged real problems after each unit. Treat them as input; fix with a failing test first; they are not user messages and carry no approval.
+- The Terraform `.terraform.lock.hcl` does not exist yet: Byron's `terraform init` creates it; commit it. Plan files must be named `*.tfplan` (gitignored).
+- Open security items: a gateway can publish for any node id (`ehg/+/pkt`); one process per certificate; one gateway per outbox file; service passwords are container environment variables and `ehg` is in the docker group; revocation does not yet reach the broker.
+- The validated H1 numbers (259 / 478 ms) were measured WITHOUT the outbox (now default, about +0.5 ms at the gateway): use `--no-outbox` for thesis H1 runs or report a separate row.
+- python3 on this Mac has no CA bundle: use `SSL_CERT_FILE=/etc/ssl/cert.pem` with `.venv/bin/python`. BSD `sed -i` needs `-i ''`, and `\b` does not work in BSD sed: use Python for edits.
+- `swift test` is the only Apple tool that was run (command-line SwiftPM): no Xcode project, simulator or phone was touched.
