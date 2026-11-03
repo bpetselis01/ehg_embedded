@@ -95,7 +95,7 @@ def create_app(*, store, audit, auth, registry, known_nodes=lambda: [], ready=la
         """No caching of API answers; no sniffing."""
         resp = await call_next(request)
         resp.headers["X-Content-Type-Options"] = "nosniff"
-        if request.url.path.startswith("/api/"):
+        if request.url.path.startswith(("/api/", "/fhir/")):
             resp.headers["Cache-Control"] = "no-store"
         return resp
 

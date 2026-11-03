@@ -66,3 +66,10 @@ def test_every_role_above_viewer_gets_totp_either_directly_or_through_operator()
 @pytest.mark.parametrize("client", ["triage-ui", "ios-gateway", "triage-api", "enroll-api", "fhir-sync"])
 def test_no_client_allows_the_password_grant(client):
     assert not clients[client].get("directAccessGrantsEnabled", False)
+
+
+def test_access_tokens_carry_the_audience_the_apis_require():
+    """The triage API and the enrolment API reject a token whose `aud` is not theirs (backend/jwtauth.py); Keycloak only adds it when a client has an audience mapper. Found when the triage page was written."""
+    def audiences(client):
+        return {m["config"]["included.client.audience"] for m in clients[client].get("protocolMappers", []) if m["protocolMapper"] == "oidc-audience-mapper" and m["config"]["access.token.claim"] == "true"}
+    assert audiences("triage-ui") == {"triage-api"} and audiences("ios-gateway") == {"enroll-api"}

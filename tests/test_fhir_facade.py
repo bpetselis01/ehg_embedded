@@ -132,3 +132,12 @@ def test_without_a_configured_fhir_server_the_routes_do_not_exist(pg_url):
     audit = AuditLog(connect, emit=lambda *_: None)
     app = create_app(store=AlertStore(connect, audit), audit=audit, auth=Authenticator("oidc", JwtVerifier(ISS, AUD, lambda t: KEY.public_key())), registry=Registry(connect, audit))
     assert TestClient(app).get("/fhir/metadata", headers=bearer("admin")).status_code == 404
+
+
+def test_fhir_responses_are_never_cached_including_errors(env):
+    """Waveform data and consent refusals must not sit in a browser or proxy cache (automated review, Unit 9)."""
+    env.answer["entries"] = [obs("EHG-1", 0)]
+    for path, h in (("/fhir/Observation?node=EHG-1", bearer("viewer")), ("/fhir/Device?node=EHG-1", bearer("viewer")), ("/fhir/metadata", bearer("viewer")),
+                    ("/fhir/Observation?node=EHG-2", bearer("viewer")), ("/fhir/Observation?node=bad.id", bearer("viewer")), ("/fhir/Observation?node=EHG-1", {})):
+        r = env.client.get(path, headers=h)
+        assert r.headers.get("cache-control") == "no-store", f"{path} -> {r.status_code}"

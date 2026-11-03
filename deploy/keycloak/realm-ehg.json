@@ -73,7 +73,20 @@
       "attributes": {
         "pkce.code.challenge.method": "S256",
         "post.logout.redirect.uris": "https://${EHG_DOMAIN}/*"
-      }
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-triage-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "triage-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
     },
     {
       "clientId": "ios-gateway",
@@ -87,6 +100,19 @@
       },
       "defaultClientScopes": [
         "gateway:enrol"
+      ],
+      "protocolMappers": [
+        {
+          "name": "audience-enroll-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "enroll-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
       ]
     },
     {
