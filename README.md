@@ -83,14 +83,17 @@ EHG_INTEGRATION=1 uv run pytest tests/test_mqtt_tls_config.py -q   # also tests 
 Each component has its own certificate: the ingest container uses `ehg-ingest` (set by the override), the viewer needs `MQTT_TLS=1 MQTT_CA=… MQTT_CERT=… MQTT_KEY=…` ([`viewer/server.py`](viewer/server.py)).
 The containers of this profile have **not been started** yet (Docker was not running when this was written); the broker config and ACL were tested against a local Mosquitto 2.1.2 ([docs/security.md](docs/security.md)).
 
-### Gateway outbox (optional): survive broker outages and restarts
+### Gateway outbox (on by default): survive broker outages and restarts
 
 ```sh
-uv run python -m gateway.gateway --simulate 1 --outbox gateway/outbox.db --gateway-id ehg-gw-01   # + the --mqtt-tls flags above for the cloud profile
+uv run python -m gateway.gateway --simulate 1 --gateway-id ehg-gw-01   # the outbox is gateway/outbox.db; --gateway-id adds retained online/offline status
+uv run python -m gateway.gateway --simulate 1 --no-outbox              # the old behaviour: messages wait only in the MQTT client's memory
 ```
 
 Every packet is written to the SQLite file first and deleted only when the broker confirms it; after an outage or a restart the waiting packets go out oldest first, marked `"replayed": true`
-([decision 0009](docs/decisions/0009-gateway-durable-outbox.md), `eval/latency.py --exclude-replayed`). Off by default. `--outbox-max-mb` (default 512) caps the file: over it the oldest unsent packets are dropped and named in the log.
+([decision 0009](docs/decisions/0009-gateway-durable-outbox.md), `eval/latency.py --exclude-replayed`). `--outbox-max-mb` (default 512) caps the file: over it the oldest unsent packets are dropped and named in the log.
+One gateway process per outbox file (a second one stops with a message; give it `--outbox OTHER.db`). Left-over packets from an earlier run are sent at the next start, marked replayed; delete `gateway/outbox.db` first if you do not want them.
+It costs time on the gateway: about 0.5 ms more between "gateway received" and "published" ([progress.md](docs/progress.md), 2026-11-03).
 
 ## Reproducing the results
 

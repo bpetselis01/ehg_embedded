@@ -206,8 +206,9 @@ class FakePaho:
 
 
 @pytest.fixture
-def fake_paho(monkeypatch):
+def fake_paho(monkeypatch, tmp_path):
     import paho.mqtt.client as mqtt
+    monkeypatch.chdir(tmp_path)  # the default outbox path (gateway/outbox.db) is relative to the working directory
     FakePaho.instances = []
     monkeypatch.setattr(mqtt, "Client", FakePaho)
     return FakePaho
@@ -215,7 +216,10 @@ def fake_paho(monkeypatch):
 
 def args_for(**kw):
     from gateway import gateway
-    return gateway.parse_args(["--simulate", "1", *[x for k, v in kw.items() for x in (f"--{k.replace('_', '-')}", str(v))]])
+    flags = []
+    for k, v in kw.items():
+        flags += [f"--{k.replace('_', '-')}"] + ([] if v is True else [str(v)])
+    return gateway.parse_args(["--simulate", "1", *flags])
 
 
 def ok_connack():
@@ -224,19 +228,64 @@ def ok_connack():
     return ReasonCode(PacketTypes.CONNACK, "Success")
 
 
-def test_outbox_is_off_by_default_and_publishing_is_unchanged(fake_paho, tmp_path, monkeypatch):
+def test_outbox_is_on_by_default_and_holds_packets_until_the_broker_is_there(fake_paho, tmp_path):
     from gateway import gateway
-    monkeypatch.chdir(tmp_path)
     args = args_for()
-    assert args.outbox is None and args.gateway_id is None
+    assert args.outbox == "gateway/outbox.db" and args.outbox_max_mb == 512 and args.no_outbox is False
+    publish, close = gateway.make_publisher(args)
+    c = fake_paho.instances[0]
+    assert (tmp_path / "gateway/outbox.db").exists()
+    publish("EHG-T", json.loads(message(1)))
+    assert c.published == [], "not connected yet: held on disk, not in paho's memory"
+    c.on_connect(c, None, None, ok_connack(), None)
+    assert [json.loads(p)["seq"] for _, p, _, _ in c.published] == [1]
+    close()
+
+
+def test_no_outbox_restores_the_plain_publish_path(fake_paho, tmp_path):
+    from gateway import gateway
+    args = args_for(no_outbox=True)
+    assert args.outbox is None
     publish, close = gateway.make_publisher(args)
     c = fake_paho.instances[0]
     publish("EHG-T", json.loads(message(1)))
     topic, payload, qos, retain = c.published[0]
     assert (topic, qos, retain) == ("ehg/EHG-T/pkt", 1, False) and "t_mqtt_pub" in json.loads(payload) and "replayed" not in json.loads(payload)
-    assert c.on_connect is None and not list(tmp_path.glob("*.db")), "no callbacks, no database unless asked for"
+    assert c.on_connect is None and not list(tmp_path.rglob("*.db")), "no callbacks, no database"
     assert not any(name in ("will_set", "reconnect_delay_set", "connect_async") for name, _, _ in c.calls)
     assert ("connect", ("localhost", 1883), {}) in c.calls
+
+
+def test_outbox_and_no_outbox_cannot_be_combined():
+    with pytest.raises(SystemExit):
+        args_for(outbox="x.db", no_outbox=True)
+
+
+def test_second_process_on_the_same_outbox_file_is_refused(tmp_path):
+    from gateway.outbox import OutboxLockedError
+    first = Outbox(tmp_path / "shared.db", FakeTransport(), log=lambda *_: None)
+    with pytest.raises(OutboxLockedError, match="another gateway process"):
+        Outbox(tmp_path / "shared.db", FakeTransport(), log=lambda *_: None)
+    first.close()
+    Outbox(tmp_path / "shared.db", FakeTransport(), log=lambda *_: None).close()  # free again once the owner is gone
+
+
+def test_gateway_exits_with_a_clear_message_when_the_outbox_is_taken(fake_paho, tmp_path):
+    from gateway import gateway
+    publish, close = gateway.make_publisher(args_for())
+    with pytest.raises(SystemExit, match="another gateway process"):
+        gateway.make_publisher(args_for())
+    close()
+
+
+def test_unreachable_broker_is_reported_not_retried_in_silence(fake_paho, capsys):
+    from gateway import gateway
+    publish, close = gateway.make_publisher(args_for(mqtt="broker.invalid"))
+    c = fake_paho.instances[0]
+    c.on_connect_fail(c, None)
+    out = capsys.readouterr().out
+    assert "cannot reach the broker at broker.invalid:1883" in out and "outbox" in out
+    close()
 
 
 def test_outbox_on_buffers_until_connected_and_backs_off_1_to_60_s(fake_paho, tmp_path):

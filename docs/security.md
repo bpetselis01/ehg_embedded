@@ -21,7 +21,7 @@ Each later unit adds its boundary and updates the Status column. Nothing here sa
 | OIDC sign-in, TOTP multi-factor, roles, token validation | Keycloak and services | Planned (Units 7, 8) |
 | Hash-chained audit log, FHIR `AuditEvent` | Triage service | Planned; will be tamper-evident, **not** write-once |
 | Secrets kept out of git | `.gitignore` (`backend/pki/`, `*.key`, `*.pem`, `*.p12`) | Implemented for keys and certificates. SOPS with age for deployment secrets is Planned (Unit 4) |
-| Gateway outbox on disk | Python: SQLite file mode 0600 (WAL files inherit it) and FileVault; iOS: Data Protection class | Python **implemented, optional (`--outbox`)** in Unit 3, plain SQLite: a **documented gap** against SQLCipher. iOS Planned (Unit 15) |
+| Gateway outbox on disk | Python: SQLite file mode 0600 (WAL files inherit it) and FileVault; iOS: Data Protection class | Python **implemented, on by default (`--no-outbox` turns it off)** in Unit 3, plain SQLite: a **documented gap** against SQLCipher. iOS Planned (Unit 15) |
 | Encryption at rest on the cloud VM | Provider disk encryption; encrypted backups | Planned; partial |
 | Container hardening, image scan, SBOM, signing | Compose, Trivy, Syft, cosign | Planned (Units 4, 14) |
 | Readback protection (APPROTECT) and secure element on the board | nRF52840 DK | **Documented gap** (replay rig, not a product) |

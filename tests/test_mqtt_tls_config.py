@@ -582,7 +582,7 @@ def test_revoked_certificate_is_refused_after_the_broker_reloads(broker):
 def test_simulated_gateway_publishes_over_tls(broker):
     """gateway.py --simulate 1 --mqtt-tls end to end into the real broker, read back by the viewer identity."""
     p = broker.pki
-    cmd = [sys.executable, "-m", "gateway.gateway", "--simulate", "1", "--mqtt", "localhost", "--mqtt-port", str(broker.port), "--mqtt-tls",
+    cmd = [sys.executable, "-m", "gateway.gateway", "--simulate", "1", "--mqtt", "localhost", "--mqtt-port", str(broker.port), "--mqtt-tls", "--no-outbox",
            "--ca", str(p / "ca-chain.crt"), "--cert", str(p / "clients/ehg-gw-01.crt"), "--key", str(p / "clients/ehg-gw-01.key"),
            "--sim-record", str(ROOT / "data/converted/tpehgdb/tpehg1007.npz")]
     if not (ROOT / "data/converted/tpehgdb/tpehg1007.npz").exists():
@@ -608,7 +608,7 @@ def test_gateway_reports_a_refused_certificate_instead_of_staying_silent(broker,
     other = tmp_path / "other"
     run_pki(other, "init", "--host", "localhost")
     q = other / "clients/ehg-gw-01"
-    cmd = [sys.executable, "-m", "gateway.gateway", "--simulate", "1", "--mqtt", "localhost", "--mqtt-port", str(broker.port), "--mqtt-tls",
+    cmd = [sys.executable, "-m", "gateway.gateway", "--simulate", "1", "--mqtt", "localhost", "--mqtt-port", str(broker.port), "--mqtt-tls", "--no-outbox",
            "--ca", str(broker.pki / "ca-chain.crt"), "--cert", f"{q}.crt", "--key", f"{q}.key"]
     if not (ROOT / "data/converted/tpehgdb/tpehg1007.npz").exists():
         pytest.skip("data/converted not present (README step 0)")

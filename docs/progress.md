@@ -1,5 +1,16 @@
 # Progress log
 
+## 2026-11-03: outbox switched ON by default (Byron's decision at Checkpoint 2)
+
+- **Change:** `gateway --outbox` now defaults to `gateway/outbox.db`; `--no-outbox` restores the old in-memory path (the two flags exclude each other). Changing the default exposed two traps, both fixed with tests:
+  (1) `connect_async` never raises, so a broker that is not there would have been retried in silence: now `[mqtt] cannot reach the broker at host:port; retrying`;
+  (2) two gateways started from the same folder would have shared one file and sent each other's rows: now a lock file refuses the second process with a clear message.
+- **Cost, measured** (throwaway driver, plain local Mosquitto 2.1.2, 400 packets at 20 per second, two runs each): gateway receive to publish, median 124 us with `--no-outbox` vs 649 / 615 us with the outbox; p95 152 us vs 2.0 / 2.3 ms; worst 0.6 to 1.3 ms vs 4.2 / 5.0 ms.
+  That is larger than the isolated `add()` benchmark (36 us) because the PUBACK delete in paho's thread contends with the insert. It is under 1 % of the validated H1 median (259 ms) and p95 (478 ms), but it is **in the H1 chain and not zero**. H1 with the outbox on has NOT been re-measured (needs the board and Docker).
+- **Default behaviour check** (plain broker, no flags except the port): packets arrive without a `replayed` key, `t_mqtt_pub - t_gw_rx` about 0.8 ms, 0 rows left after a clean stop, file mode 0600, a second gateway from the same folder exits with code 1 and the message.
+- **Consequences to remember:** the earlier invariant "default `python -m gateway.gateway` behaves exactly as today" no longer holds for the outbox (decided by Byron); H1 runs for the thesis should either use `--no-outbox` to stay comparable with the recorded numbers (259 / 478 ms) or be reported as a separate row; left-over rows replay at the next start, marked `replayed`.
+- Tests: 145 pass and 8 skipped without a broker; with `EHG_INTEGRATION=1` and `mosquitto` installed, 153 pass (about 49 s).
+
 ## 2026-11-03: Unit 3, durable gateway outbox ([decision 0009](decisions/0009-gateway-durable-outbox.md)); Checkpoint 2 pending
 
 - **Added:** [`gateway/outbox.py`](../gateway/outbox.py) (SQLite WAL, mode 0600, write first, delete on PUBACK, oldest first, at most 100 in flight, disk cap, durable-write fallback),

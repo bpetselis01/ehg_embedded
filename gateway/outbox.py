@@ -16,10 +16,12 @@ HOW: add() writes the row FIRST, then sends if connected. A row is deleted only 
   One lock guards everything because add() runs in the BLE/asyncio thread while the callbacks run in paho's thread.
 ROLE IN THESIS: Gateway resilience beyond the board's 256-packet history (H2): an outage longer than about two minutes is recovered from
   disk instead of being lost, and replayed rows are marked so H1 can exclude them (eval/latency.py --exclude-replayed).
-BEFORE -> AFTER: Before: gateway/gateway.py hands each JSON to paho's in-memory queue. After (with --outbox PATH): it hands it here, and
-  this module hands it to paho when the link is up. Nothing changes without --outbox.
+BEFORE -> AFTER: Before: gateway/gateway.py handed each JSON to paho's in-memory queue. After (the default since Checkpoint 2; --no-outbox
+  restores the old path): it hands it here, and this module hands it to paho when the link is up. Only one process may own a file (a lock file
+  next to it), so two gateways started from the same folder cannot share one by accident.
 """
 
+import fcntl
 import os
 import sqlite3
 import threading
@@ -31,12 +33,23 @@ SCHEMA = """CREATE TABLE IF NOT EXISTS outbox(
   topic TEXT NOT NULL, payload TEXT NOT NULL, created REAL NOT NULL, attempts INTEGER NOT NULL DEFAULT 0)"""
 
 
+class OutboxLockedError(RuntimeError):
+    """Another gateway process already owns this outbox file."""
+
+
 class Outbox:
     """On-disk queue; `transport.send(topic, payload)` returns a token (e.g. the MQTT message id) or None if it could not hand it over."""
 
     def __init__(self, path, transport, *, max_bytes: int = 512 * 2**20, max_inflight: int = 100, clock=time.time, log=print):
         path = self._path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
+        # one process per outbox file: two would each send the other's rows. The lock goes with the process, so a crash never leaves it stuck.
+        self._lock_file = os.fdopen(os.open(f"{path}.lock", os.O_RDWR | os.O_CREAT, 0o600), "w")
+        try:
+            fcntl.flock(self._lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            self._lock_file.close()
+            raise OutboxLockedError(f"{path} is in use by another gateway process; give this one its own file (--outbox PATH) or turn the outbox off (--no-outbox)") from None
         os.close(os.open(path, os.O_RDWR | os.O_CREAT, 0o600))
         os.chmod(path, 0o600)  # SQLite gives the -wal and -shm files the same permission bits
         self._db = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
@@ -114,6 +127,7 @@ class Outbox:
             if not self._closed:
                 self._closed = True
                 self._db.close()
+                self._lock_file.close()  # releases the lock
 
     # ------------------------------------------------------------ internals
 

@@ -76,7 +76,7 @@ older frames are dropped (`late`), a missing one is skipped (`starved`, frame_id
 
 `{node_id, seq, frame_idx, t_inject, t_inject_host, n_ch, fs_hz, record_id, flags, samples: [[...]], t_gw_rx, t_mqtt_pub}`
 
-Optional `"replayed": true` (added in Unit 3, only when the gateway runs with `--outbox`): the message did not go out the moment the gateway had it (it waited through a broker outage, a restart or the in-flight limit). `t_gw_rx` is the original receive time and `t_mqtt_pub` is stamped when it is actually sent, so the latency of a replayed message is NOT H1 latency (`eval/latency.py --exclude-replayed`). Consumers must treat a missing `replayed` as false.
+Optional `"replayed": true` (added in Unit 3, only while the gateway's outbox is on, which is the default; `--no-outbox` never sets it): the message did not go out the moment the gateway had it (it waited through a broker outage, a restart or the in-flight limit). `t_gw_rx` is the original receive time and `t_mqtt_pub` is stamped when it is actually sent, so the latency of a replayed message is NOT H1 latency (`eval/latency.py --exclude-replayed`). Consumers must treat a missing `replayed` as false.
 
 Gateway status (only with `--gateway-id ID`): retained `ehg/_gw/ID/status`, payload `online` (on connect) or `offline` (the broker's last will, or a clean exit), QoS 1.
 

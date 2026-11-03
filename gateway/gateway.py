@@ -6,7 +6,8 @@
   uv run python -m gateway.gateway --simulate 3    # 3 software nodes, no BLE (backend tests, H3 load)
   uv run python -m gateway.gateway --simulate 1 --mqtt-tls --ca backend/pki/ca-chain.crt \\
       --cert backend/pki/clients/ehg-gw-01.crt --key backend/pki/clients/ehg-gw-01.key   # cloud profile: TLS 1.3 + client cert, port 8883
-  uv run python -m gateway.gateway --outbox gateway/outbox.db --gateway-id ehg-gw-01   # survive broker outages and restarts (docs/decisions/0009)
+  uv run python -m gateway.gateway --gateway-id ehg-gw-01   # + retained online/offline status. The outbox (gateway/outbox.db) is on by default:
+  uv run python -m gateway.gateway --no-outbox     # old behaviour, in-memory queue only. One gateway process per outbox file (--outbox PATH)
 
 PURPOSE: Laptop-side bridge. Packets from the board (Bluetooth) -> database side (MQTT).
 INPUT: 1 BLE notification per packet = bytes in the wire format (header + int16 samples + CRC;
@@ -180,14 +181,19 @@ def make_publisher(args):
         c.will_set(status_topic, "offline", qos=1, retain=True)  # the broker publishes this if we vanish without saying goodbye
     ob = None
     if args.outbox:
-        from gateway.outbox import Outbox
-        ob = Outbox(args.outbox, PahoTransport(c), max_bytes=int(args.outbox_max_mb * 2**20))
+        from gateway.outbox import Outbox, OutboxLockedError
+        try:
+            ob = Outbox(args.outbox, PahoTransport(c), max_bytes=int(args.outbox_max_mb * 2**20))
+        except OutboxLockedError as e:
+            raise SystemExit(f"gateway: {e}") from None
         c.reconnect_delay_set(1, 60)  # paho doubles the wait from 1 s up to 60 s (it offers no jitter option)
         c.on_publish = lambda cl, u, mid, rc, p: ob.acked(mid)
     if args.mqtt_tls:
         c.tls_set_context(tls_context(args.ca, args.cert, args.key))
         # paho runs the TLS handshake inside its network thread, so a refused certificate raises nowhere: say so out loud
         c.on_connect_fail = lambda cl, u: print("[mqtt] connection failed (TLS handshake or network); retrying. Check --ca/--cert/--key, the broker name and the CRL")
+    elif ob:  # connect_async never raises, so without this a broker that is not there would be retried in silence
+        c.on_connect_fail = lambda cl, u: print(f"[mqtt] cannot reach the broker at {args.mqtt}:{args.mqtt_port}; retrying. Packets wait in the outbox")
     if args.mqtt_tls or ob or status_topic:
         def on_connect(cl, u, f, rc, p):
             if args.mqtt_tls:
@@ -337,7 +343,10 @@ def parse_args(argv=None):
     ap.add_argument("--ca", help="CA chain that signed the broker certificate (backend/pki/ca-chain.crt)")
     ap.add_argument("--cert", help="this gateway's client certificate (backend/pki/clients/ehg-gw-01.crt)")
     ap.add_argument("--key", help="the private key of --cert")
-    ap.add_argument("--outbox", metavar="PATH", help="keep every message in this SQLite file until the broker confirms it (off by default); e.g. gateway/outbox.db")
+    box = ap.add_mutually_exclusive_group()
+    box.add_argument("--outbox", metavar="PATH", default="gateway/outbox.db",
+                     help="keep every message in this SQLite file until the broker confirms it (ON by default; one gateway process per file)")
+    box.add_argument("--no-outbox", action="store_true", help="old behaviour: hand messages straight to the MQTT client's in-memory queue")
     ap.add_argument("--outbox-max-mb", type=float, default=512, help="size cap of the outbox; over it the OLDEST unsent packets are dropped, loudly")
     ap.add_argument("--gateway-id", help="publish retained online/offline status on ehg/_gw/<id>/status (with a last will); must equal the certificate CN under TLS")
     ap.add_argument("--no-mqtt", action="store_true")
@@ -353,6 +362,8 @@ def parse_args(argv=None):
         ap.error("--ca/--cert/--key given without --mqtt-tls: refusing to fall back to plain MQTT")
     if args.mqtt_port is None:
         args.mqtt_port = 8883 if args.mqtt_tls else 1883
+    if args.no_outbox:
+        args.outbox = None
     return args
 
 
