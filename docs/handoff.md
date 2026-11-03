@@ -1,9 +1,9 @@
 # Handoff pin (written 2026-11-03 22:40 AEDT)
 
 ## Resume from
-- Unit: Unit 5 is WRITTEN and committed. It is Byron's to EXECUTE: `docs/deployment.md` + `deploy/runbook/checklist.md`. Nothing can continue until he reports back. Resume at CHECKPOINT 3, then Unit 6
-- Phase / checkpoint status: Phases 0 to 2 done. Phase 3: Units 4 and 5 written; Checkpoint 3 (Byron has a reachable VM and the Mac gateway publishes over mTLS from the internet) NOT reached. The Oracle card question is PENDING (Byron said "skip this step first")
-- Branch / last commit: feat/enterprise-topology, see `git log -1` (docs: Oracle deployment runbook ...). NOTHING has been pushed; Byron must push the branch and a tag (runbook step 6)
+- Unit: BYRON ASKED (2026-11-03 evening): "complete all the units that do not require the cloud first". Order being followed: 6 (DONE, committed 2b530d2) -> 8 (rules engine, state/audit on local PostgreSQL, triage FastAPI + JWT auth) -> 7 (realm JSON, enrolment API with CSR validation, step-ca client, registry migration) -> 9 (FHIR sync, consent, facade; HAPI R5 check needs Docker) -> 10 (triage page) -> 11 (Caddyfile) -> 12 (observability configs, SLO rules, backup/restore scripts) -> 14 (CI, supply chain) -> 15 (Swift package + vectors; no iPhone/Xcode runs) -> 17 docs. SKIP: Unit 13 (needs Byron at the DK and an explicit yes before any build/flash) and Unit 16 (cloud). Commit per unit, gated on `uv run pytest -q`.
+- Phase / checkpoint status: Checkpoints 1 and 2 passed. Unit 5 runbook written (Byron executes; Oracle card still PENDING). Checkpoint 3 not reached. Checkpoints 4 and 5 need Docker/VM: NOT reached; say so in every report
+- Branch / last commit: feat/enterprise-topology, see `git log -1`. Nothing pushed.
 
 ## State of the repo
 - Tests: `uv run pytest -q` = 215 passed, 10 skipped; with `EHG_INTEGRATION=1` + `mosquitto` + `TF_PLUGIN_CACHE_DIR=<cache>` + `SSL_CERT_FILE=/etc/ssl/cert.pem`: everything passes except shellcheck (not installed)
