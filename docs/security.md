@@ -100,6 +100,11 @@ All four were real, all fixed with failing tests first (`tests/test_ts_writer.py
 - Honesty note: the tests for these two were written together with the fix in one step, so I did not see them fail first.
 - Still open: the broker reads its CRL only at start-up and on SIGHUP; the host-side job that fetches `GET /enroll-api/crl` and signals Mosquitto is not built, so a revocation takes effect at the broker only after that job (or a restart) runs.
 
+## Front door (Unit 11): findings of the automated review, 2026-11-03
+
+- **The 404 for /metrics and probes never ran (MEDIUM, fixed):** Caddy runs `handle` blocks before a bare `respond`, and a catch-all `handle` forwarded everything, so `/metrics` and `/healthz` would have been proxied. It is now the FIRST `handle` block and also matches prefixed paths (`/grafana/metrics`, `/enroll-api/healthz`). The services also refuse `/metrics` when a proxy header is present (second line of defence).
+- **Keycloak's admin interface was reachable (MEDIUM, fixed):** `/auth/*` was proxied whole. Now only `/auth/realms/ehg/*` and `/auth/resources/*` are; the admin console, the master realm, health and metrics answer 404. Administer Keycloak through an SSH tunnel to the container. Test: `tests/test_caddy_config.py` (path-matching of allowed and blocked examples; `caddy adapt` ordering is checked only where Caddy is installed).
+
 ## Known limit: a gateway can publish for any node id
 
 `topic write ehg/+/pkt` lets an authenticated gateway publish packets labelled with another node's id. Pinning a gateway to its nodes needs either a gateway id in the topic or message (a change to the documented `ehg/<node>/pkt` interface that `eval/` and the recorded runs rely on) or a check against a registry of which gateway serves which node.

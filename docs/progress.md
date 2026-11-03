@@ -3,6 +3,7 @@
 ## 2026-11-03: Unit 11, the Caddyfile (front door); never run
 
 - **Added:** the real `deploy/caddy/Caddyfile` (routes `/`, `/api`, `/fhir` to the triage service; `/auth` to Keycloak; `/grafana` to Grafana; `/enroll-api` to the enrolment API; `/metrics` and probe paths answered 404; HSTS, nosniff, frame denial, strict CSP, no Server header; 1 MB / 16 KB body limits) and `tests/test_caddy_config.py` (28 structural tests; `caddy validate` runs only where Caddy is installed).
+- **Automated review, 2 findings, fixed:** the 404 for `/metrics` and probes was a bare `respond` that Caddy runs AFTER `handle` blocks, so it never executed: it is now the first `handle` block and also covers prefixed paths; Keycloak is reachable only at `/auth/realms/ehg/*` and `/auth/resources/*` (admin console and master realm answer 404; use an SSH tunnel for the console).
 - **Honest gap:** stock Caddy has no rate-limit directive; rate limiting lives in the services (enrolment 5 per hour per login; Keycloak brute-force protection). The upstream services (triage, Keycloak, enrolment, FHIR) are not in the cloud compose file yet, so those routes would answer 502 until they are added.
 
 ## 2026-11-03: Unit 7, identity and certificate enrolment (code; not run against Keycloak or step-ca) (decision [0013](decisions/0013-keycloak-and-certificate-lifecycle.md))

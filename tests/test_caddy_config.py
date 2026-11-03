@@ -20,7 +20,7 @@ def upstreams() -> dict[str, str]:
 
 
 def test_the_routes_are_exactly_the_designed_ones():
-    assert re.findall(r"^\s*(handle(?:_path)?)\s+(\S+)?\s*\{", body, re.M) == [("handle", "/api/*"), ("handle", "/fhir/*"), ("handle", "/auth/*"), ("handle", "/grafana/*"), ("handle_path", "/enroll-api/*"), ("handle", "")]
+    assert re.findall(r"^\s*(handle(?:_path)?)\s+(\S+)?\s*\{", body, re.M) == [("handle", "@internal"), ("handle", "/api/*"), ("handle", "/fhir/*"), ("handle", "@keycloak"), ("handle", "/auth/*"), ("handle", "/grafana/*"), ("handle_path", "/enroll-api/*"), ("handle", "")]
     proxied = re.findall(r"reverse_proxy\s+(\S+)", body)
     assert sorted(proxied) == sorted(["triage:8780", "triage:8780", "keycloak:8080", "grafana:3000", "enroll:8790", "triage:8780"])
 
@@ -30,10 +30,35 @@ def test_nothing_internal_is_proxied(internal):
     assert internal not in " ".join(re.findall(r"reverse_proxy\s+(\S+)", body))
 
 
-def test_metrics_and_probe_paths_are_answered_404_before_any_route():
-    m = re.search(r"@internal path ([^\n]+)\n\s*respond @internal 404", body)
-    assert m and {"/metrics", "/metrics/*", "/healthz", "/readyz"} <= set(m.group(1).split())
-    assert body.index("respond @internal 404") < body.index("handle /api/*"), "the 404 must come before the routes"
+def matcher(name: str) -> list[str]:
+    """The path patterns of a named matcher."""
+    return re.search(rf"@{name} path ([^\n]+)", body).group(1).split()
+
+
+def matches(patterns: list[str], path: str) -> bool:
+    """Caddy's path matcher: a trailing /* matches below the prefix; a leading */ matches under any prefix (fnmatch semantics are close enough for these literals)."""
+    from fnmatch import fnmatchcase
+    return any(fnmatchcase(path, p) for p in patterns)
+
+
+def test_metrics_and_probe_paths_are_blocked_by_the_first_handle_block_not_a_bare_respond():
+    """Regression for a review finding: Caddy runs handle blocks BEFORE a bare `respond`, so a respond beside them was unreachable."""
+    assert re.search(r"handle @internal \{\s*respond 404\s*\}", body) and not re.search(r"^\s*respond @internal", body, re.M)
+    assert body.index("handle @internal") < body.index("handle /api/*")
+    internal = matcher("internal")
+    for path in ("/metrics", "/metrics/x", "/healthz", "/readyz", "/grafana/metrics", "/enroll-api/healthz", "/api/metrics", "/auth/healthz"):
+        assert matches(internal, path), f"{path} must be blocked"
+    for path in ("/api/alerts", "/", "/grafana/d/abc", "/enroll-api/enroll"):
+        assert not matches(internal, path), f"{path} must stay reachable"
+
+
+def test_only_the_ehg_realms_public_paths_of_keycloak_are_reachable():
+    kc = matcher("keycloak")
+    for ok in ("/auth/realms/ehg", "/auth/realms/ehg/protocol/openid-connect/auth", "/auth/realms/ehg/protocol/openid-connect/token", "/auth/resources/x1/login/keycloak/css/login.css"):
+        assert matches(kc, ok), ok
+    for blocked in ("/auth/admin/master/console/", "/auth/admin/realms/ehg/users", "/auth/realms/master/protocol/openid-connect/auth", "/auth/realms/ehg-evil/x", "/auth/health", "/auth/metrics", "/auth/"):
+        assert not matches(kc, blocked), blocked
+    assert re.search(r"handle /auth/\* \{\s*respond 404\s*\}", body) and body.index("handle @keycloak") < body.index("handle /auth/*")
 
 
 @pytest.mark.parametrize("header", ["Strict-Transport-Security", "X-Content-Type-Options", "X-Frame-Options", "Referrer-Policy", "Permissions-Policy", "Content-Security-Policy", "-Server"])
