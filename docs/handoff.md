@@ -6,7 +6,7 @@
 - Branch / last commit: feat/enterprise-topology, see `git log -1` (feat(transport): MQTT TLS 1.3 with client certificates as an optional cloud profile)
 
 ## State of the repo
-- Tests: `uv run pytest -q` = 122 passed, 6 skipped; `EHG_INTEGRATION=1 uv run pytest -q` = 128 passed (needs `brew install mosquitto`, which is installed here: Mosquitto 2.1.2)
+- Tests: `uv run pytest -q` = 122 passed, 6 skipped; `EHG_INTEGRATION=1 uv run pytest -q` = 129 passed (needs `brew install mosquitto`, which is installed here: Mosquitto 2.1.2)
 - Uncommitted changes: none
 - Files created in Unit 2: `tools/pki.sh`, `backend/mosquitto/mosquitto.tls.conf`, `backend/mosquitto/acl`, `backend/docker-compose.cloud.yml`, `docs/security.md`, `tests/test_mqtt_tls_config.py`; edited `gateway/gateway.py` (parse_args, tls_context, TLS flags), `backend/ingest/ingest.py` and `viewer/server.py` (mqtt_settings), README, codebase guide, troubleshooting, ADR 0008, licences, progress, `.gitignore`, `pyproject.toml`/`uv.lock` (+PyYAML dev)
 - Docker / compose: Docker daemon not running; nothing started. `docker compose config` works without the daemon and was used
@@ -29,6 +29,8 @@
 3. Update ACL/docs for the status topic (already allowed for `ehg-gw-01`), README, troubleshooting; add `gateway/outbox*.db` to `.gitignore`; record the outbox overhead benchmark in `docs/progress.md`; then stop at CHECKPOINT 2
 
 ## Warnings / traps
+- Open security item carried from Unit 2: a gateway can publish for any node id (`ehg/+/pkt`). Close it with the registry's `node.assigned_gateway` plus a triage/ingest check (Units 6 to 8); see `docs/security.md`
+- The TLS broker forces client id = certificate CN: one process per certificate
 - Never push, never commit on `main`, no AI trailer in commit messages (CI fails on it)
 - New `.py`/`.sh` under tools/eval/gateway/viewer/backend/firmware need their file name in the file index of `docs/codebase-guide.md`; every CLI uses `ArgumentParser(description=__doc__, ...)`
 - paho runs the TLS handshake in its network thread: a bad certificate raises nothing at `connect()`. Tests must probe with the raw CONNECT/CONNACK helper, and piped subprocess tests need `PYTHONUNBUFFERED=1`

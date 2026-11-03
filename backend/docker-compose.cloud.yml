@@ -3,7 +3,8 @@
 #
 # PURPOSE: An override file: it changes only the broker and ingest of docker-compose.yml, so the default stack (plain 1883) is unchanged
 #   when this file is not named (docs/decisions/0007-enterprise-evolution-keep-influx-as-reference.md).
-# INPUT: certificates in backend/pki (tools/pki.sh init). MQTT_BIND (default 127.0.0.1) = which host address 8883 listens on.
+# INPUT: certificates in backend/pki (tools/pki.sh init). Each container gets only the files it needs, not the CA keys.
+#   Run tools/pki.sh init BEFORE `up`: Docker turns a missing bind-mount source into an empty directory. MQTT_BIND (default 127.0.0.1) = which host address 8883 listens on.
 #   e.g. a cloud VM would set MQTT_BIND=0.0.0.0; this laptop keeps the default.
 # OUTPUT: broker on 127.0.0.1:8883 (mTLS). Port 1883 is NOT published to the host. Same Grafana (3300) and InfluxDB (8086).
 #   e.g. `docker compose -f docker-compose.yml -f docker-compose.cloud.yml ps` still shows 4 containers.
@@ -18,14 +19,20 @@ services:
     volumes:
       - ./mosquitto/mosquitto.tls.conf:/mosquitto/config/mosquitto.conf:ro
       - ./mosquitto/acl:/mosquitto/config/acl:ro
-      - ./pki:/mosquitto/pki:ro
+      # single files, never the whole pki directory: that also holds the intermediate CA key (and the root key until it is moved off)
+      - ./pki/ca-chain.crt:/mosquitto/pki/ca-chain.crt:ro
+      - ./pki/broker.crt:/mosquitto/pki/broker.crt:ro
+      - ./pki/broker.key:/mosquitto/pki/broker.key:ro
+      - ./pki/ca.crl:/mosquitto/pki/ca.crl:ro
 
   ingest:
     environment:
       MQTT_PORT: "8883"
       MQTT_TLS: "1"
       MQTT_CA: /pki/ca-chain.crt
-      MQTT_CERT: /pki/clients/ehg-ingest.crt
-      MQTT_KEY: /pki/clients/ehg-ingest.key
+      MQTT_CERT: /pki/ehg-ingest.crt
+      MQTT_KEY: /pki/ehg-ingest.key
     volumes:
-      - ./pki:/pki:ro
+      - ./pki/ca-chain.crt:/pki/ca-chain.crt:ro
+      - ./pki/clients/ehg-ingest.crt:/pki/ehg-ingest.crt:ro
+      - ./pki/clients/ehg-ingest.key:/pki/ehg-ingest.key:ro

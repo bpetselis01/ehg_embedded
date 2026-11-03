@@ -31,13 +31,13 @@ Each later unit adds its boundary and updates the Status column. Nothing here sa
 
 | STRIDE | Threat | Control (Unit 2) | Residual risk |
 |---|---|---|---|
-| **S**poofing | Someone publishes as a gateway, or reads the stream, without being one | TLS 1.3 with `require_certificate`; the certificate CN becomes the MQTT user name; no anonymous access in the cloud profile | A stolen client key works until the certificate expires or is revoked and the broker reloads its CRL |
+| **S**poofing | Someone publishes as a gateway, or reads the stream, without being one | TLS 1.3 with `require_certificate`; the certificate CN becomes the MQTT user name **and the client id** (`use_username_as_clientid`); no anonymous access in the cloud profile | A stolen client key works until the certificate expires or is revoked and the broker reloads its CRL |
 | **S**poofing | A fake broker captures gateway data | The client trusts only the private CA and checks the broker name against the certificate | A wrong `--host` at certificate creation fails closed (name mismatch) |
 | **T**ampering | A gateway publishes packets for nodes it does not serve | ACL limits what each identity can publish | `ehg/+/pkt` lets a gateway publish for **any** node id (documented limit in the ACL file) |
 | **T**ampering | Data altered in transit | TLS integrity; the application CRC-16 detects corruption before the gateway | Samples are not signed end to end; a compromised gateway can publish altered data |
 | **R**epudiation | A publisher denies sending | One identity per component, visible in the broker log | The broker log is not tamper-evident (audit log planned, Unit 8) |
 | **I**nformation disclosure | Packets read in transit or by an unauthorised reader | TLS 1.3; readers are listed in the ACL; no `#` grants | Public de-identified data only; real patient data must not be used (see below) |
-| **D**enial of service | Flooding, or an expired revocation list | `max_queued_messages 100000` bounds the backlog | An **expired CRL refuses every client** (tested, below); no rate limiting at the broker |
+| **D**enial of service | Flooding, an expired revocation list, or one identity taking over another's client id and session | Client id forced to the CN, so a takeover is impossible (reproduced and fixed, below); `max_queued_messages 100000` bounds the backlog | An **expired CRL refuses every client** (tested, below); no rate limiting at the broker; two processes sharing one certificate kick each other off, so each process needs its own certificate |
 | **E**levation of privilege | A reader publishes, or a gateway writes another gateway's status | ACL; both cases tested against the real broker | The CA signing key controls every identity (see "Keys") |
 
 ## What was checked, and how
@@ -51,13 +51,21 @@ Each later unit adds its boundary and updates the Status column. Nothing here sa
   so the CRL is picked up on reload or restart, not on its own. How an already-open session is treated at reload was **not** tested.
 - **Expired CRL:** with the CRL checked, a list past its next-update date refuses every client until `tools/pki.sh crl` rewrites it (tested with Python's OpenSSL server context, which uses the same mechanism as the broker; not tested against Mosquitto itself).
   `tools/pki.sh` writes CRLs valid for 365 days; put a refresh in the calendar.
+- **Client-id takeover (found by an automated security review, 2026-11-03):** without `use_username_as_clientid`, the viewer identity connected with the ingest service's client id and the broker dropped ingest and gave the viewer its session. Reproduced with a failing test, then fixed in `mosquitto.tls.conf`; the test now passes.
+- **CA keys stay out of containers (same review):** the override mounts single certificate files, never `backend/pki`, which also holds `intermediate/ca.key` (and `root/root.key` until it is moved off). A test checks the merged compose file.
 - **No Docker daemon needed:** all of the above ran without Docker running. `docker compose config` (which only reads files) confirms the merged cloud profile publishes only `127.0.0.1:8883`,
   mounts the TLS config, ACL and certificates read-only, and still has the same 4 services; the default stack still publishes 1883. The containers themselves were **not started** (Docker was not running).
+
+## Known limit: a gateway can publish for any node id
+
+`topic write ehg/+/pkt` lets an authenticated gateway publish packets labelled with another node's id. Pinning a gateway to its nodes needs either a gateway id in the topic or message (a change to the documented `ehg/<node>/pkt` interface that `eval/` and the recorded runs rely on) or a check against a registry of which gateway serves which node.
+It is **not fixed in Unit 2** and is accepted for now: the planned registry (`node.assigned_gateway`, Units 6 and 7) and the triage worker's checks (Unit 8) are where it gets closed, and the pin in `docs/handoff.md` carries it forward. Until then, a compromised gateway certificate can forge data for any node.
 
 ## Not verified (carried forward)
 
 - The `eclipse-mosquitto:2` image's exact version (the tests ran 2.1.2 from Homebrew), and whether the container's `mosquitto` user can read `backend/pki/broker.key` (mode 600). On Linux this may need a group-readable key or running the container with the host user. Check when Docker is available (Unit 5 on the VM).
 - The WebSocket-over-TLS path on port 443, whether a carrier blocks 8883, and client certificates through a SNI-routing front door.
+- Whether the single-file bind mount of `ca.crl` follows a rewrite by `tools/pki.sh crl` (it should, since OpenSSL rewrites the file in place, but a replaced file would leave the container with a stale list). Check with Docker.
 - OpenSSL 3 is required by `tools/pki.sh`; macOS's own `/usr/bin/openssl` is LibreSSL and is refused with a message.
 
 ## Keys

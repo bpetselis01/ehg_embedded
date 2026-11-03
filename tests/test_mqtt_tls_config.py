@@ -82,6 +82,7 @@ def test_tls_conf_requires_tls13_and_client_certs():
     assert d["tls_version"] == ["tlsv1.3"]
     assert d["require_certificate"] == ["true"]
     assert d["use_identity_as_username"] == ["true"]
+    assert d["use_username_as_clientid"] == ["true"], "otherwise one identity can take over another's session"
     assert d["allow_anonymous"] == ["false"]
     assert d["listener"] == ["8883"], "the cloud profile must have one listener, and it must be TLS"
     for key in ("cafile", "certfile", "keyfile", "crlfile", "acl_file"):
@@ -128,8 +129,13 @@ def test_cloud_override_publishes_only_8883():
     assert ports and all(p.endswith(":8883:8883") for p in ports), ports
     assert "!override" in CLOUD_COMPOSE.read_text(), "without !override Compose would ADD to the base 1883 mapping"
     assert not any("1883" in p for p in ports)
-    mounts = over["services"]["mosquitto"]["volumes"]
+    mounts = over["services"]["mosquitto"]["volumes"] + over["services"]["ingest"]["volumes"]
     assert all(m.endswith(":ro") for m in mounts), "certificates, config and ACL are mounted read-only"
+    for m in mounts:
+        source = m.split(":")[0]
+        if "pki" in source:  # certificates: single files only; the pki directory also holds the CA private keys
+            assert Path(source).suffix in (".crt", ".key", ".crl"), f"{m}: mount named files, never the pki directory"
+            assert not re.search(r"intermediate|root|ca\.key", source), f"{m}: CA material must not reach a service container"
     env = over["services"]["ingest"]["environment"]
     assert env["MQTT_TLS"] == "1" and env["MQTT_PORT"] == "8883"
 
@@ -152,7 +158,13 @@ def test_compose_config_merge_matches_the_design():
     assert [(p["target"], p["published"], p["host_ip"]) for p in mq["ports"]] == [(8883, "8883", "127.0.0.1")]
     targets = {v["target"]: v["source"] for v in mq["volumes"] if v["type"] == "bind"}
     assert targets["/mosquitto/config/mosquitto.conf"].endswith("mosquitto.tls.conf")
-    assert targets["/mosquitto/config/acl"].endswith("mosquitto/acl") and targets["/mosquitto/pki"].endswith("backend/pki")
+    assert targets["/mosquitto/config/acl"].endswith("mosquitto/acl")
+    assert {t for t in targets if t.startswith("/mosquitto/pki/")} == {f"/mosquitto/pki/{n}" for n in ("ca-chain.crt", "broker.crt", "broker.key", "ca.crl")}
+    for service in ("mosquitto", "ingest"):
+        for v in cloud["services"][service]["volumes"]:
+            if v["type"] == "bind" and "pki" in v["source"]:
+                assert v["read_only"] and v["source"].rsplit(".", 1)[-1] in ("crt", "key", "crl"), f"{service}: {v['source']} must be one certificate file"
+                assert not re.search(r"/(intermediate|root)/|ca\.key", v["source"])
     default = config("docker-compose.yml")
     assert [(p["target"], p["published"]) for p in default["services"]["mosquitto"]["ports"]] == [(1883, "1883")]
 
@@ -502,6 +514,34 @@ def test_broker_drops_publishes_the_acl_does_not_allow(broker):
     # ehg-bridge is allowed to read exactly these two filters, so it sees everything that was let through
     got = collect(broker, "ehg-bridge", ["ehg/+/pkt", "ehg/_gw/+/status"], 1, attempts)
     assert got == [("ehg/_gw/ehg-gw-01/status", b"own")], f"only the permitted publish may arrive, got {got}"
+
+
+@needs_openssl
+@needs_broker
+def test_one_identity_cannot_take_over_another_identitys_session(broker):
+    """Without use_username_as_clientid, a reader that sends the ingest service's client id kicks ingest off and inherits its persistent session."""
+    import paho.mqtt.client as mqtt
+    api = mqtt.CallbackAPIVersion.VERSION2
+    up, dropped = threading.Event(), threading.Event()
+    victim = mqtt.Client(api, client_id="ehg-ingest", clean_session=False)
+    victim.tls_set_context(client_context(broker.pki, "ehg-ingest"))
+    victim.on_connect = lambda *a: up.set()
+    victim.on_disconnect = lambda *a: dropped.set()
+    victim.connect("localhost", broker.port)
+    victim.loop_start()
+    assert up.wait(5), "ingest identity could not connect"
+    thief_up = threading.Event()
+    thief = mqtt.Client(api, client_id="ehg-ingest")  # a different identity, claiming ingest's client id
+    thief.tls_set_context(client_context(broker.pki, "ehg-viewer"))
+    thief.on_connect = lambda *a: thief_up.set()
+    thief.connect("localhost", broker.port)
+    thief.loop_start()
+    assert thief_up.wait(5), "the viewer identity should still be able to connect (under its own name)"
+    time.sleep(1.5)
+    assert not dropped.is_set(), "the viewer identity took over the ingest service's client id and session"
+    for c in (thief, victim):
+        c.loop_stop()
+        c.disconnect()
 
 
 @needs_openssl
