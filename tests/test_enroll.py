@@ -345,3 +345,16 @@ def test_the_whole_ehg_namespace_is_reserved_for_provisioned_identities(env, use
 
 def test_names_that_merely_contain_ehg_are_fine(env):
     assert enrol(env, user="ios-ehg-1").status_code == 200
+
+
+def test_a_revocation_that_failed_at_the_ca_is_retried_by_repeating_the_request(env):
+    serials = [str(x509.load_pem_x509_certificate(enrol(env).json()["certificate"].encode()).serial_number) for _ in range(2)]
+    env.ca.mode = "revoke_fails"
+    first = env.client.post("/revoke/ios-phone-1", headers=bearer("root", "admin")).json()
+    assert "NOT revoked" in first["ca"] and env.ca.revoked == [] and env.registry.gateway("ios-phone-1")["revoked_at"] is not None
+    env.ca.mode = None                                   # the CA is back
+    second = env.client.post("/revoke/ios-phone-1", headers=bearer("root", "admin")).json()
+    assert sorted(s for s, _ in env.ca.revoked) == sorted(serials) and "revoked 2 certificate(s)" in second["ca"], "the second request retried exactly the failures"
+    env.ca.revoked.clear()
+    third = env.client.post("/revoke/ios-phone-1", headers=bearer("root", "admin")).json()
+    assert env.ca.revoked == [] and "no live certificate waiting" in third["ca"], "nothing left to retry, nothing sent twice"

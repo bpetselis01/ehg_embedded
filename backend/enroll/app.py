@@ -110,10 +110,11 @@ def create_app(*, registry, audit, auth, ca, crl_source=lambda: "", limit=(5, 36
         for serial in serials:
             try:
                 ca.revoke(serial, gateway_id)
+                registry.mark_ca_revoked(serial)  # only a CONFIRMED revocation leaves the retry list
             except CaError as e:
                 failed.append(f"{serial} ({e})")
-        ca_result = ("no live certificate on record" if not serials else f"revoked {len(serials)} certificate(s) at the CA" if not failed
-                     else f"NOT revoked at the CA: {'; '.join(failed)}; the registry will still refuse a new enrolment, but the broker's CRL does not yet list them")
+        ca_result = ("no live certificate waiting to be revoked at the CA" if not serials else f"revoked {len(serials)} certificate(s) at the CA" if not failed
+                     else f"NOT revoked at the CA: {'; '.join(failed)}; the registry will still refuse a new enrolment, but the broker's CRL does not yet list them. Repeat the revocation once the CA is back: it retries exactly these")
         return {"gateway": gateway_id, "ca": ca_result, "crl": "fetch GET /crl and signal the broker (it reads the CRL on start-up and SIGHUP)"}
 
     @app.exception_handler(UnknownGateway)

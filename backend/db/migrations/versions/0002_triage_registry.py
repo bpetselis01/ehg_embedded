@@ -26,7 +26,7 @@ def upgrade() -> None:
         id text PRIMARY KEY CHECK (id ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'), kind text NOT NULL CHECK (kind IN ('python', 'ios')),
         cert_serial text, enrolled_at timestamptz, revoked_at timestamptz, last_seen timestamptz, app_version text)""")
     op.execute("""CREATE TABLE registry.gateway_cert (
-        serial text PRIMARY KEY, gateway_id text NOT NULL REFERENCES registry.gateway (id), issued_at timestamptz NOT NULL, not_after timestamptz NOT NULL, revoked_at timestamptz)""")
+        serial text PRIMARY KEY, gateway_id text NOT NULL REFERENCES registry.gateway (id), issued_at timestamptz NOT NULL, not_after timestamptz NOT NULL, revoked_at timestamptz, ca_revoked_at timestamptz)""")
     op.execute("""CREATE TABLE registry.subject (
         id text PRIMARY KEY, pseudonym text NOT NULL UNIQUE, source_dataset text NOT NULL,
         consent_status text NOT NULL DEFAULT 'none' CHECK (consent_status IN ('none', 'active', 'withdrawn')))""")
