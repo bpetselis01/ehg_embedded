@@ -151,6 +151,15 @@ Step by step:
 | [`deploy/postgres/10-init-databases.sh`](../deploy/postgres/10-init-databases.sh) | first start of PostgreSQL: creates the databases and login roles |
 | [`tests/test_deploy_assets.py`](../tests/test_deploy_assets.py) | checks Terraform, cloud-init, compose, `update.sh` and that no secret or state can reach git |
 | [`tests/test_mqtt_tls_config.py`](../tests/test_mqtt_tls_config.py) | checks the TLS config, ACL, compose merge, PKI and (opt-in) a real local Mosquitto |
+| [`backend/bus.py`](../backend/bus.py) | the NATS JetStream layout: stream, subjects, message ids, consumer settings |
+| [`backend/mqtt_env.py`](../backend/mqtt_env.py) | MQTT connection settings from environment variables, for services built from the repo root |
+| [`backend/bridge/bridge.py`](../backend/bridge/bridge.py) | MQTT -> JetStream; acknowledges the broker only after the stream has the message |
+| [`backend/ts_writer/writer.py`](../backend/ts_writer/writer.py) | JetStream -> PostgreSQL/TimescaleDB, idempotent, atomic batches, reports "degraded" when the database is down |
+| [`backend/db/migrate.py`](../backend/db/migrate.py) | applies or undoes the database migrations (Alembic) |
+| [`backend/db/migrations/env.py`](../backend/db/migrations/env.py), [`versions/0001_base_schema.py`](../backend/db/migrations/versions/0001_base_schema.py), [`versions/0002_timescale.py`](../backend/db/migrations/versions/0002_timescale.py) | Alembic environment; plain tables; TimescaleDB hypertables, compression, retention, roll-ups |
+| [`backend/platform.Dockerfile`](../backend/platform.Dockerfile), [`backend/docker-compose.platform.yml`](../backend/docker-compose.platform.yml) | the platform services' image and the compose override (profile `platform`) |
+| [`eval/parity.py`](../eval/parity.py) | compares InfluxDB and TimescaleDB for the same run; fails if they differ |
+| [`tests/conftest.py`](../tests/conftest.py) | a throwaway local PostgreSQL for the tests that need real SQL |
 | [`backend/.env.example`](../backend/.env.example) | shared names and passwords (copy to `.env`) |
 | [`backend/mosquitto/mosquitto.conf`](../backend/mosquitto/mosquitto.conf) | broker settings (keeps a queue on disk) |
 | [`backend/ingest/ingest.py`](../backend/ingest/ingest.py) + `Dockerfile` | MQTT → InfluxDB writer |

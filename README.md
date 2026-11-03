@@ -84,6 +84,17 @@ EHG_INTEGRATION=1 uv run pytest tests/test_mqtt_tls_config.py -q   # also tests 
 Each component has its own certificate: the ingest container uses `ehg-ingest` (set by the override), the viewer needs `MQTT_TLS=1 MQTT_CA=… MQTT_CERT=… MQTT_KEY=…` ([`viewer/server.py`](viewer/server.py)).
 The containers of this profile have **not been started** yet (Docker was not running when this was written); the broker config and ACL were tested against a local Mosquitto 2.1.2 ([docs/security.md](docs/security.md)).
 
+### Data platform (optional profile): NATS + TimescaleDB beside InfluxDB
+
+```sh
+cd backend && docker compose --profile platform -f docker-compose.yml -f docker-compose.platform.yml up -d     # needs Docker; the default `docker compose up -d` is unchanged (4 containers)
+docker compose stop ingest                                   # so InfluxDB is fed only from the stream
+uv run python -m gateway.gateway --simulate 1 --sim-loss 0.01 --no-outbox   # a few minutes, then Ctrl-C
+EHG_TS_DSN="host=localhost port=5433 dbname=ehg user=ehg password=local-only-change-me" uv run python eval/parity.py --node SIM-0000 --since 10m
+```
+
+`eval/integrity.py`, `eval/latency.py` and `tools/fhir_export.py` take `--backend influx|timescale`. Nothing here has run against real NATS/TimescaleDB yet ([decision 0012](docs/decisions/0012-timescaledb-nats-data-platform.md)); the SQL, bridge and writer logic is tested with fakes and a local PostgreSQL.
+
 ### Gateway outbox (on by default): survive broker outages and restarts
 
 ```sh

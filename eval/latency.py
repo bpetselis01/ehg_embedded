@@ -129,10 +129,11 @@ def main():
     ap.add_argument("--node", required=True)
     ap.add_argument("--since", default="1h")
     ap.add_argument("--fs", type=float, default=20.0)
+    ap.add_argument("--backend", choices=["influx", "timescale"], help="which store to read (default: $EHG_BACKEND or influx)")
     ap.add_argument("--exclude-replayed", action="store_true",
                     help="drop packets a gateway outbox sent late (default: report all, and the live-only figure beside it)")
     a = ap.parse_args()
-    pkts = [p for p in query_pkts(a.node, a.since) if not p["retrans"]]
+    pkts = [p for p in query_pkts(a.node, a.since, backend=a.backend) if not p["retrans"]]
     if not pkts:
         raise SystemExit("no packets")
     n_replayed = len(pkts) - len(without_replayed(pkts))

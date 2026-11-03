@@ -1,7 +1,7 @@
 """MQTT -> InfluxDB ingestion service.
 
 PURPOSE: Stores every packet the gateway publishes into the time-series database (InfluxDB).
-INPUT: MQTT topic ehg/+/pkt (QoS 1, persistent session), 1 JSON per packet (docs/interface-spec.md 4):
+INPUT: MQTT topic ehg/+/pkt (QoS 1, persistent session), or with INGEST_SOURCE=jetstream the EHG stream (NATS_URL), 1 JSON per packet (docs/interface-spec.md 4):
     {node_id, seq, frame_idx, t_inject, t_inject_host, n_ch, fs_hz, record_id, flags, samples, t_gw_rx, t_mqtt_pub}
     e.g. the JSON example in gateway/gateway.py (EHG-93C0, seq 0, samples [[1093, 171, -748], ...])
 OUTPUT: InfluxDB bucket `ehg` (docs/interface-spec.md 5), 2 measurements:
@@ -65,9 +65,14 @@ def points_for(m: dict) -> list[Point]:
 
 
 def on_message(client, userdata, msg):
-    """Handle one MQTT message: de-duplicate, write samples, stamp t_db_ack, write timing row."""
+    """MQTT callback: handle the payload."""
+    handle(msg.payload)
+
+
+def handle(payload: bytes) -> None:
+    """Handle one message (from MQTT or from JetStream): de-duplicate, write samples, stamp t_db_ack, write timing row."""
     t_ingest_rx = time.time()
-    m = json.loads(msg.payload)
+    m = json.loads(payload)
     key = (m["node_id"], m["seq"], m["t_inject"])  # t_inject disambiguates seq reuse after node reboot
     if key in seen:
         return
@@ -107,8 +112,36 @@ def mqtt_settings(env=os.environ):
     return host, int(env.get("MQTT_PORT", 8883)), ctx
 
 
+async def run_jetstream() -> None:
+    """INGEST_SOURCE=jetstream: read the internal bus instead of MQTT (the "influx-writer" of decision 0012, used for the parity proof).
+
+    The subject, stream and consumer settings repeat backend/bus.py on purpose: this file runs alone in its own container image and cannot import it.
+    """
+    import asyncio
+
+    import nats
+    from nats.js.api import AckPolicy, ConsumerConfig
+
+    nc = await nats.connect(os.environ.get("NATS_URL", "nats://nats:4222"), name="ehg-influx-writer", max_reconnect_attempts=-1)
+    sub = await nc.jetstream().pull_subscribe("EHG.PKT.>", durable="influx-writer", stream="EHG",
+                                              config=ConsumerConfig(durable_name="influx-writer", filter_subject="EHG.PKT.>", ack_policy=AckPolicy.EXPLICIT, ack_wait=30, max_deliver=5))
+    print("ingest running (source: jetstream)")
+    while True:
+        try:
+            msgs = await sub.fetch(50, timeout=1)
+        except nats.errors.TimeoutError:
+            continue
+        for m in msgs:
+            await asyncio.to_thread(handle, m.data)  # the InfluxDB write is synchronous; acknowledge only after it returned
+            await m.ack()
+
+
 def main():
     """Connect to the broker (retrying until it is up) and process messages forever."""
+    if os.environ.get("INGEST_SOURCE", "mqtt") == "jetstream":
+        import asyncio
+        asyncio.run(run_jetstream())
+        return
     host, port, tls = mqtt_settings()
     c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="ehg-ingest", clean_session=False)
     c.on_connect = lambda cl, u, f, rc, p: cl.subscribe("ehg/+/pkt", qos=1)

@@ -28,6 +28,10 @@ Each UNVERIFIED row is checked in the unit that first uses the component, and th
 | PyYAML 6.0.3 (dev, added in Unit 2) | MIT | Parses compose and cloud-init files in tests | Permissive | Confirmed locally (package metadata and classifier) |
 | OpenSSL 3.0.12 (command line, used by `tools/pki.sh` and the tests) | Not read; stated as Apache-2.0 for OpenSSL 3 in general | Makes the certificates | Free; a tool run locally, not shipped | UNVERIFIED |
 | Mosquitto 2.1.2 (Homebrew build used for the local tests; same version as the `eclipse-mosquitto:2` image) | `EPL-2.0 OR BSD-3-Clause` | Real-broker tests; cloud broker | Free; the licence is read from the Docker image's own label `org.opencontainers.image.licenses` | Confirmed from the image label (2026-11-03); licence text not read |
+| nats-py 2.16.0 | Apache-2.0 | NATS client | Permissive | Confirmed locally (package metadata) |
+| psycopg 3.3.7 (+ psycopg-binary) | **LGPL-3.0-only** | PostgreSQL client | Free; used as an unmodified library, so the LGPL does not extend to this code. Keep it a normal dependency (do not vendor or modify it) | Confirmed locally (package metadata) |
+| Alembic 1.20.1, SQLAlchemy 2.1.6, Mako 1.4.3 | MIT | Migrations | Permissive | Confirmed locally (package metadata) |
+| prometheus-client 0.26.0 | Apache-2.0 AND BSD-2-Clause | Metrics endpoints | Permissive | Confirmed locally (package metadata) |
 | python-hcl2 8.1.4 (dev, added in Unit 4) | MIT | Parses `.tf` files in tests | Permissive | Confirmed locally (package metadata and classifier) |
 | Terraform CLI 1.14.9 (installed here) | Business Source Licence 1.1 (per the prompt) | Validates and applies the IaC | Free for our own use | Version confirmed (`terraform version`); licence text NOT read: UNVERIFIED |
 | `oracle/oci` Terraform provider 9.11.0 | Not read | Oracle resources | Free to use | UNVERIFIED |

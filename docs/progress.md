@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-11-03: Unit 6, data platform code (bridge, writer, migrations, parity) (decision [0012](decisions/0012-timescaledb-nats-data-platform.md)); parity proof NOT run
+
+- **Scope decision:** Byron asked for every unit that does not need the cloud; this is the first. The checkpoint ordering (Checkpoint 3 before Unit 6) is superseded by that instruction for the CODE; putting it on the VM still waits for the VM.
+- **Added:** `backend/bus.py`, `backend/mqtt_env.py`, `backend/bridge/bridge.py`, `backend/ts_writer/writer.py`, `backend/db/` (Alembic: 0001 plain tables, 0002 TimescaleDB), `eval/backend_client.py` rewritten for two stores (imports without `.env`), `--backend` on integrity/latency/fhir_export, `eval/parity.py`,
+  `backend/ingest/ingest.py` gains `INGEST_SOURCE=jetstream` (the influx-writer), `backend/platform.Dockerfile` and `backend/docker-compose.platform.yml` (profile `platform`; default stack unchanged, checked with `docker compose config`), `tests/conftest.py` (throwaway local PostgreSQL).
+- **Tests added:** bridge ack ordering and crash-redelivery with a fake JetStream, writer rows/idempotency/atomicity on a real PostgreSQL 14, outage handling, loud failure of the TimescaleDB revision without the extension, backend_client shapes, parity checks for every kind of difference.
+- **Mistake caught:** I wrote a full-length image digest for NATS in the platform override from a 12-character prefix, i.e. an invented value; replaced with the real registry digest before committing. A neighbouring test claimed more than it checked and was rewritten with exact expectations.
+- **NOT done / not verified:** anything against a real NATS server or TimescaleDB; the parity proof and the data-platform memory on the VM (Checkpoint 4); the `timescaledb-ha` init script; the platform images were never built.
+
 ## 2026-11-03: Unit 5, Oracle runbook (written; NOT run: it is yours to execute) ([deployment.md](deployment.md))
 
 - **Decisions recorded** (asked one at a time): hostname **DuckDNS + Caddy**; home region **Sydney `ap-sydney-1`**; repository **stays private** (so the VM clones over SSH with a read-only deploy key). **The Oracle card question was deferred by Byron ("skip this step first") and is still PENDING:** the runbook says not to start sign-up until it is decided, and nothing assumes consent.

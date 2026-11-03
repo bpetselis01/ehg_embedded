@@ -53,8 +53,9 @@ def main():
     ap.add_argument("--node", required=True)
     ap.add_argument("--since", default="1h")
     ap.add_argument("--db", default="tpehgdb")
+    ap.add_argument("--backend", choices=["influx", "timescale"], help="which store to read (default: $EHG_BACKEND or influx)")
     a = ap.parse_args()
-    record_id, frames, _ = query_frames(a.node, a.since)
+    record_id, frames, _ = query_frames(a.node, a.since, backend=a.backend)
     src = np.load(source_file(Path(f"data/converted/{a.db}"), record_id))["samples"]
     # Frames are counted from the first one seen in the window: a window can start mid-stream.
     # Re-number from 0 and rotate the source so row 0 lines up with that first frame.

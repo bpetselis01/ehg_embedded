@@ -82,3 +82,16 @@ Background: [deploy/README.md](../deploy/README.md). Added 2026-11-03.
 | `update.sh`: "tag ... points at ..., not at ...: refusing" | The tag moved, or you gave the wrong hash | `git rev-parse TAG` on your Mac and pass that full hash. A moved tag should be investigated, not forced |
 | `update.sh`: "another update is running" | A previous run crashed and left `/opt/ehg/state/update.lock` | Make sure no update is running, then remove that directory |
 | `update.sh`: "sops is not installed" | cloud-init does not install it (no distribution package) | Install it by hand and verify its checksum (`deploy/secrets/README.md`) |
+
+## Data platform (NATS, TimescaleDB, writers)
+
+Background: [decision 0012](decisions/0012-timescaledb-nats-data-platform.md). Added 2026-11-03; none of these has been seen on a running stack yet.
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `migrate` fails with `extension "timescaledb" is not available` | The database server has no TimescaleDB (a plain PostgreSQL image) | By design the failure is loud and leaves revision 0001. Use the `timescaledb-ha` image, or set `EHG_MIGRATE_TARGET=0001` for a plain schema |
+| ts-writer logs `DEGRADED, database write failed` | PostgreSQL is down or unreachable | Nothing is lost: the messages wait in NATS (7 days). Start the database; the writer recovers by itself and reports `ehg_writer_degraded 0` |
+| ts-writer logs `cannot parse a message ... terminated` | A message in the stream is not a valid packet | It is kept as a dead letter (JetStream advisory); inspect it with `nats` tools. It will not be retried |
+| `eval/parity.py` says FAIL | The two stores differ | Do not switch the cloud profile to TimescaleDB. Read which check failed; check that `ingest` was stopped and both writers read the same stream |
+| `eval/*.py --backend timescale`: "needs EHG_TS_DSN" | The connection string is not set | `export EHG_TS_DSN="host=localhost port=5433 dbname=ehg user=ehg password=..."` (5433 is the local platform database; Supabase uses 5432) |
+| Tests using real SQL are skipped | No local PostgreSQL | `brew install postgresql@14` (tests start a throwaway cluster in /tmp; TimescaleDB tests still need Docker) |

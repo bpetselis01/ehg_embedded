@@ -15,6 +15,10 @@ dependencies = [
     "influxdb-client>=1.46",
     "matplotlib>=3.9",
     "websockets>=13",
+    "nats-py>=2.16.0",
+    "psycopg[binary]>=3.3.7",
+    "alembic>=1.20.1",
+    "prometheus-client>=0.26.0",
 ]
 
 [dependency-groups]
