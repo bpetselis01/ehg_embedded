@@ -256,3 +256,62 @@ def test_a_failed_hand_over_restarts_the_bridge_so_the_broker_redelivers():
     finally:
         loop.call_soon_threadsafe(loop.stop)
 
+
+
+# ---------------------------------------------------------------- poison messages must never crash-loop the bridge (automated review, 2026-11-04)
+
+def run_handle(payload: bytes, topic: str = "ehg/EHG-1/pkt"):
+    import asyncio
+    from types import SimpleNamespace
+
+    from backend.bridge.bridge import Bridge
+    published, acked = [], []
+
+    async def publish(subject, body, headers):
+        published.append((subject, body))
+        return SimpleNamespace(duplicate=False)
+    asyncio.run(Bridge(publish).handle(topic, payload, lambda: acked.append(1)))
+    return published, acked
+
+
+def test_a_deeply_nested_payload_is_kept_as_bad_and_acknowledged_not_raised():
+    """json.loads raises RecursionError (not a ValueError) on very deep nesting; that escaped the router, was treated as a publish failure and restarted the bridge on every redelivery."""
+    published, acked = run_handle(b"[" * 200_000 + b"]" * 200_000)
+    assert acked == [1] and published and published[0][0].startswith("EHG.BAD.")
+
+
+def test_an_oversized_payload_is_replaced_by_a_marker_never_published_whole():
+    """NATS refuses a message above its payload limit; publishing it would raise on every redelivery."""
+    published, acked = run_handle(b"x" * 400_000)
+    assert acked == [1] and published[0][0] == "EHG.BAD.too_large" and len(published[0][1]) < 200 and b"400000" in published[0][1]
+
+
+def test_any_surprise_inside_the_router_becomes_a_bad_message(monkeypatch):
+    from backend.bridge import bridge as b
+    monkeypatch.setattr(b.bus, "msg_id", lambda m: (_ for _ in ()).throw(KeyError("surprise")))
+    published, acked = run_handle(b'{"node_id": "EHG-1", "seq": 1, "t_inject": 5}')
+    assert acked == [1] and published[0][0].startswith("EHG.BAD.")
+
+
+def test_a_publish_failure_still_raises_so_the_bridge_restarts_and_the_broker_redelivers():
+    import asyncio
+
+    from backend.bridge.bridge import Bridge
+
+    async def broken(subject, body, headers):
+        raise TimeoutError("nats unreachable")
+    acked = []
+    try:
+        asyncio.run(Bridge(broken).handle("ehg/EHG-1/pkt", b'{"node_id": "EHG-1", "seq": 1, "t_inject": 5}', lambda: acked.append(1)))
+    except TimeoutError:
+        pass
+    else:
+        raise AssertionError("a transport failure must raise")
+    assert acked == []
+
+
+def test_the_broker_refuses_oversized_messages_too():
+    from pathlib import Path
+    conf = (Path(__file__).parents[1] / "backend/mosquitto/mosquitto.tls.conf").read_text()
+    import re
+    assert re.search(r"^max_packet_size\s+(\d+)$", conf, re.M) and int(re.search(r"^max_packet_size\s+(\d+)$", conf, re.M).group(1)) <= 262_144

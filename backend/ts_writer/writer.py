@@ -66,6 +66,12 @@ def validate(m: dict) -> None:
         _epoch(m.get(name), name)
     if not isinstance(m.get("record_id"), (str, int)) or isinstance(m.get("record_id"), bool) or len(str(m["record_id"])) > 64:
         raise ValueError("record_id must be a short string or integer")
+    try:
+        text = str(m["record_id"]).encode("utf-8").decode("utf-8")  # a lone surrogate cannot be encoded
+    except UnicodeError:
+        raise ValueError("record_id is not valid text") from None
+    if "\x00" in text:
+        raise ValueError("record_id contains a NUL character")
     samples = m.get("samples")
     if not isinstance(samples, list) or not 1 <= len(samples) <= MAX_FRAMES:
         raise ValueError(f"samples must be 1..{MAX_FRAMES} frames")
@@ -114,7 +120,7 @@ class PgStore:
                                           pkt["t_inject_host"], pkt["t_gw_rx"], pkt["t_mqtt_pub"], t_rx, t_ack))
                     new_pkt += cur.rowcount
             return new_raw, new_pkt
-        except psycopg.errors.DataError as e:  # the transaction was rolled back; the connection is fine, the DATA is not
+        except (psycopg.errors.DataError, UnicodeError) as e:  # the transaction was rolled back; the connection is fine, the DATA is not (a text that cannot be encoded counts too)
             raise BadData(f"{type(e).__name__}: {e}") from e
         except Exception:
             try:

@@ -22,6 +22,7 @@ import os
 from backend import bus
 from backend.mqtt_env import mqtt_settings
 
+MAX_PAYLOAD = 262_144  # a packet is under 2 KB; the broker's message_size_limit is the same
 REQUIRED = ("node_id", "seq", "t_inject")
 
 
@@ -41,8 +42,16 @@ class Bridge:
     async def handle(self, topic: str, payload: bytes, ack) -> None:
         """Put one broker message on the stream, then (and only then) call ack(). Any failure raises and leaves ack() uncalled."""
         self._count("rx")
+        # Only a failure of the PUBLISH may raise (it restarts the bridge so the broker redelivers). A message that cannot even be ROUTED is poison: raising for it would restart the bridge
+        # on every redelivery, for ever. Oversized payloads are replaced by a short marker, because the stream refuses them and that refusal would be deterministic too.
+        if len(payload) > MAX_PAYLOAD:
+            subject, headers, payload = f"{bus.BAD_PREFIX}.too_large", {}, f"payload of {len(payload)} bytes dropped (limit {MAX_PAYLOAD})".encode()
+        else:
+            try:
+                subject, headers = self._route(topic, payload)
+            except Exception:  # noqa: BLE001  (RecursionError on absurd nesting, or anything unforeseen: keep the bytes under EHG.BAD.*)
+                subject, headers = f"{bus.BAD_PREFIX}.unroutable", {}
         try:
-            subject, headers = self._route(topic, payload)
             result = await self._publish(subject, payload, headers)
         except Exception:
             self._count("errors")

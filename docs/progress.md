@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-11-04: automated review of the review fixes: poison messages (2 findings), both valid, fixed
+
+- **Bridge (HIGH):** my new restart-on-failure would have turned one poison message into a crash loop: `json.loads` on absurd nesting raises `RecursionError` (not a `ValueError`), which escaped the router and was treated as a publish failure; an oversized payload would have been refused by the stream on every redelivery. Now only a failure of the publish itself raises (and restarts); anything that cannot be routed goes to `EHG.BAD.unroutable`, an oversized payload is replaced by a short marker under `EHG.BAD.too_large`, both are acknowledged, and the broker refuses packets above 256 KiB (`max_packet_size`, checked with the real Mosquitto 2.1.2).
+  A deterministic PUBLISH failure (for example the stream missing) would still restart the bridge in a loop; that is a configuration fault and the loop is the visible signal (EhgTargetDown), so no per-message restart counter was added.
+- **Writer (MEDIUM):** unlimited deliveries are kept on purpose (a finite limit loses the stream's messages to the consumer after a short outage), but the review is right that a wrongly classified failure would then stall everything: a `record_id` with a lone surrogate would have raised `UnicodeEncodeError`, which was treated as a database outage and naked for ever. Validation now rejects a record id that is not valid text or holds a NUL, and a text-encoding failure in the store counts as bad data (terminated), not as an outage. A schema or permission error is still treated as an outage on purpose (terminating would lose messages when a migration has not run).
+- **Tests:** deep nesting, oversize, a surprise inside the router, a publish failure still raising, the broker limit; record-id validation and the store's classification.
+
 ## 2026-11-04: independent first-start review (a fresh agent, never shown my conclusions): 12 findings, 11 acted on
 
 - **Confirmed by me against the code or the installed library, fixed, tested:** (1) the triage service would have crashed at start-up with `UnboundLocalError` (my own mistake: the SLI gauges were used before they were created); the wiring is now in a function, `build()`, that a test can run. (2) A lambda as NATS subscription callback: nats-py refuses it ("must use coroutine"), so triage would have failed there too (test scans the repository for it).

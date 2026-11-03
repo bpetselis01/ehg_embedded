@@ -230,3 +230,26 @@ def test_sql_data_error_becomes_baddata_and_the_connection_stays_usable(store):
         store.write([(raw, pkt, 1.0)])
     assert store.write(batch_of(message(seq=1))) == (30, 1)
     assert count(store, "ehg_raw") == 30
+
+
+# ---------------------------------------------------------------- a bad record id must end that message, not stall the consumer (automated review, 2026-11-04)
+
+def test_a_record_id_that_cannot_be_stored_is_rejected_by_validation():
+    import pytest as _pytest
+
+    from backend.ts_writer.writer import validate
+    good = {"node_id": "EHG-1", "seq": 1, "frame_idx": 0, "t_inject": 5, "flags": 0, "fs_hz": 20, "t_inject_host": 1.7e9, "t_gw_rx": 1.7e9, "t_mqtt_pub": 1.7e9, "samples": [[1, 2]]}
+    for bad in ("a\x00b", "\ud800", "x" * 65):
+        with _pytest.raises(ValueError):
+            validate({**good, "record_id": bad})
+    validate({**good, "record_id": "tpehg1007"})
+    validate({**good, "record_id": 7})
+
+
+def test_a_text_encoding_failure_in_the_store_is_bad_data_not_a_database_outage():
+    """Anything that is the DATA's fault must reach term(); only connection trouble may nak (unlimited deliveries make a wrong nak a stall)."""
+    import inspect
+
+    from backend.ts_writer import writer
+    src = inspect.getsource(writer.PgStore.write)
+    assert "UnicodeError" in src and "BadData" in src
