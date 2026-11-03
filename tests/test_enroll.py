@@ -306,3 +306,42 @@ def test_enrol_mac_refuses_politely_and_the_token_is_never_an_argument(tmp_path,
         cli.main(["list", "--url", "https://x"])
     with pytest.raises(SystemExit):
         cli.main(["list", "--url", "https://x", "--token", "abc"])
+
+
+# ---------------------------------------------------------------- automated security review, 2026-11-03
+
+def test_revoking_reaches_every_unexpired_certificate_not_only_the_latest(env):
+    serials = [str(x509.load_pem_x509_certificate(enrol(env).json()["certificate"].encode()).serial_number) for _ in range(3)]
+    assert len(set(serials)) == 3 and env.registry.gateway("ios-phone-1")["cert_serial"] == serials[-1]
+    with env.registry._connect() as c:  # one of the three has already expired: no need to send it to the CA
+        c.execute("UPDATE registry.gateway_cert SET not_after = now() - interval '1 hour' WHERE serial = %s", (serials[0],))
+    r = env.client.post("/revoke/ios-phone-1", headers=bearer("root", "admin"))
+    assert r.status_code == 200 and sorted(s for s, _ in env.ca.revoked) == sorted(serials[1:]), "the two live certificates are revoked at the CA"
+    with env.registry._connect() as c:
+        assert c.execute("SELECT count(*) FROM registry.gateway_cert WHERE revoked_at IS NULL AND gateway_id = 'ios-phone-1'").fetchone()[0] == 1, "only the already-expired one is left unmarked"
+    assert enrol(env).status_code == 403
+
+
+def test_a_partial_ca_failure_names_which_certificates_were_not_revoked(env):
+    [enrol(env) for _ in range(2)]
+    original = env.ca.revoke
+    calls = []
+
+    def flaky(serial, subject):
+        calls.append(serial)
+        if len(calls) == 1:
+            raise CaError("the CA is unreachable (ConnectError)")
+        return original(serial, subject)
+    env.ca.revoke = flaky
+    j = env.client.post("/revoke/ios-phone-1", headers=bearer("root", "admin")).json()
+    assert "NOT revoked" in j["ca"] and calls[0] in j["ca"] and len(calls) == 2, "one failure must not stop the other revocation, and the failed serial is named"
+
+
+@pytest.mark.parametrize("user", ["ehg-gw-02", "EHG-GW-01", "Ehg-x", "ehg-anything-at-all", "ehg-"])
+def test_the_whole_ehg_namespace_is_reserved_for_provisioned_identities(env, user):
+    r = enrol(env, user=user)
+    assert r.status_code == 403 and "gateway id" in r.json()["error"] and env.ca.signed == []
+
+
+def test_names_that_merely_contain_ehg_are_fine(env):
+    assert enrol(env, user="ios-ehg-1").status_code == 200

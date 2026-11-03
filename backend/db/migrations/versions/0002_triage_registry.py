@@ -3,7 +3,7 @@
 PURPOSE: The relational half of the enterprise store (decisions 0011, 0013): operator alerts with a lifecycle, a tamper-EVIDENT audit trail, and who/what is enrolled. Plain PostgreSQL only,
   so it is tested on any PostgreSQL 14+ (the TimescaleDB features are revision 0003).
 INPUT: a database at revision 0001, and a login role named ehg_triage (created by deploy/postgres/10-init-databases.sh; the migration FAILS if it does not exist, rather than skipping the grants).
-OUTPUT: schema triage: alerts (one ACTIVE alert per node+rule, enforced by a partial unique index), alert_events, audit_log. Schema registry: gateway, node, subject (a pseudonymous research label, no personal data).
+OUTPUT: schema triage: alerts (one ACTIVE alert per node+rule, enforced by a partial unique index), alert_events, audit_log. Schema registry: gateway, gateway_cert (EVERY certificate issued, so a revocation can reach them all), node, subject (a pseudonymous research label, no personal data).
   audit_log: id, ts, actor, role, action, target, detail_json, prev_hash, hash; triggers raise an error on UPDATE, DELETE and TRUNCATE. ehg_triage may INSERT and SELECT audit_log, and nothing else on it.
 HOW: This is tamper-EVIDENT, not write-once: a database superuser can still rewrite the table, so the chain head hash is shipped off the VM with the backups (decision 0017) and `python -m backend.triage.audit --verify` recomputes the chain.
 ROLE IN THESIS: Alert management, audit and the registry behind the triage page and the enrolment API.
@@ -25,6 +25,8 @@ def upgrade() -> None:
     op.execute("""CREATE TABLE registry.gateway (
         id text PRIMARY KEY CHECK (id ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'), kind text NOT NULL CHECK (kind IN ('python', 'ios')),
         cert_serial text, enrolled_at timestamptz, revoked_at timestamptz, last_seen timestamptz, app_version text)""")
+    op.execute("""CREATE TABLE registry.gateway_cert (
+        serial text PRIMARY KEY, gateway_id text NOT NULL REFERENCES registry.gateway (id), issued_at timestamptz NOT NULL, not_after timestamptz NOT NULL, revoked_at timestamptz)""")
     op.execute("""CREATE TABLE registry.subject (
         id text PRIMARY KEY, pseudonym text NOT NULL UNIQUE, source_dataset text NOT NULL,
         consent_status text NOT NULL DEFAULT 'none' CHECK (consent_status IN ('none', 'active', 'withdrawn')))""")

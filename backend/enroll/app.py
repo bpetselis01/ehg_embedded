@@ -7,7 +7,7 @@ INPUT: POST /enroll {"csr": "<PEM>", "app_version": "1.0"} with `Authorization: 
 OUTPUT: errors with names: 401 no/invalid token, 403 wrong role or a REVOKED gateway, 422 unacceptable request (reason given), 429 too many requests (5 per hour per identity), 502 the CA failed or returned a wrong certificate.
 HOW: The gateway id (the certificate CN) is the token's user name, validated against the id pattern; the CN in the CSR is ignored. Order: rate limit -> role -> registry (revoked?) -> CSR checks -> CA signs ->
   the answer is re-checked (backend/enroll/csr.py) -> only then the registry row is written. If any step fails nothing is recorded as enrolled. Every outcome is an audit row (enroll.issue / enroll.denied).
-  Revoking marks the registry, revokes the certificate at the CA, and reports whether the broker's CRL needs refreshing: the broker reads its CRL on start-up and SIGHUP (docs/security.md), so a host-side job
+  Revoking marks the registry, revokes EVERY live certificate of the gateway at the CA (all serials are kept, not only the newest), and reports whether the broker's CRL needs refreshing: the broker reads its CRL on start-up and SIGHUP (docs/security.md), so a host-side job
   that fetches GET /crl into the broker's ca.crl and signals Mosquitto is part of the deployment (not built here).
 ROLE IN THESIS: The enrolment API of the certificate lifecycle (docs/security.md, decision 0013). UNVERIFIED against a real step-ca or Keycloak.
 BEFORE -> AFTER: Before: certificates by hand. After: an audited, rate-limited, revocable flow.
@@ -28,7 +28,7 @@ from backend.jwtauth import AuthError
 from backend.triage.registry import RevokedGateway, UnknownGateway
 
 ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
-SYSTEM_IDS = ("ehg-bridge", "ehg-ingest", "ehg-viewer", "ehg-gw-01")  # service identities made by tools/pki.sh: a person's login must not claim them
+RESERVED_PREFIX = "ehg-"  # every provisioned identity (tools/pki.sh: ehg-gw-01, ehg-bridge, ehg-ingest, ehg-viewer, ...) lives in this namespace; a login can never enrol into it
 
 
 class EnrollBody(BaseModel):
@@ -74,7 +74,7 @@ def create_app(*, registry, audit, auth, ca, crl_source=lambda: "", limit=(5, 36
         if "gateway" not in p.roles and not p.at_least("admin"):
             deny(p, "this login may not enrol a gateway", 403)
         gid = p.user
-        if not ID_RE.fullmatch(gid) or gid in SYSTEM_IDS:
+        if not ID_RE.fullmatch(gid) or gid.lower().startswith(RESERVED_PREFIX):
             deny(p, "this user name cannot be used as a gateway id", 403)
         try:
             existing = registry.gateway(gid)
@@ -93,7 +93,7 @@ def create_app(*, registry, audit, auth, ca, crl_source=lambda: "", limit=(5, 36
             audit.append(p.user, p.role or "none", "enroll.denied", f"gateway:{gid}", {"reason": "the CA failed or returned an unacceptable certificate", "detail": str(e)})
             raise HTTPException(502, "the certificate authority did not produce an acceptable certificate") from None
         try:
-            registry.enrol_gateway(gid, "ios" if "gateway" in p.roles else "python", str(cert.serial_number), p.user, p.role or "none", body.app_version)
+            registry.enrol_gateway(gid, "ios" if "gateway" in p.roles else "python", str(cert.serial_number), p.user, p.role or "none", body.app_version, not_after=cert.not_valid_after_utc)
         except RevokedGateway:
             deny(p, "this gateway has been revoked", 403, f"gateway:{gid}")
         audit.append(p.user, p.role or "none", "enroll.issue", f"gateway:{gid}", {"serial": str(cert.serial_number), "not_after": cert.not_valid_after_utc.isoformat()})
@@ -104,14 +104,16 @@ def create_app(*, registry, audit, auth, ca, crl_source=lambda: "", limit=(5, 36
         """Admin: revoke a gateway in the registry and at the CA."""
         if not p.at_least("admin"):
             raise HTTPException(403, "needs the admin role")
+        serials = registry.active_serials(gateway_id, datetime.fromtimestamp(clock(), tz=timezone.utc))  # every live certificate, not only the newest
         g = registry.revoke_gateway(gateway_id, p.user, p.role)  # UnknownGateway -> 404 below
-        ca_result = "no certificate on record"
-        if g["cert_serial"]:
+        failed = []
+        for serial in serials:
             try:
-                ca.revoke(g["cert_serial"], gateway_id)
-                ca_result = "revoked at the CA"
+                ca.revoke(serial, gateway_id)
             except CaError as e:
-                ca_result = f"NOT revoked at the CA ({e}); the registry will still refuse a new enrolment"
+                failed.append(f"{serial} ({e})")
+        ca_result = ("no live certificate on record" if not serials else f"revoked {len(serials)} certificate(s) at the CA" if not failed
+                     else f"NOT revoked at the CA: {'; '.join(failed)}; the registry will still refuse a new enrolment, but the broker's CRL does not yet list them")
         return {"gateway": gateway_id, "ca": ca_result, "crl": "fetch GET /crl and signal the broker (it reads the CRL on start-up and SIGHUP)"}
 
     @app.exception_handler(UnknownGateway)

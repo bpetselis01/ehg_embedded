@@ -93,6 +93,13 @@ All four were real, all fixed with failing tests first (`tests/test_ts_writer.py
 - **A node could become invisible (MEDIUM, fixed):** a sampling rate near zero made the signal window size 0, the trim emptied the window, and the snapshot then crashed every round, so that node's alerts (even NODE_OFFLINE) never fired. The window is now at least one frame and never drops the newest packet, `fs_hz` must be at least 1, and a node whose full evaluation fails falls back to a liveness-only view (and is logged) instead of being skipped.
 - Still open: `GapTracker` remembers every sequence number seen in a stream (its own comment says so); a long soak from a hostile gateway can still grow that set slowly.
 
+## Enrolment API (Unit 7): findings of the automated review, 2026-11-03
+
+- **Revocation reached only the newest certificate (HIGH, fixed):** re-enrolling overwrote the stored serial, so revoking later revoked one certificate while earlier unexpired ones (up to 7 days old) stayed valid. Every issued serial is now kept (`registry.gateway_cert`, migration 0002), revocation revokes ALL live ones at the CA and names any that failed, and a failed revocation of one does not stop the others.
+- **Reserved names were a fixed list (MEDIUM, fixed):** four names were denied by a tuple. The whole `ehg-` namespace (case-insensitive) is now reserved: every provisioned identity (`tools/pki.sh`) lives there, so a login can never enrol into it. A name outside it also gets no broker permissions unless it is added to the ACL by hand.
+- Honesty note: the tests for these two were written together with the fix in one step, so I did not see them fail first.
+- Still open: the broker reads its CRL only at start-up and on SIGHUP; the host-side job that fetches `GET /enroll-api/crl` and signals Mosquitto is not built, so a revocation takes effect at the broker only after that job (or a restart) runs.
+
 ## Known limit: a gateway can publish for any node id
 
 `topic write ehg/+/pkt` lets an authenticated gateway publish packets labelled with another node's id. Pinning a gateway to its nodes needs either a gateway id in the topic or message (a change to the documented `ehg/<node>/pkt` interface that `eval/` and the recorded runs rely on) or a check against a registry of which gateway serves which node.
