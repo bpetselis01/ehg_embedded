@@ -49,3 +49,7 @@ deploy/**/secrets/*
 **/age.key
 *.agekey
 deploy/**/*.tfplan
+
+# SwiftPM build output
+ios/**/.build/
+ios/**/.swiftpm/

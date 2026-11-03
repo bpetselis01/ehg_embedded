@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-11-04: Unit 15 (the part that needs no phone): Swift wire-format package and golden vectors
+
+- **Added:** `tools/gen_packet_vectors.py` and `tests/fixtures/packet_vectors.json` (8 valid and 7 invalid packets from `gateway/packet.py`: 16- and 24-bit, one channel, no frames, the retransmission flag, extreme sample values and header fields, every refusal reason), the Swift package `ios/EHGWire` (decoder, encoder, CRC-16),
+  `tests/test_ios_wire_format.py` (vectors are current; Python parses them; Swift constants, offsets and check order match Python; opt-in run of `swift test`), and the wire-format rule in CLAUDE.md now names three copies.
+- **Tested:** `swift test` (command-line SwiftPM, Swift 6.4, 6 tests, all pass): every vector decodes to identical values and re-encodes to identical bytes; every bad vector is refused for the same reason; every truncation and every single-bit flip of a valid packet is refused; CRC check value 0x29B1.
+  No Xcode project was opened, no simulator or phone was used.
+- **NOT done (needs Byron, an Apple ID and the iPhone):** the app target `ios/EHGGateway` (CoreBluetooth, MQTT client, background behaviour), gap tracking and RESEND in Swift, the feasibility spike and `docs/ios-gateway-feasibility.md`, free-signing limits, any cellular measurement. The Swift side of `GapTracker` is not ported.
+
 ## 2026-11-04: Unit 12, observability, SLOs, backups and the restore drill (written and unit-tested; never evaluated by Prometheus, Grafana or on the VM)
 
 - **Added:** `backend/triage/slis.py` (fleet gauges and consumer backlog), `deploy/observability/rules/slo.yml` + `alerts.yml` (6 recording rules, 12 alerts), `prometheus.yml` (rule files, Alertmanager, triage/bridge/ts-writer jobs), a read-only provisioned dashboard `pipeline-overview.json`,

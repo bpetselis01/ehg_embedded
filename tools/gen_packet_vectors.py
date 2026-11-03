@@ -1,0 +1,97 @@
+"""Generate the golden wire-format vectors that guard every copy of the packet decoder (Python, C firmware header, Swift).
+
+Usage: uv run python tools/gen_packet_vectors.py          # rewrite tests/fixtures/packet_vectors.json
+       uv run python tools/gen_packet_vectors.py --check  # exit 1 if the file is not what gateway/packet.py produces now
+
+PURPOSE: The wire format has three copies (firmware/ehg_node/src/ehg_packet.h, gateway/packet.py, ios/EHGWire/Sources/EHGWire/Packet.swift). gateway/packet.py is the reference; its output is frozen here as JSON, and the Swift test suite
+  must decode every vector to exactly the same values and refuse every bad one with the same reason (decision 0015).
+INPUT: gateway/packet.py only. No hardware, no network.
+OUTPUT: tests/fixtures/packet_vectors.json: {"valid": [{"name", "hex", "packet": {version, n_ch, fs_hz, seq, frame_idx, t_inject, n_frames, flags, record_id, samples}}], "invalid": [{"name", "hex", "error": kind}]}
+  with kind one of too_short, unknown_version, wrong_length, crc_mismatch (the order Python checks them in, which the other copies must follow).
+  e.g. {"name": "default_3ch_10frames_16bit", "hex": "0203 1400 ...", "packet": {"version": 2, "n_ch": 3, "fs_hz": 20, ...}}
+HOW: Deterministic: fixed field values and a fixed pseudo-random sample sequence (a small linear generator, not random), so --check is stable. Extremes (-32768, 32767, 24-bit limits) and the flag bits are included on purpose.
+ROLE IN THESIS: Keeps H2/H4 (bit-exact samples, damaged packets rejected) true on the phone as well as on the Mac.
+BEFORE -> AFTER: Before: two copies guarded by tests/test_docs.py only for the C/Python constants. After: a third copy (Swift) guarded by shared vectors.
+"""
+
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))  # lets `python tools/gen_packet_vectors.py` find gateway/
+from gateway.packet import FLAG_24BIT, FLAG_RETRANS, HEADER, Packet, pack, parse  # noqa: E402
+
+OUT = Path(__file__).parent.parent / "tests/fixtures/packet_vectors.json"
+
+
+def samples(n_frames: int, n_ch: int, lo: int, hi: int, seed: int) -> list[list[int]]:
+    """A repeatable spread of values between lo and hi, always including both extremes first."""
+    vals, x = [lo, hi], seed
+    while len(vals) < n_frames * n_ch:
+        x = (x * 1103515245 + 12345) % (2**31)
+        vals.append(lo + x % (hi - lo + 1))
+    return [vals[i * n_ch:(i + 1) * n_ch] for i in range(n_frames)]
+
+
+def make(name: str, n_ch=3, n_frames=10, flags=0, seed=1, **kw) -> tuple[str, Packet]:
+    """One named valid packet."""
+    lo, hi = (-8388608, 8388607) if flags & FLAG_24BIT else (-32768, 32767)
+    fields = {"version": 2, "fs_hz": 20, "seq": 40, "frame_idx": 400, "t_inject": 98304, "record_id": 7, **kw}
+    return name, Packet(n_ch=n_ch, n_frames=n_frames, flags=flags, samples=samples(n_frames, n_ch, lo, hi, seed), **fields)
+
+
+def build() -> dict:
+    """The whole vector file as a dict."""
+    valid = [
+        make("default_3ch_10frames_16bit"),
+        make("one_channel", n_ch=1, seed=2),
+        make("retransmission_flag", flags=FLAG_RETRANS, seed=3, seq=41),
+        make("24bit_samples", flags=FLAG_24BIT, seed=4),
+        make("24bit_and_retransmission", flags=FLAG_24BIT | FLAG_RETRANS, n_ch=2, n_frames=5, seed=5),
+        make("no_frames", n_frames=0),
+        make("max_field_values", seq=2**32 - 1, frame_idx=2**32 - 1, t_inject=2**32 - 1, record_id=65535, fs_hz=65535, seed=6),
+        make("sequence_zero", seq=0, frame_idx=0, t_inject=0, record_id=0, seed=7),
+    ]
+    out_valid = []
+    for name, p in valid:
+        raw = pack(p)
+        assert parse(raw) == p, name
+        out_valid.append({"name": name, "hex": raw.hex(), "packet": p.__dict__})
+    good = bytes.fromhex(out_valid[0]["hex"])
+    flipped = bytearray(good)
+    flipped[30] ^= 0x01
+    bad_version = bytearray(good)
+    bad_version[0] = 3
+    cases = [("too_short_empty", b"", "too_short"), ("too_short_header_minus_one", good[:HEADER.size - 1], "too_short"),
+             ("unknown_version", bytes(bad_version), "unknown_version"), ("wrong_length_one_byte_short", good[:-1], "wrong_length"),
+             ("wrong_length_one_byte_long", good + b"\x00", "wrong_length"), ("crc_mismatch_sample_bit_flipped", bytes(flipped), "crc_mismatch"),
+             ("crc_mismatch_trailer_zeroed", good[:-2] + b"\x00\x00", "crc_mismatch")]
+    invalid = []
+    for name, raw, kind in cases:
+        try:
+            parse(raw)
+        except ValueError as e:
+            got = ("too_short" if "too short" in str(e) else "unknown_version" if "unknown version" in str(e) else "wrong_length" if "expected" in str(e) else "crc_mismatch")
+            assert got == kind, (name, str(e))
+        else:
+            raise AssertionError(f"{name} parsed")
+        invalid.append({"name": name, "hex": raw.hex(), "error": kind})
+    return {"_note": "Generated by tools/gen_packet_vectors.py from gateway/packet.py. Do not edit by hand.", "valid": out_valid, "invalid": invalid}
+
+
+def main(argv: list[str]) -> int:
+    """Write the file, or with --check compare."""
+    text = json.dumps(build(), indent=1) + "\n"
+    if "--check" in argv:
+        if not OUT.exists() or OUT.read_text() != text:
+            print(f"{OUT} is out of date: run uv run python tools/gen_packet_vectors.py")
+            return 1
+        print("packet vectors are current")
+        return 0
+    OUT.write_text(text)
+    print(f"wrote {OUT}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
