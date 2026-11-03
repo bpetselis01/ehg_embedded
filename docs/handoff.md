@@ -7,7 +7,7 @@
 - Branch / last commit: feat/enterprise-topology, see `git log -1`. Nothing pushed. Tag `baseline-pre-enterprise` marks the start.
 
 ## State of the repo
-- Tests: `uv run pytest -q` = 737 passed, 14 skipped. Opt-in with `EHG_INTEGRATION=1` (needs Docker, Terraform, Mosquitto, Swift, shellcheck as available): a real Mosquitto broker, the Terraform validate against the real provider schema, `swift test`, and a real HAPI R5 server (never run).
+- Tests: `uv run pytest -q` = 767 passed, 14 skipped. With `EHG_INTEGRATION=1 TF_PLUGIN_CACHE_DIR=<cache> SSL_CERT_FILE=/etc/ssl/cert.pem` = 777 passed, 3 skipped (a real Mosquitto broker, the Terraform validate against the real provider schema, `swift test`); skipped for lack of the tool: Caddy, TimescaleDB, shellcheck, and the real HAPI test (needs a running Docker daemon).
 - Uncommitted changes: none once the last commit is made.
 - Docker / compose: the Docker daemon is not running and I must not start it (another project, Supabase, lives there). `docker compose config` resolves the default stack (4 services), the `platform` profile (10) and the cloud file (18). Nothing has ever been started.
 - Background processes or runs: none.
@@ -30,7 +30,7 @@
 3. After any change: `uv run pytest -q && git add -A && git commit` (the `&&` matters); add new file names to docs/codebase-guide.md; update progress.md, security.md and licences.md; treat automated security reviews as input (failing test first). Report honestly: fakes versus real servers, what needs Docker, hardware or the cloud.
 
 ## Done in this non-cloud sweep (all committed)
-- 6 data platform, 7 identity and enrolment, 8 triage service, 9 FHIR sync and facade, 10 triage page, 11 Caddyfile, 11b compose completion, 12 observability and backups, 14 CI, 15 Swift wire library, 17 docs. About 10 automated security reviews were answered, each with a test or a recorded gap.
+- 6 data platform, 7 identity and enrolment, 8 triage service, 9 FHIR sync and facade, 10 triage page, 11 Caddyfile, 11b compose completion, 12 observability and backups, 14 CI, 15 Swift wire library, 17 docs. About 10 automated security reviews were answered, each with a test or a recorded gap. Afterwards five first-start defects were found by reading never-run code against real library signatures and product rules (stream filter, TimescaleDB extension permission, blanket CSP, Grafana sub-path, openssl exit status): see the 2026-11-04 entries of progress.md. An independent review of that kind of code was started at the end; its findings, if any arrived, are in the next progress.md entry.
 
 ## Warnings / traps
 - Never push, never commit on `main`, no AI trailer in commit messages (CI fails on it). You never create or query cloud resources and never ask for credentials; Byron runs terraform apply and the update script.
