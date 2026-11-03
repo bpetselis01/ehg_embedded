@@ -16,6 +16,7 @@ gateway/logs/
 
 # local AI tooling
 CLAUDE.md
+Claude outputs/
 .claude/
 .serena/
 .ua/
