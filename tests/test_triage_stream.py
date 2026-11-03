@@ -308,3 +308,30 @@ def test_a_tiny_sampling_rate_cannot_empty_the_window_or_break_the_snapshot(fs):
 def test_the_validator_requires_at_least_one_hertz(fs):
     with pytest.raises(ValueError):
         FleetMonitor().on_packet(pkt(1, fs_hz=fs), 1.0)
+
+
+# ---------------------------------------------------------------- the service wiring (found by an independent review, never reached by a test before)
+
+def test_the_service_wires_up_from_the_environment_without_touching_the_network():
+    """run() needs NATS, so build() is the part a test can reach: it used to fail with UnboundLocalError (the SLI gauges were used before they were created)."""
+    import inspect
+
+    from backend.triage.stream import build, dead_letter_handler
+    svc = build({"EHG_TRIAGE_DSN": "host=nowhere dbname=x", "AUTH_MODE": "dev", "BIND_HOST": "127.0.0.1"})
+    assert svc.app.title and svc.engine.fleet is svc.fleet
+    svc.sli.update([{"node": "A", "rx": 5, "missing": 1, "p95_latency_ms": 100.0}])
+    assert svc.reg.get_sample_value("ehg_fleet_packets_60s", {"kind": "rx"}) == 5.0 and svc.reg.get_sample_value("ehg_triage_bad_messages_total") == 0.0, "the gauges and counters built here are the ones the API serves"
+    handler = dead_letter_handler(svc.dead)
+    assert inspect.iscoroutinefunction(handler), "nats-py raises 'must use coroutine for subscriptions' for anything else"
+    import asyncio
+    asyncio.run(handler(object()))
+    assert svc.reg.get_sample_value("ehg_triage_dead_letters_total") == 1.0
+
+
+def test_no_nats_subscription_in_the_repository_uses_a_plain_function_callback():
+    import re
+    from pathlib import Path
+    root = Path(__file__).parents[1]
+    for path in (root / "backend").rglob("*.py"):
+        for m in re.finditer(r"\.subscribe\([^)]*cb=([^,)]*)", path.read_text()):
+            assert not m.group(1).strip().startswith("lambda"), f"{path.name}: nats-py needs a coroutine callback, not {m.group(1)}"

@@ -209,41 +209,59 @@ def pg_health_sink(connect):
     return sink
 
 
-async def run() -> None:
-    """Service entry point: JetStream consumer + once-a-second engine + the HTTP API, in one process (needs NATS, PostgreSQL and AUTH_* settings)."""
-    import json
-    import time
-
-    import nats
+def build(env=os.environ):
+    """Everything the service needs EXCEPT the network: monitors, engine, stores, metrics and the HTTP app, wired from the environment. Nothing connects here (the database is opened per call),
+    so a test can run it. Keeping this out of run() matters: run() needs NATS, so no test reached it, and a wrong order of assignments in it (the SLI gauges used before they were made) was found only by an independent review."""
     import psycopg
-    import uvicorn
     from prometheus_client import CollectorRegistry, Counter
 
-    from backend import bus
     from backend.jwtauth import from_env
     from backend.triage.app import create_app
     from backend.triage.audit import AuditLog
     from backend.triage.registry import Registry
     from backend.triage.state import AlertStore
 
-    dsn = os.environ["EHG_TRIAGE_DSN"]
+    dsn = env["EHG_TRIAGE_DSN"]
     connect = lambda: psycopg.connect(dsn, connect_timeout=5)  # noqa: E731
     audit = AuditLog(connect)
     store, registry = AlertStore(connect, audit), Registry(connect, audit)
-    offset = os.environ.get("CLOCK_OFFSET_S")
+    offset = env.get("CLOCK_OFFSET_S")
     fleet = FleetMonitor(lambda node: (registry.node(node) or {}).get("assigned_gateway"), float(offset) if offset else None)
-    engine = Engine(fleet, store, sink=sli.wrap(pg_health_sink(connect)))
     reg = CollectorRegistry()  # served by the API's /metrics (before this, the counters below were incremented but never exposed)
     sli, lag = FleetSli(reg), ConsumerLag(reg)
+    engine = Engine(fleet, store, sink=sli.wrap(pg_health_sink(connect)))
     bad, dead = Counter("ehg_triage_bad_messages", "messages kept under EHG.BAD.*", registry=reg), Counter("ehg_triage_dead_letters", "JetStream max-delivery advisories", registry=reg)
+    app = create_app(store=store, audit=audit, auth=from_env(env), registry=registry, known_nodes=lambda: list(fleet.nodes), config=engine.cfg, metrics=reg, fhir_upstream=upstream_from_env(env),
+                     ui_oidc={"authority": env.get("OIDC_UI_AUTHORITY", env.get("OIDC_ISSUER", "")), "client_id": env.get("OIDC_UI_CLIENT_ID", "triage-ui")})
+    return type("Service", (), {"fleet": fleet, "engine": engine, "reg": reg, "sli": sli, "lag": lag, "bad": bad, "dead": dead, "app": app})()
+
+
+def dead_letter_handler(counter):
+    """The callback for the max-deliveries advisory. nats-py REFUSES a subscription callback that is not a coroutine function (a lambda raised at start-up)."""
+    async def on_dead(msg) -> None:
+        """Count one advisory."""
+        counter.inc()
+    return on_dead
+
+
+async def run() -> None:
+    """Service entry point: JetStream consumer + once-a-second engine + the HTTP API, in one process (needs NATS, PostgreSQL and AUTH_* settings)."""
+    import json
+    import time
+
+    import nats
+    import uvicorn
+
+    from backend import bus
+
+    svc = build()
+    fleet, engine, lag, bad, dead, app = svc.fleet, svc.engine, svc.lag, svc.bad, svc.dead, svc.app
     host = os.environ.get("BIND_HOST", "127.0.0.1")
-    app = create_app(store=store, audit=audit, auth=from_env(), registry=registry, known_nodes=lambda: list(fleet.nodes), config=engine.cfg, metrics=reg, fhir_upstream=upstream_from_env(os.environ),
-                     ui_oidc={"authority": os.environ.get("OIDC_UI_AUTHORITY", os.environ.get("OIDC_ISSUER", "")), "client_id": os.environ.get("OIDC_UI_CLIENT_ID", "triage-ui")})
     nc = await nats.connect(os.environ.get("NATS_URL", "nats://nats:4222"), name="ehg-triage", max_reconnect_attempts=-1)
     js = nc.jetstream()
     await js.add_stream(bus.stream_config())
     sub = await js.pull_subscribe("EHG.>", durable="triage", stream=bus.STREAM, config=bus.consumer_config("triage", "EHG.>"))
-    await nc.subscribe(bus.DEAD_LETTER_ADVISORY, cb=lambda msg: dead.inc())
+    await nc.subscribe(bus.DEAD_LETTER_ADVISORY, cb=dead_letter_handler(dead))
 
     async def consume():
         """Feed the monitors from the stream."""

@@ -562,3 +562,57 @@ def test_the_database_init_script_creates_the_timescaledb_extension_as_superuser
     assert "EXCEPTION WHEN OTHERS" in body, "a plain PostgreSQL image must still get its databases (0001 only), with the failure surfacing in migration 0003"
     assert "--username postgres" in body, "the superuser"
 
+
+# ---------------------------------------------------------------- update.sh run for real, with stub docker and sops (found by an independent review)
+
+def stubbed_update(tmp_path, docker_script: str, runtime_env: Path | None = None):
+    """Run `update.sh --bootstrap --timeout 1` for real with fake docker, sops and sleep programs first on PATH."""
+    home = tmp_path / "ehg"
+    (home / "secrets").mkdir(parents=True)
+    (home / "secrets/age.key").write_text("AGE-SECRET-KEY-FAKE")
+    (home / "etc").mkdir()
+    (home / "etc/site.env").write_text("EHG_DOMAIN=x.example\n")
+    (home / "repo/deploy/secrets").mkdir(parents=True)
+    (home / "repo/deploy/secrets/secrets.sops.yaml").write_text("x")
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    for name, body in {"docker": docker_script, "sops": "echo A=b", "sleep": "true"}.items():
+        (bin_ / name).write_text("#!/bin/sh\n" + body + "\n")
+        (bin_ / name).chmod(0o755)
+    env = {**os.environ, "EHG_HOME": str(home), "EHG_RUNTIME_ENV": str(runtime_env or tmp_path / "run/runtime.env"), "PATH": f"{bin_}:{os.environ['PATH']}"}
+    return subprocess.run([str(UPDATE_SH), "--bootstrap", "--timeout", "1"], capture_output=True, text=True, env=env)
+
+
+HEALTHY_PS = 'case "$*" in *" ps "*) echo \'{"Service":"caddy","State":"running","Health":"healthy"}\' ;; esac'
+
+
+@pytest.mark.skipif(shutil.which("jq") is None, reason="jq not installed")
+@pytest.mark.parametrize("failing", ["pull", "build", "up"])
+def test_a_failed_pull_build_or_up_fails_the_release_instead_of_reporting_success(tmp_path, failing):
+    """In `deploy_current || rc=$?` POSIX shells ignore set -e inside the function: without `|| return` a failed build left no containers and the script still said 'all services are up'."""
+    r = stubbed_update(tmp_path, f'case "$*" in *" {failing} "*|*" {failing}") exit 1 ;; esac\n{HEALTHY_PS}')
+    assert r.returncode != 0 and "all services are up" not in r.stdout, r.stdout + r.stderr
+
+
+@pytest.mark.skipif(shutil.which("jq") is None, reason="jq not installed")
+def test_no_containers_at_all_is_not_healthy(tmp_path):
+    r = stubbed_update(tmp_path, "exit 0")  # every docker command 'succeeds' but nothing exists
+    assert r.returncode != 0 and "all services are up" not in r.stdout and "NOT healthy" in r.stdout, r.stdout + r.stderr
+
+
+@pytest.mark.skipif(shutil.which("jq") is None, reason="jq not installed")
+def test_the_stubbed_happy_path_still_succeeds(tmp_path):
+    r = stubbed_update(tmp_path, HEALTHY_PS)
+    assert r.returncode == 0 and "all services are up" in r.stdout, r.stdout + r.stderr
+
+
+def test_a_runtime_directory_that_cannot_be_made_gets_a_clear_message_not_a_decryption_error(tmp_path):
+    r = stubbed_update(tmp_path, "exit 0", runtime_env=Path("/proc/ehg-cannot-exist/runtime.env"))
+    assert r.returncode != 0 and "cannot create" in r.stderr and "tmpfiles" in r.stderr and "could not decrypt" not in r.stderr, r.stderr
+
+
+def test_cloud_init_creates_the_runtime_directory_for_the_service_user_at_every_boot():
+    text = CLOUD_INIT.read_text()
+    assert re.search(r"/etc/tmpfiles\.d/ehg\.conf", text) and re.search(r"^\s+d /run/ehg 0700 ehg ehg -$", text, re.M)
+    assert text.index("systemd-tmpfiles --create /etc/tmpfiles.d/ehg.conf") < text.index("update.sh --bootstrap"), "before the first bootstrap run"
+

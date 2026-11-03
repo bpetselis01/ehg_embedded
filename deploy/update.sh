@@ -77,7 +77,8 @@ decrypt_secrets() {
         else say "waiting: $EHG_HOME/secrets/age.key is not there yet. Copy it by hand (the deployment runbook, Unit 5), then run: deploy/update.sh --bootstrap"; return 2; fi
     fi
     command -v sops >/dev/null 2>&1 || [ "$DRY" = 1 ] || die "sops is not installed on this VM; install it by hand and verify its checksum (the deployment runbook, Unit 5)"
-    run mkdir -p "$(dirname "$RUNTIME_ENV")"
+    # /run/ehg is made at boot by systemd-tmpfiles (cloud-init); this user cannot create anything directly under the root-owned /run
+    run mkdir -p "$(dirname "$RUNTIME_ENV")" || die "cannot create $(dirname "$RUNTIME_ENV"): it should exist already, owned by this user (cloud-init writes /etc/tmpfiles.d/ehg.conf; run: sudo systemd-tmpfiles --create)"
     if [ "$DRY" = 1 ]; then echo "DRY-RUN: SOPS_AGE_KEY_FILE=$EHG_HOME/secrets/age.key sops --decrypt --output-type dotenv $REPO/deploy/secrets/secrets.sops.yaml > $RUNTIME_ENV (mode 600)"; return 0; fi
     ( umask 077; SOPS_AGE_KEY_FILE="$EHG_HOME/secrets/age.key" sops --decrypt --output-type dotenv "$REPO/deploy/secrets/secrets.sops.yaml" > "$RUNTIME_ENV" ) \
         || die "could not decrypt deploy/secrets/secrets.sops.yaml (wrong age key, or the file is not encrypted for it)"
@@ -86,9 +87,12 @@ decrypt_secrets() {
 # wait until every service is running, and healthy where it has a health check
 wait_healthy() {
     [ "$DRY" = 1 ] && { echo "DRY-RUN: wait up to ${TIMEOUT}s for ${SERVICES:-all} services to be running/healthy"; return 0; }
-    waited=0
+    waited=0 bad="no containers appeared"
     while [ "$waited" -lt "$TIMEOUT" ]; do
-        bad=$(docker compose --env-file "$RUNTIME_ENV" --env-file "$EHG_HOME/etc/site.env" -f "$REPO/$COMPOSE_FILE" ps --all --format json \
+        # no containers at all is NOT healthy (an empty list would otherwise look like "nothing is wrong")
+        listing=$(docker compose --env-file "$RUNTIME_ENV" --env-file "$EHG_HOME/etc/site.env" -f "$REPO/$COMPOSE_FILE" ps --all --format json) || listing=""
+        if [ -z "$listing" ]; then sleep 5; waited=$((waited + 5)); continue; fi
+        bad=$(printf '%s\n' "$listing" \
               | jq -r --arg want "$SERVICES" 'select(($want == "") or (.Service as $s | ($want | split(" ") | index($s)) != null)) | select(((.State != "running") and ((.State != "exited") or ((.ExitCode // 1) != 0))) or ((.Health // "") != "" and .Health != "healthy")) | .Service' | sort -u | tr '\n' ' ')
         [ -z "$bad" ] && { say "all services are up"; return 0; }
         sleep 5; waited=$((waited + 5))
@@ -99,10 +103,12 @@ wait_healthy() {
 
 deploy_current() {
     decrypt_secrets || return $?
-    compose pull --ignore-buildable
-    compose build
+    # every step ends with || return: this function is called as `deploy_current || rc=$?`, and in that position POSIX shells IGNORE `set -e` inside it, so without these a failed
+    # pull, build or up would be skipped and wait_healthy would go on to report success (found by an independent review)
+    compose pull --ignore-buildable || return $?
+    compose build || return $?
     # shellcheck disable=SC2086 # $SERVICES is a validated list of service names and must split into words
-    compose up -d --remove-orphans $SERVICES
+    compose up -d --remove-orphans $SERVICES || return $?
     wait_healthy
 }
 

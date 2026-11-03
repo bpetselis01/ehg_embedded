@@ -101,6 +101,11 @@ write_files:
     permissions: "0644"
     content: |
       * * * * * root /usr/local/sbin/ehg-df-metrics.sh
+  - path: /etc/tmpfiles.d/ehg.conf
+    permissions: "0644"
+    content: |
+      # the decrypted secrets live only here, in memory (tmpfs); /run is root-owned, so the service user's directory is made at every boot
+      d /run/ehg 0700 ehg ehg -
   - path: /etc/cron.d/ehg-crl-sync
     permissions: "0644"
     content: |
@@ -169,7 +174,8 @@ write_files:
       chown -R ehg:ehg /opt/ehg
       chmod 700 /opt/ehg/secrets /opt/ehg/pki
 
-      # 5. try to start the stack; it waits (and says so) until the age key is in place
+      # 5. try to start the stack; it waits (and says so) until the age key is in place (/run/ehg first: the service user cannot create it under the root-owned /run)
+      systemd-tmpfiles --create /etc/tmpfiles.d/ehg.conf || status "ERROR could not create /run/ehg"
       if [ -x /opt/ehg/repo/deploy/update.sh ]; then
         su -s /bin/sh ehg -c "/opt/ehg/repo/deploy/update.sh --bootstrap" && status "update.sh --bootstrap ran" || status "update.sh --bootstrap reported a problem (see its output)"
       fi
