@@ -169,6 +169,9 @@ Step by step:
 | [`backend/triage/registry.py`](../backend/triage/registry.py) | gateways, nodes, pseudonymous subjects with consent, and the health history behind the trends |
 | [`backend/triage/audit.py`](../backend/triage/audit.py) | hash-chained append-only audit log and its verifier (`--verify`); tamper-evident, not write-once |
 | [`backend/triage/state.py`](../backend/triage/state.py) | alert lifecycle in PostgreSQL (open, acknowledged, escalated, resolved), required notes, auto-resolve, audit in the same transaction |
+| [`backend/fhir_sync/worker.py`](../backend/fhir_sync/worker.py) | copies complete stored windows into the reference FHIR server (HAPI) as conditional, idempotent transactions, only for nodes with active consent |
+| [`backend/triage/fhir_api.py`](../backend/triage/fhir_api.py) | the read-only FHIR facade (`/fhir/*`): node-scoped, consent-checked, audited; the browser never reaches HAPI |
+| [`deploy/hapi/application.yaml`](../deploy/hapi/application.yaml) | HAPI FHIR R5 configuration (no CORS, no Swagger, no mass delete); never started |
 | [`backend/jwtauth.py`](../backend/jwtauth.py) | JWT validation (explicit algorithms, required claims), role mapping and the dev mode (loopback only) |
 | [`backend/triage/rules.py`](../backend/triage/rules.py) | pipeline-health alert rules, hysteresis, severity score and worklist order (pure functions; nothing clinical) |
 | [`backend/platform.Dockerfile`](../backend/platform.Dockerfile), [`backend/docker-compose.platform.yml`](../backend/docker-compose.platform.yml) | the platform services' image and the compose override (profile `platform`) |

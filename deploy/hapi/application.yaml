@@ -1,0 +1,61 @@
+# PURPOSE: Configuration of the reference EHR, HAPI FHIR JPA server (image hapiproject/hapi:v7.6.0), as a FHIR R5 server on the private Docker network.
+# INPUT: mounted read-only at /app/config/application.yaml with SPRING_CONFIG_LOCATION=file:///app/config/application.yaml; the database password comes from the environment variable HAPI_DB_PASSWORD
+#   (Spring resolves ${...} from the environment); database `hapi` and role `hapi` are created by deploy/postgres/10-init-databases.sh.
+# OUTPUT: a FHIR R5 endpoint at http://hapi:8080/fhir that only the triage facade (backend/triage/fhir_api.py) and the sync worker (backend/fhir_sync/worker.py) talk to. Caddy does not route it.
+# HOW: Key names were read from the starter's own application.yaml at tag image/v7.6.0 (2026-11-04), then reduced to what we need. Differences from the starter's defaults, on purpose:
+#   cors: nothing listed, so a browser cannot call HAPI directly (the default allows every origin with credentials); openapi_enabled false and no `tester` section (no web UI, no Swagger);
+#   delete_expunge_enabled / expunge_enabled false and allow_multiple_delete false (a mass delete of patient-linked data must not be one request away); enforce_referential_integrity_on_write true;
+#   allow_external_references false; page sizes capped. Only the `health` actuator endpoint is exposed (the starter's default).
+# STATUS: UNVERIFIED: never started (Docker was not running). Nothing here proves HAPI accepts our resources; tests/test_hapi_integration.py (EHG_INTEGRATION=1, needs Docker) is the check.
+# ROLE IN THESIS: The "6b EHR interoperability" hop of docs/production-topology.md; a reference EHR, not a hospital system.
+# BEFORE -> AFTER: Before: no FHIR server. After: a configured one, waiting for the compose service.
+server:
+  port: 8080
+management:
+  endpoints:
+    enabled-by-default: false
+    web:
+      exposure:
+        include: 'health'
+  endpoint:
+    health:
+      enabled: true
+      probes:
+        enabled: true
+spring:
+  main:
+    allow-circular-references: true
+  flyway:
+    enabled: false
+    baselineOnMigrate: true
+    fail-on-missing-locations: false
+  datasource:
+    url: jdbc:postgresql://postgres:5432/hapi
+    username: hapi
+    password: ${HAPI_DB_PASSWORD}
+    driverClassName: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 8
+  jpa:
+    properties:
+      hibernate.format_sql: false
+      hibernate.show_sql: false
+      hibernate.dialect: ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect
+      hibernate.search.enabled: false
+hapi:
+  fhir:
+    fhir_version: R5
+    openapi_enabled: false
+    narrative_enabled: false
+    mdm_enabled: false
+    cr:
+      enabled: false
+    cdshooks:
+      enabled: false
+    allow_external_references: false
+    allow_multiple_delete: false
+    delete_expunge_enabled: false
+    expunge_enabled: false
+    enforce_referential_integrity_on_write: true
+    default_page_size: 20
+    max_page_size: 50

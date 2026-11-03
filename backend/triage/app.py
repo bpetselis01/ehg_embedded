@@ -4,7 +4,7 @@ PURPOSE: What the triage page and operators talk to (decision 0011). Operational
 INPUT: HTTP requests with `Authorization: Bearer <token>` (backend/jwtauth.py). Wired by create_app(store, audit, auth, registry, ...).
   Routes and the minimum role: GET /api/session, /api/worklist, /api/nodes/{id}, /api/nodes/{id}/trend?range=24h|7d|30d|90d, /api/alerts?state=, /api/alerts/{id} (viewer);
   POST /api/alerts/{id}/ack|escalate|resolve|note with {"note": "..."} (operator); GET /api/registry/gateways|nodes|subjects, POST /api/registry/gateways/{id}/revoke,
-  GET /api/audit?limit=, GET /api/audit/verify, GET|PUT /api/config (admin); GET /healthz, /readyz, /metrics (no login; /metrics is for the internal network and refuses proxied requests).
+  GET /api/audit?limit=, GET /api/audit/verify, GET|PUT /api/config (admin); GET /fhir/metadata|Observation|Device (viewer; only when a FHIR server is configured: backend/triage/fhir_api.py); GET /healthz, /readyz, /metrics (no login; /metrics is for the internal network and refuses proxied requests).
 OUTPUT: JSON. Errors have a name and a status: 401 no/invalid token, 403 role too low or no active consent for the node's subject, 404 unknown id, 409 illegal transition, 422 bad input
   (missing note, bad range, bad threshold), 503 database unavailable. A server error returns a plain message, never a stack trace. No response contains a secret.
   e.g. POST /api/alerts/17/escalate {"note": ""} -> 422 {"error": "escalate needs a note explaining why"}
@@ -23,6 +23,7 @@ from prometheus_client import CollectorRegistry, Gauge, generate_latest
 from pydantic import BaseModel, ConfigDict
 
 from backend.jwtauth import AuthError
+from backend.triage.fhir_api import router as fhir_router
 from backend.triage.registry import RANGES, UnknownGateway
 from backend.triage.rules import Config
 from backend.triage.state import IllegalTransition, NoteRequired, NotFound
@@ -40,7 +41,7 @@ class NoteBody(BaseModel):
     note: str | None = None
 
 
-def create_app(*, store, audit, auth, registry, known_nodes=lambda: [], ready=lambda: (True, ""), config: Config | None = None, on_revoke=None, clock=lambda: datetime.now(timezone.utc)) -> FastAPI:
+def create_app(*, store, audit, auth, registry, known_nodes=lambda: [], ready=lambda: (True, ""), config: Config | None = None, on_revoke=None, fhir_upstream=None, clock=lambda: datetime.now(timezone.utc)) -> FastAPI:
     """Build the API around its collaborators (all injectable, so the tests need no network)."""
     app = FastAPI(title="EHG triage API", version="0.1.0", description=PURPOSE)
     cfg = config or Config()
@@ -224,6 +225,9 @@ def create_app(*, store, audit, auth, registry, known_nodes=lambda: [], ready=la
             setattr(cfg, k, v)
         audit.append(p.user, p.role, "config.change", "config", {"before": before, "after": body})
         return {k: getattr(cfg, k) for k in (*CONFIG_LIMITS, "latency_enabled")}
+
+    if fhir_upstream is not None:  # the read-only FHIR facade (backend/triage/fhir_api.py); absent when no FHIR server is configured
+        app.include_router(fhir_router(fhir_upstream, who, audit, registry))
 
     @app.get("/healthz")
     def healthz():

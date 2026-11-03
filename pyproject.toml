@@ -27,6 +27,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "fhir-resources==8.3.0",
     "pyserial>=3.5",
     "pytest>=8",
     "python-hcl2>=8.1.4",

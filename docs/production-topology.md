@@ -66,7 +66,7 @@ Never describe a stand-in or design-only hop as if it were done.
 | 4 | Cellular and MQTT | iPhone cellular data; MQTT over TLS 1.3 mTLS (or WSS on 443) | Planned; will be a *phone-cellular* measurement (H1-cellular). A real LTE-M or NB-IoT modem is **Design-only / not built** |
 | 5 | Cloud core | Oracle A1 VM: Mosquitto, NATS, TimescaleDB, triage, HAPI, Keycloak, observability | Planned (Units 4 to 12); needs your Oracle account |
 | 6a | Operator dashboard | Triage page, Grafana and the raw viewer | Grafana and the viewer Existing; triage page Planned (Unit 10) |
-| 6b | EHR interoperability | Self-hosted HAPI FHIR R5 as a *reference* EHR | Planned (Unit 9); no hospital EHR, HL7 v2 or vendor integration |
+| 6b | EHR interoperability | Self-hosted HAPI FHIR R5 as a *reference* EHR | Sync worker and read-only facade written and tested against a fake FHIR server (Unit 9); HAPI itself never started; no hospital EHR, HL7 v2 or vendor integration |
 
 **Design-only (written up, never built):** multi-zone or multi-region availability and broker clustering; restoring onto an Azure free VM; a real LTE-M or NB-IoT modem;
 App Store or TestFlight distribution; fleet-wide staged firmware rollout; write-once audit storage; AU Core conformance.

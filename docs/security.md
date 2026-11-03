@@ -108,6 +108,15 @@ All four were real, all fixed with failing tests first (`tests/test_ts_writer.py
 - **Keycloak's admin interface was reachable (MEDIUM, fixed):** `/auth/*` was proxied whole. Now only `/auth/realms/ehg/*` and `/auth/resources/*` are; the admin console, the master realm, health and metrics answer 404. Administer Keycloak through an SSH tunnel to the container. Test: `tests/test_caddy_config.py` (path-matching of allowed and blocked examples; `caddy adapt` ordering is checked only where Caddy is installed).
 - **Ordering of the deny rule (MEDIUM, second look, fixed):** relying on the source order of separate `handle` blocks is not guaranteed (Caddy sorts them by matcher specificity). All routing is now inside ONE `route` block, which runs exactly as written, with the deny rule first and the catch-all last (tested); Grafana's own `/metrics` is also switched off (`GF_METRICS_ENABLED=false`). Still UNVERIFIED by `caddy adapt` (Caddy is not installed here).
 
+## FHIR sync and facade (Unit 9)
+
+- **Boundary:** browser or page -> triage API `/fhir/*` -> HAPI (private network, not routed by Caddy). The sync worker writes to HAPI directly; nothing else does.
+- **Controls, each with a test** (`tests/test_fhir_facade.py`, `tests/test_fhir_sync.py`): `viewer` role needed; GET only (405 for everything else); `node` mandatory and a plain id, so there is no unscoped search; ACTIVE consent required and read on every request (a node with no subject is refused too); the refusal is audited; the server is not contacted for a refused node;
+  each result is re-checked against the requested node, so a wrong answer from the server cannot leak another node's data; upstream errors become a 502 with no server text; the worker exports only when consent is True, checks it every round, and sends nothing for False or None.
+- **Documented gap:** withdrawing consent stops further exports and all reads through the facade, but does NOT delete what was already sent to HAPI. A deletion route would need a deliberate, audited design (and HAPI delete/expunge is switched off in `deploy/hapi/application.yaml`).
+- **Documented gap:** the worker holds its "already sent" memory in the process; after a restart it resends, and the conditional requests keep the server at one copy (tested). HAPI authentication on the private network is not configured (network isolation only).
+- **Not verified:** that a real HAPI R5 server accepts the transaction (tests/test_hapi_integration.py, needs Docker), HAPI's memory use on the 12 GB VM, and the HAPI configuration keys beyond having been read from the starter's own file.
+
 ## Known limit: a gateway can publish for any node id
 
 `topic write ehg/+/pkt` lets an authenticated gateway publish packets labelled with another node's id. Pinning a gateway to its nodes needs either a gateway id in the topic or message (a change to the documented `ehg/<node>/pkt` interface that `eval/` and the recorded runs rely on) or a check against a registry of which gateway serves which node.

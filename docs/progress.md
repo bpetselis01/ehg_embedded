@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-11-04: Unit 9, FHIR sync worker and read-only facade (tested against a FAKE FHIR server; HAPI never started)
+
+- **Added:** `backend/fhir_sync/worker.py` (reuses `tools.fhir_export.bundle` unchanged; one conditional transaction per COMPLETE 600-frame chunk: Device POST with If-None-Exist, Observation conditional PUT by identifier), `backend/triage/fhir_api.py` (`/fhir/metadata|Observation|Device`, wired in by `create_app(fhir_upstream=...)`),
+  `deploy/hapi/application.yaml` (key names read from the starter's file at tag image/v7.6.0), platform image gains httpx and the two files the worker imports, `fhir.resources==8.3.0` (dev) and `tests/test_hapi_integration.py` (opt-in, needs Docker).
+- **Tested (12 + 9 tests):** repeat/restart/two-worker idempotence, late recovered frames replace rather than duplicate, raw counts and chunk times, consent False/None/withdrawn sends nothing, server failure is retried not dropped, an entry-level failure inside a 200 is an error, R5 model validation of our resources; facade roles, strict consent, mandatory node scoping, GET-only, audit, a lying upstream cannot leak another node, 502 without details.
+- **NOT done / not verified:** any real HAPI server; HAPI and the sync worker are NOT yet in `deploy/compose/docker-compose.cloud.yml` (nor are the bridge, ts-writer, triage, Keycloak and step-ca: completing that file is still to do); the worker needs the converted `.npz` folder (gain, baseline) mounted, which is gitignored data; the `Consent` and `AuditEvent` FHIR resources of the plan are not written (consent is enforced from the registry).
+
 ## 2026-11-03: Unit 14, CI and supply chain (minimal, honest)
 
 - **Added:** `.github/workflows/security.yml` (shellcheck; the deployment guard tests; Linux only, read-only token), `.github/dependabot.yml` (uv, actions, Dockerfile bases, Terraform), `docs/supply-chain.md`, `tests/test_ci_config.py`. Only the two actions already vetted in `tests.yml` are used.

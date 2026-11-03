@@ -37,6 +37,7 @@ Each UNVERIFIED row is checked in the unit that first uses the component, and th
 | Alembic 1.20.1, SQLAlchemy 2.1.6, Mako 1.4.3 | MIT | Migrations | Permissive | Confirmed locally (package metadata) |
 | prometheus-client 0.26.0 | Apache-2.0 AND BSD-2-Clause | Metrics endpoints | Permissive | Confirmed locally (package metadata) |
 | python-hcl2 8.1.4 (dev, added in Unit 4) | MIT | Parses `.tf` files in tests | Permissive | Confirmed locally (package metadata and classifier) |
+| fhir.resources 8.3.0, fhir-core 1.1.12 (dev, added in Unit 9) | BSD (OSI classifier in the package metadata) | Checks our FHIR resources against the R5 models in tests | Permissive | Confirmed locally (package metadata) |
 | Terraform CLI 1.14.9 (installed here) | Business Source Licence 1.1 (per the prompt) | Validates and applies the IaC | Free for our own use | Version confirmed (`terraform version`); licence text NOT read: UNVERIFIED |
 | `oracle/oci` Terraform provider 9.11.0 | Not read | Oracle resources | Free to use | UNVERIFIED |
 | Eclipse Mosquitto | EPL/EDL (as stated in the prompt) | Edge MQTT broker | Open source, free to self-host | UNVERIFIED |
@@ -50,7 +51,7 @@ Each UNVERIFIED row is checked in the unit that first uses the component, and th
 | NATS Server (JetStream) | Apache-2.0 | Internal bus | Permissive | UNVERIFIED |
 | PostgreSQL 16 | PostgreSQL licence | Enterprise store | Permissive | UNVERIFIED |
 | **TimescaleDB Community edition** | **Tiger Data Licence (not OSI-approved)** | Needed for compression and continuous aggregates | Self-hosting for own use is allowed; offering it as a service is not. Confirm with `SHOW timescaledb.license;` in Unit 6 | UNVERIFIED |
-| HAPI FHIR JPA server | Apache-2.0 | Reference EHR | Permissive | UNVERIFIED |
+| HAPI FHIR JPA server (image `hapiproject/hapi:v7.6.0`; its starter config was read from the GitHub tag `image/v7.6.0` on 2026-11-04) | Apache-2.0 (per the prompt; licence text not read) | Reference EHR | Permissive | UNVERIFIED |
 | Keycloak (26.8.1 or later) | Apache-2.0 | Identity provider | Permissive | UNVERIFIED |
 | Prometheus, Alertmanager | Apache-2.0 | Metrics and alert routing | Permissive | UNVERIFIED |
 | Loki | AGPL-3.0 (the prompt says "check") | Logs | Self-hosted for own use; do not modify and offer as a service | UNVERIFIED |
@@ -62,7 +63,6 @@ Each UNVERIFIED row is checked in the unit that first uses the component, and th
 | SOPS | MPL-2.0 | Encrypted secrets in git | Weak copyleft on modified files only | UNVERIFIED |
 | age | BSD-3-Clause | Key encryption for SOPS | Permissive | UNVERIFIED |
 | Alembic, SQLAlchemy | MIT | Migrations | Permissive | UNVERIFIED |
-| fhir.resources 8.3.0 | Not stated in the prompt | FHIR structure checks in tests | Free | UNVERIFIED |
 | **Terraform CLI** | **Business Source Licence 1.1** | Record the version used; pin 1.6 or later only after reading the licence text | Free for own use; not for offering a competing service. OpenTofu is a drop-in fallback | UNVERIFIED |
 | Trivy, Syft, cosign, gitleaks, tflint, shellcheck | Not stated in the prompt | Supply-chain and lint tooling | Free to run locally or in Actions | UNVERIFIED |
 | CocoaMQTT | MIT | Swift MQTT client | Permissive | UNVERIFIED |
