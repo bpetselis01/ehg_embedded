@@ -20,6 +20,7 @@ from nats.js.api import AckPolicy, ConsumerConfig, DeliverPolicy, DiscardPolicy,
 STREAM = "EHG"
 PKT_PREFIX, GW_PREFIX, BAD_PREFIX = "EHG.PKT", "EHG.GW", "EHG.BAD"
 DEAD_LETTER_ADVISORY = f"$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.{STREAM}.>"
+TERMINATED_ADVISORY = f"$JS.EVENT.ADVISORY.CONSUMER.MSG_TERMINATED.{STREAM}.>"  # published when a consumer term()s a message (the writers do, for anything unparseable)
 MAX_DELIVER, ACK_WAIT_S = 5, 30
 DUPLICATE_WINDOW_S = 3600  # an hour: a gateway replaying after an outage resends within this window
 MAX_AGE_S, MAX_BYTES = 7 * 86400, 8 * 2**30  # a week or 8 GB of replay history; the stores hold the long-term data
@@ -58,7 +59,13 @@ def stream_config() -> StreamConfig:
                         duplicate_window=DUPLICATE_WINDOW_S)
 
 
-def consumer_config(durable: str, subject: str = f"{PKT_PREFIX}.>") -> ConsumerConfig:
-    """A durable pull consumer with explicit acks, redelivery after ACK_WAIT_S and a hard limit of MAX_DELIVER tries."""
+UNLIMITED = -1
+
+
+def consumer_config(durable: str, subject: str = f"{PKT_PREFIX}.>", max_deliver: int = MAX_DELIVER) -> ConsumerConfig:
+    """A durable pull consumer with explicit acks and redelivery after ACK_WAIT_S. `max_deliver` is the hard limit of tries (MAX_DELIVER by default).
+
+    The STORE writers pass UNLIMITED: while their database is down they nak, and every nak counts as a delivery, so after five tries (about 30 s of outage) JetStream would stop offering
+    the message to that consumer for good (it stays in the stream, unseen: found by an independent review). A message that can never be stored is term()-ed by the writer itself, so nothing loops forever."""
     return ConsumerConfig(durable_name=durable, filter_subject=subject, ack_policy=AckPolicy.EXPLICIT, deliver_policy=DeliverPolicy.ALL,
-                          ack_wait=ACK_WAIT_S, max_deliver=MAX_DELIVER)
+                          ack_wait=ACK_WAIT_S, max_deliver=max_deliver)

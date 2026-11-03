@@ -80,7 +80,7 @@ services:
       - mosquitto-data:/mosquitto/data
     mem_limit: 64m
     healthcheck:
-      test: ["CMD-SHELL", "nc -z 127.0.0.1 8883 || exit 1"]
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 8883 || nc -w 1 127.0.0.1 8883 </dev/null || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -121,7 +121,7 @@ services:
       - pg-data:/home/postgres/pgdata
     mem_limit: 2048m
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres || exit 1"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -197,7 +197,7 @@ services:
     cap_drop: [ALL]
     mem_limit: 256m
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/grafana/api/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

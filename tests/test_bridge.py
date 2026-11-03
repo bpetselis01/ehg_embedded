@@ -209,3 +209,50 @@ def test_every_consumer_filter_in_the_code_is_inside_the_streams_subjects():
     for who, f in filters.items():
         assert any(subject_is_subset(f, s) for s in subjects), f"{who}: filter {f!r} is not inside the stream subjects {subjects}"
 
+
+def test_store_writers_never_run_out_of_deliveries_while_their_database_is_down():
+    """Each nak while the database is down counts as a delivery; with 5 allowed, a 30 s outage ended the consumer's chance to see the message (it stayed in the stream, unseen)."""
+    import re
+    from pathlib import Path
+    root = Path(__file__).parents[1]
+    assert bus.UNLIMITED == -1 and bus.consumer_config("x").max_deliver == bus.MAX_DELIVER == 5, "the default stays bounded"
+    assert bus.consumer_config("ts-writer", max_deliver=bus.UNLIMITED).max_deliver == -1
+    assert 'consumer_config("ts-writer", max_deliver=bus.UNLIMITED)' in (root / "backend/ts_writer/writer.py").read_text()
+    assert "max_deliver=-1" in (root / "backend/ingest/ingest.py").read_text() and "max_deliver=5" not in (root / "backend/ingest/ingest.py").read_text()
+    assert re.search(r"MSG_TERMINATED\.EHG\.>", bus.TERMINATED_ADVISORY) and "TERMINATED_ADVISORY" in (root / "backend/triage/stream.py").read_text()
+
+
+def test_a_failed_hand_over_restarts_the_bridge_so_the_broker_redelivers():
+    """Mosquitto resends unacknowledged QoS 1 messages only on reconnect; a live connection would stall after 20 stuck messages."""
+    import asyncio
+    import threading
+    from types import SimpleNamespace
+
+    from backend.bridge.bridge import Bridge, make_on_message
+
+    async def failing_publish(subject, payload, headers):
+        raise TimeoutError("nats unreachable")
+
+    async def good_publish(subject, payload, headers):
+        return SimpleNamespace(duplicate=False)
+
+    loop = asyncio.new_event_loop()
+    threading.Thread(target=loop.run_forever, daemon=True).start()
+    try:
+        for publish, expect_restart in ((failing_publish, True), (good_publish, False)):
+            restarted, acked, done = [], [], threading.Event()
+            client = SimpleNamespace(ack=lambda mid, qos: acked.append((mid, qos)))
+            on_message = make_on_message(Bridge(publish), loop, restart=lambda: (restarted.append(1), done.set()))
+            msg = SimpleNamespace(topic="ehg/EHG-1/pkt", payload=b'{"node_id": "EHG-1", "seq": 1, "t_inject": 5}', mid=7, qos=1)
+            on_message(client, None, msg)
+            if expect_restart:
+                assert done.wait(5) and restarted == [1] and acked == [], "no ack, and the process is asked to restart"
+            else:
+                for _ in range(100):
+                    if acked:
+                        break
+                    done.wait(0.05)
+                assert acked == [(7, 1)] and restarted == [], "a stored message is acknowledged and nothing restarts"
+    finally:
+        loop.call_soon_threadsafe(loop.stop)
+

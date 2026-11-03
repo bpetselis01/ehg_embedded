@@ -142,7 +142,7 @@ async def run_jetstream() -> None:
 
     nc = await nats.connect(os.environ.get("NATS_URL", "nats://nats:4222"), name="ehg-influx-writer", max_reconnect_attempts=-1)
     sub = await nc.jetstream().pull_subscribe("EHG.PKT.>", durable="influx-writer", stream="EHG",
-                                              config=ConsumerConfig(durable_name="influx-writer", filter_subject="EHG.PKT.>", ack_policy=AckPolicy.EXPLICIT, ack_wait=30, max_deliver=5))
+                                              config=ConsumerConfig(durable_name="influx-writer", filter_subject="EHG.PKT.>", ack_policy=AckPolicy.EXPLICIT, ack_wait=30, max_deliver=-1))  # -1: a nak while InfluxDB is down must never use up the tries (bus.UNLIMITED); an unreadable message is term()-ed
     print("ingest running (source: jetstream)")
     while True:
         try:

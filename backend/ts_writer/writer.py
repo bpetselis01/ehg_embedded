@@ -219,7 +219,7 @@ async def run() -> None:
     nc = await nats.connect(os.environ.get("NATS_URL", "nats://nats:4222"), name="ehg-ts-writer", max_reconnect_attempts=-1)
     js = nc.jetstream()
     await js.add_stream(bus.stream_config())
-    sub = await js.pull_subscribe(f"{bus.PKT_PREFIX}.>", durable="ts-writer", stream=bus.STREAM, config=bus.consumer_config("ts-writer"))
+    sub = await js.pull_subscribe(f"{bus.PKT_PREFIX}.>", durable="ts-writer", stream=bus.STREAM, config=bus.consumer_config("ts-writer", max_deliver=bus.UNLIMITED))
     start_http_server(int(os.environ.get("WRITER_METRICS_PORT", "9202")))
     metrics = {k: Counter(f"ehg_writer_{k}", f"writer counter {k}") for k in ("rx", "rows", "duplicate_packets", "redelivered", "db_errors", "terminated")}
     metrics["degraded"] = Gauge("ehg_writer_degraded", "1 while the database is unreachable")

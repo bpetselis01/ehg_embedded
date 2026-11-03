@@ -2,6 +2,7 @@
 the never-overwrite rule, rotation that touches only its own directories, and that a failed backup does NOT refresh the freshness metric. NOT covered: TimescaleDB, restic, a Docker target (see docs/dr.md)."""
 
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -173,4 +174,12 @@ def test_the_init_script_runs_on_a_real_server_and_tolerates_a_missing_timescale
         assert {x[0] for x in c.execute("SELECT rolname FROM pg_roles WHERE rolname IN ('ehg','hapi','keycloak','ehg_exporter','ehg_triage')")} == {"ehg", "hapi", "keycloak", "ehg_exporter", "ehg_triage"}
         assert {x[0] for x in c.execute("SELECT datname FROM pg_database WHERE datname IN ('ehg','hapi','keycloak')")} == {"ehg", "hapi", "keycloak"}
         assert c.execute("SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = 'ehg'").fetchone()[0] == "ehg"
+
+
+def test_documented_container_prefix_is_plain_docker_exec_never_compose_exec():
+    """`docker compose exec` interpolates the whole compose file, which has required secrets: it would fail on the first nightly run unless env files were passed (independent review)."""
+    for path in ("docs/dr.md", "deploy/backup/backup.sh", "deploy/backup/restore_drill.sh"):
+        text = (ROOT / path).read_text()
+        assert "docker exec -i -u postgres ehg-postgres-1" in text, path
+        assert not re.search(r'--pg-prefix "docker compose', text), f"{path} still documents compose exec"
 

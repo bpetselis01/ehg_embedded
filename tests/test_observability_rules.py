@@ -127,3 +127,24 @@ def test_the_alertmanager_example_is_not_loaded_and_the_live_config_stays_starta
     assert live["route"]["receiver"] == "null", "the live config must not reference a file or URL that does not exist yet"
     ex = yaml.safe_load((OBS / "alertmanager.ntfy.example.yml").read_text())
     assert ex["receivers"][0]["webhook_configs"][0]["url_file"].startswith("/") and "http" not in json.dumps(ex), "the webhook address is read from a secret file, never written in git"
+
+
+def test_every_scrape_target_is_a_compose_service_and_none_is_known_to_be_down_by_design():
+    """EhgTargetDown pages on `up == 0`: a target that can never be up (Grafana with metrics off) would page for ever (independent review)."""
+    prom = yaml.safe_load((OBS / "prometheus.yml").read_text())
+    compose = yaml.safe_load((ROOT / "deploy/compose/docker-compose.cloud.yml").read_text())["services"]
+    for job in prom["scrape_configs"]:
+        for target in job["static_configs"][0]["targets"]:
+            host = target.split(":")[0]
+            assert host in compose or host == "prometheus", f"{job['job_name']}: {host} is not a service in the cloud compose file"
+            if host == "grafana":
+                assert compose["grafana"]["environment"]["GF_METRICS_ENABLED"] == "true", "Grafana metrics are off: do not scrape it"
+
+
+def test_healthchecks_that_the_review_found_fragile_are_robust():
+    compose = yaml.safe_load((ROOT / "deploy/compose/docker-compose.cloud.yml").read_text())["services"]
+    assert "-h 127.0.0.1" in compose["postgres"]["healthcheck"]["test"][1], "over TCP, so the init-time server (unix socket only) does not count as ready"
+    assert "-h 127.0.0.1" in (ROOT / "backend/docker-compose.platform.yml").read_text().split("pg_isready")[1].split("||")[0]
+    assert "/grafana/api/health" in compose["grafana"]["healthcheck"]["test"][1], "Grafana is served from the sub-path"
+    assert "nc -w 1" in compose["mosquitto"]["healthcheck"]["test"][1], "fallback for a busybox nc without -z"
+

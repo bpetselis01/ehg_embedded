@@ -1,6 +1,6 @@
 #!/bin/sh
 # PURPOSE: Prove that a backup restores: verify its checksums, recreate roles and databases on a CLEAN PostgreSQL, then check the audit chain and time the whole thing. The measured time is the RTO of docs/dr.md (with the caveat that it ran on this target).
-# INPUT: --backup DIR (one ehg-backup-<timestamp> directory made by backup.sh); the TARGET through PGHOST, PGPORT, PGUSER, PGPASSWORD or --pg-prefix "docker compose exec -T postgres"; --databases "ehg hapi keycloak"; --audit-db ehg;
+# INPUT: --backup DIR (one ehg-backup-<timestamp> directory made by backup.sh); the TARGET through PGHOST, PGPORT, PGUSER, PGPASSWORD or --pg-prefix "docker exec -i -u postgres ehg-postgres-1"-style prefix (plain docker exec, see backup.sh); --databases "ehg hapi keycloak"; --audit-db ehg;
 #   --verify-cmd "CMD" (default: uv run python -m backend.triage.audit --verify, which reads EHG_TRIAGE_DSN, so set that to the restored ehg database); --result FILE (default DIR/drill-result.txt); --dry-run.
 #   e.g. PGHOST=127.0.0.1 PGPORT=55432 PGUSER=postgres EHG_TRIAGE_DSN="host=127.0.0.1 port=55432 user=postgres dbname=ehg" restore_drill.sh --backup /srv/ehg-data/backups/ehg-backup-20261104T020000Z
 # OUTPUT: prints each step, then "RESTORE DRILL OK in N s" and writes the same line plus the audit head to the result file. Exit status 1 on ANY failure (checksum mismatch, a database that already exists, a failed restore, a failed audit verification,

@@ -261,7 +261,8 @@ async def run() -> None:
     js = nc.jetstream()
     await js.add_stream(bus.stream_config())
     sub = await js.pull_subscribe("EHG.>", durable="triage", stream=bus.STREAM, config=bus.consumer_config("triage", "EHG.>"))
-    await nc.subscribe(bus.DEAD_LETTER_ADVISORY, cb=dead_letter_handler(dead))
+    for advisory in (bus.DEAD_LETTER_ADVISORY, bus.TERMINATED_ADVISORY):  # both ways a message ends up unused: out of tries, or term()-ed by a writer
+        await nc.subscribe(advisory, cb=dead_letter_handler(dead))
 
     async def consume():
         """Feed the monitors from the stream."""

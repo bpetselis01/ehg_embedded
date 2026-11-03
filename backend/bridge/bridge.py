@@ -80,6 +80,30 @@ class Bridge:
         return f"{bus.BAD_PREFIX}.unexpected_topic", {}
 
 
+def restart_process() -> None:
+    """Exit so the container restarts and reconnects (restart: unless-stopped). `os._exit` because this runs in a callback thread."""
+    os._exit(1)
+
+
+def make_on_message(bridge, loop, restart=restart_process):
+    """The MQTT `on_message` callback. It runs in paho's thread: hand the message to the event loop and acknowledge MQTT only when the stream has it.
+
+    When the hand-over fails (NATS unreachable for more than the publish timeout), `restart()` is called. Mosquitto resends an unacknowledged QoS 1 message only when the client RECONNECTS,
+    never inside a live connection, and it stops sending after `max_inflight_messages` (20) unacknowledged ones: without a restart a NATS outage would stall the bridge for good
+    while its health check (the metrics page) stayed green (found by an independent review). The persistent session and the stream's duplicate window make the restart lossless."""
+    def on_message(client, userdata, msg):
+        """Hand one message over."""
+        fut = asyncio.run_coroutine_threadsafe(bridge.handle(msg.topic, msg.payload, lambda: client.ack(msg.mid, msg.qos)), loop)
+
+        def done(f):
+            """Report a failure and restart: ack() was not called, so the broker redelivers after the reconnect."""
+            if f.exception():
+                print(f"bridge: NOT acknowledged ({type(f.exception()).__name__}: {f.exception()}); restarting so the broker redelivers {msg.topic}")
+                restart()
+        fut.add_done_callback(done)
+    return on_message
+
+
 async def run() -> None:
     """Connect MQTT (manual ack, persistent session) and NATS, then bridge until stopped."""
     import nats
@@ -105,17 +129,7 @@ async def run() -> None:
     c.on_connect = lambda cl, u, f, rc, p: (print(f"bridge: MQTT connected ({rc})"), cl.subscribe([("ehg/+/pkt", 1), ("ehg/_gw/+/status", 1)]))
     c.on_connect_fail = lambda cl, u: print("bridge: cannot reach the MQTT broker (TLS handshake or network); retrying")
 
-    def on_message(client, userdata, msg):
-        """Called in paho's thread: hand the message to the event loop; acknowledge MQTT only when the stream has it."""
-        fut = asyncio.run_coroutine_threadsafe(bridge.handle(msg.topic, msg.payload, lambda: client.ack(msg.mid, msg.qos)), loop)
-
-        def done(f):
-            """Report a failure; the broker will redeliver because ack() was not called."""
-            if f.exception():
-                print(f"bridge: NOT acknowledged ({type(f.exception()).__name__}: {f.exception()}); the broker will redeliver {msg.topic}")
-        fut.add_done_callback(done)
-
-    c.on_message = on_message
+    c.on_message = make_on_message(bridge, loop)
     c.connect_async(host, port)
     c.loop_start()
     print("bridge running")

@@ -22,7 +22,7 @@
 
 ## Nightly schedule (by hand, once)
 
-On the VM, as the `ehg` user, a cron entry or systemd timer running `deploy/backup/backup.sh --pg-prefix "docker compose -f /opt/ehg/repo/deploy/compose/docker-compose.cloud.yml exec -T postgres"` at about 02:00, with `RESTIC_REPOSITORY` and `RESTIC_PASSWORD_FILE` in its environment. Not installed by cloud-init: run `--dry-run` first and read the plan.
+On the VM, as the `ehg` user, a cron entry or systemd timer running `deploy/backup/backup.sh --pg-prefix "docker exec -i -u postgres ehg-postgres-1"` at about 02:00, with `RESTIC_REPOSITORY` and `RESTIC_PASSWORD_FILE` in its environment. Not installed by cloud-init: run `--dry-run` first and read the plan.
 
 ## Restore drill
 

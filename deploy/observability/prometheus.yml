@@ -1,6 +1,6 @@
 # PURPOSE: Prometheus: what to scrape, the SLO recording rules and the alert rules (rules/), and where alerts go (Alertmanager).
 # INPUT: none. OUTPUT: metrics from every service that has a metrics endpoint, every 15 s, kept 15 days (set on the command line).
-# HOW: Targets are Docker service names on the private network. Mosquitto and NATS have no Prometheus exporter (their health shows through the consumers' backlog and the writer's state); bridge, ts-writer and triage
+# HOW: Targets are Docker service names on the private network. Grafana is NOT scraped (its metrics endpoint is switched off, GF_METRICS_ENABLED=false, so the target would be down for ever and EhgTargetDown would fire permanently). Mosquitto and NATS have no Prometheus exporter (their health shows through the consumers' backlog and the writer's state); bridge, ts-writer and triage
 #   are scraped here but are not in the cloud compose file yet, so until they are added those three targets are down and EhgTargetDown fires for them (expected, see docs/progress.md).
 # ROLE IN THESIS: Measured resource use and health of the cloud core (docs/decisions/0016-observability-and-slos.md).
 # BEFORE -> AFTER: Before: nothing scraped. After: the targets below.
@@ -30,8 +30,6 @@ scrape_configs:
     static_configs: [{ targets: ["alloy:12345"] }]
   - job_name: alertmanager
     static_configs: [{ targets: ["alertmanager:9093"] }]
-  - job_name: grafana
-    static_configs: [{ targets: ["grafana:3000"] }]
   - job_name: triage
     metrics_path: /metrics
     static_configs: [{ targets: ["triage:8780"] }]
