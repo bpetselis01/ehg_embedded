@@ -23,9 +23,8 @@ def pg_bin(name):
     return shutil.which(name) or (f"/opt/homebrew/bin/{name}" if os.path.exists(f"/opt/homebrew/bin/{name}") else None)
 
 
-@pytest.fixture(scope="module")
-def clean_cluster():
-    """A second, empty PostgreSQL server: the restore target."""
+def _cluster():
+    """Start an empty PostgreSQL server in /tmp; yields (host, port); removed afterwards."""
     initdb, pg_ctl = pg_bin("initdb"), pg_bin("pg_ctl")
     if not (initdb and pg_ctl and pg_bin("pg_dump") and pg_bin("pg_restore")):
         pytest.skip("PostgreSQL client and server programs not installed")
@@ -38,6 +37,18 @@ def clean_cluster():
     yield "127.0.0.1", port
     subprocess.run([pg_ctl, "-D", f"{root}/data", "-m", "immediate", "stop"], capture_output=True)
     shutil.rmtree(root, ignore_errors=True)
+
+
+@pytest.fixture(scope="module")
+def clean_cluster():
+    """A second, empty PostgreSQL server: the restore target."""
+    yield from _cluster()
+
+
+@pytest.fixture
+def init_cluster():
+    """A third, private server for the database init script (it creates fixed role and database names)."""
+    yield from _cluster()
 
 
 def env_for(host, port, **extra):
@@ -149,3 +160,17 @@ def test_unsafe_names_and_options_are_refused(tmp_path):
         assert sh(BACKUP, "--dry-run", "--databases", bad, env=env).returncode == 2
     assert sh(BACKUP, "--keep", "x", "--dry-run", env=env).returncode == 2 and sh(BACKUP, "--nope", env=env).returncode == 2
     assert sh(DRILL, "--dry-run", env=env).returncode == 2, "--backup is required"
+
+
+def test_the_init_script_runs_on_a_real_server_and_tolerates_a_missing_timescaledb(init_cluster):
+    """deploy/postgres/10-init-databases.sh against a plain PostgreSQL 14: five roles, three databases, and the extension step only prints a notice (this server has no TimescaleDB)."""
+    host, port = init_cluster
+    env = env_for(host, port, EHG_DB_PASSWORD="a", HAPI_DB_PASSWORD="b", KEYCLOAK_DB_PASSWORD="c", EXPORTER_DB_PASSWORD="d", TRIAGE_DB_PASSWORD="e q'uote")
+    r = sh(ROOT / "deploy/postgres/10-init-databases.sh", env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "timescaledb could not be created here" in r.stderr, "the tolerant path ran (no TimescaleDB in this server)"
+    with psycopg.connect(f"host={host} port={port} user=postgres dbname=postgres") as c:
+        assert {x[0] for x in c.execute("SELECT rolname FROM pg_roles WHERE rolname IN ('ehg','hapi','keycloak','ehg_exporter','ehg_triage')")} == {"ehg", "hapi", "keycloak", "ehg_exporter", "ehg_triage"}
+        assert {x[0] for x in c.execute("SELECT datname FROM pg_database WHERE datname IN ('ehg','hapi','keycloak')")} == {"ehg", "hapi", "keycloak"}
+        assert c.execute("SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = 'ehg'").fetchone()[0] == "ehg"
+

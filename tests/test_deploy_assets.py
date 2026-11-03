@@ -552,3 +552,13 @@ def test_the_broker_gets_revocations_through_a_cron_job_that_runs_as_the_service
     assert re.search(r"^\s+\*/5 \* \* \* \* ehg /opt/ehg/repo/deploy/crl-sync\.sh", text, re.M), "cron.d entries need a user column"
     assert (DEPLOY / "crl-sync.sh").exists() and os.access(DEPLOY / "crl-sync.sh", os.X_OK)
     assert "-v ca.crl" not in COMPOSE.read_text() and "/ca.crl:/mosquitto/pki/ca.crl:ro" in COMPOSE.read_text(), "the script writes INTO this single bind-mounted file"
+
+
+def test_the_database_init_script_creates_the_timescaledb_extension_as_superuser_for_the_migrations():
+    """Migration 0003 runs as the non-superuser role `ehg`; CREATE EXTENSION timescaledb needs a superuser (it is not a trusted extension), so the init script must do it (read from the TimescaleDB rules; never run)."""
+    text = (DEPLOY / "postgres/10-init-databases.sh").read_text()
+    body = text[text.index("psql -v ON_ERROR_STOP=1"):]
+    assert "\\connect ehg" in body and body.index("CREATE DATABASE ehg") < body.index("\\connect ehg") < body.index("CREATE EXTENSION IF NOT EXISTS timescaledb")
+    assert "EXCEPTION WHEN OTHERS" in body, "a plain PostgreSQL image must still get its databases (0001 only), with the failure surfacing in migration 0003"
+    assert "--username postgres" in body, "the superuser"
+

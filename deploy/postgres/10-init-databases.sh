@@ -5,7 +5,8 @@
 #   ehg_triage is the triage service's own login: it owns nothing, and the migrations grant it only what it needs (append-only on the audit log).
 # OUTPUT: nothing printed except psql's own messages; a missing variable stops the script with an error (set -eu), so the container fails visibly.
 # HOW: psql variables with :'name' quoting put the passwords into the statements safely, so a quote in a password cannot break or inject SQL.
-#   ehg_exporter gets only pg_monitor (read-only statistics) for postgres_exporter. TimescaleDB itself is enabled by the migrations (Unit 6), not here.
+#   ehg_exporter gets only pg_monitor (read-only statistics) for postgres_exporter. The TimescaleDB extension is created here, as the superuser, inside database ehg: the migrations run as the NON-superuser role `ehg`, and CREATE EXTENSION timescaledb needs a superuser
+#   (the extension is not marked trusted), so without this step migration 0003 would be refused on the first real start. If the extension is not available (a plain PostgreSQL image) this step only prints a notice and migration 0003 fails loudly, which is intended.
 # STATUS: UNVERIFIED: the timescaledb-ha image is expected to run initdb.d scripts like the official Postgres image; nobody has started it yet.
 # ROLE IN THESIS: One database server, three databases (docs/decisions/0012); least privilege per service.
 # BEFORE -> AFTER: Before: an empty cluster. After: three empty databases with their owners.
@@ -21,4 +22,10 @@ GRANT pg_monitor TO ehg_exporter;
 CREATE DATABASE ehg OWNER ehg;
 CREATE DATABASE hapi OWNER hapi;
 CREATE DATABASE keycloak OWNER keycloak;
+\connect ehg
+DO $$ BEGIN
+  CREATE EXTENSION IF NOT EXISTS timescaledb;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'timescaledb could not be created here (%): migration 0003 will say so', SQLERRM;
+END $$;
 SQL

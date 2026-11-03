@@ -1,5 +1,11 @@
 # Progress log
 
+## 2026-11-04: another first-start failure found by reading (TimescaleDB extension permission), fixed
+
+- **Found:** migration 0003 runs as the NON-superuser role `ehg` and starts with `CREATE EXTENSION timescaledb`, which needs a superuser (the extension is not marked trusted, to my knowledge of TimescaleDB; not verified on a server). The first real start would have stopped there unless the image happened to pre-create it.
+- **Fixed:** `deploy/postgres/10-init-databases.sh` (runs as the superuser) now creates the extension inside database `ehg`; on a server without TimescaleDB it only prints a notice and migration 0003 still fails loudly. Run for real against a throwaway PostgreSQL 14 in `tests/test_backup_scripts.py` (five roles, three databases, owner `ehg`, a password with a quote in it, the notice path), plus a structural test.
+- **Reviewed and found consistent with TimescaleDB's rules (from memory, not run):** every primary key of the three hypertables contains `time`; continuous-aggregate windows span at least two buckets; the aggregates are created `WITH NO DATA` inside `autocommit_block`; `remove_*_policy(..., if_exists => TRUE)` signatures.
+
 ## 2026-11-04: the service image checked for completeness (clean environment and a static guard)
 
 - **Done:** installed exactly the Dockerfile's packages into a fresh Python 3.13 environment, laid the repository files out as the image copies them, and imported every service module (bridge, ts-writer, triage, migrate, enrolment service, FHIR sync, facade): all import. `eval`'s InfluxDB store is not in this image by design (the sync worker asks for the timescale store only).
