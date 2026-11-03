@@ -1,17 +1,31 @@
-// PURPOSE: Grafana Alloy: ship every container's log file to Loki. Reads the JSON log files Docker writes under the data volume, so Alloy does NOT need the Docker socket
-//   (access to the socket is root-equivalent on the host).
-// INPUT: /var/lib/docker/containers/*/*-json.log (mounted read-only). OUTPUT: log lines pushed to http://loki:3100.
-// HOW: Lines carry the container id in their file path only; mapping ids to service names and parsing the JSON fields is Unit 12's job.
-// STATUS: UNVERIFIED against the pinned Alloy version (nobody has started it yet).
+// PURPOSE: Grafana Alloy: ship the systemd journal to Loki. Docker's log driver is journald (cloud-init), so every container's log lines are in the journal with their
+//   container name; Alloy reads ONLY the journal. It does not mount Docker's data directory (that holds every container's environment, including the database
+//   passwords) and it does not mount the Docker socket (root-equivalent on the host).
+// INPUT: /var/log/journal and /etc/machine-id (mounted read-only). OUTPUT: log lines pushed to http://loki:3100 with the labels container (Docker's name) and unit.
+// HOW: loki.relabel turns the journal fields CONTAINER_NAME and _SYSTEMD_UNIT into labels; everything else is dropped from the label set.
+// STATUS: UNVERIFIED against the pinned Alloy version (nobody has started it yet). The Alloy process must be able to read the journal files (they belong to the group
+//   systemd-journal); if it cannot, add that group to the service with group_add using the numeric id (getent group systemd-journal on the VM).
 // ROLE IN THESIS: Centralised logs (docs/decisions/0016-observability-and-slos.md).
-// BEFORE -> AFTER: Before: nothing collects logs. After: Loki has them.
-local.file_match "containers" {
-  path_targets = [{"__path__" = "/var/lib/docker/containers/*/*-json.log", "job" = "docker"}]
+// BEFORE -> AFTER: Before: nothing collects logs. After: Loki has them, searchable by container name.
+loki.relabel "journal" {
+  forward_to = []
+
+  rule {
+    source_labels = ["__journal_container_name"]
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
 }
 
-loki.source.file "containers" {
-  targets    = local.file_match.containers.targets
-  forward_to = [loki.write.default.receiver]
+loki.source.journal "system" {
+  path          = "/var/log/journal"
+  labels        = {job = "journal"}
+  relabel_rules = loki.relabel.journal.rules
+  forward_to    = [loki.write.default.receiver]
 }
 
 loki.write "default" {

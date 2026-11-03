@@ -28,12 +28,13 @@ Docker was not running when it was written, and the cloud steps are yours (`terr
 | `terraform fmt` clean; `terraform validate` passes against the real Oracle provider 9.11.0 schema | Terraform 1.14.9 here; `EHG_INTEGRATION=1 uv run pytest tests/test_deploy_assets.py` (needs network for `init`) |
 | Free-tier numbers (2 OCPU / 12 GB A1, 200 GB volumes, 10 TB egress, 20 GB object storage, idle rule) | Oracle's own "Always Free Resources" page, fetched 2026-11-03 |
 | Every image pinned by version and digest has a `linux/arm64` manifest | Registry HTTP API (Docker was not running), 2026-11-03 |
-| Compose resolves; a missing secret stops it with the variable's name; only 80/443/8883 are published; memory limits plus reserved services fit the 9.5 GB ceiling | `docker compose config` (needs no daemon) and the tests |
+| Compose resolves; a missing secret stops it with the variable's name; only 80/443/8883 are published; host mounts are limited to five read-only paths (no host root, `/run`, Docker data directory or socket); only Caddy and Mosquitto are on a network with a route out; memory limits plus reserved services fit the 9.5 GB ceiling | `docker compose config` (needs no daemon) and the tests |
 | `update.sh` input checks, dry run, ssh form, bootstrap-without-key | Tests |
 
 | NOT checked (needs a real VM, a cloud account or a running Docker) |
 |---|
 | `terraform plan`/`apply`; the block-volume device path `/dev/oracleoci/oraclevdb`; the "VM down" alarm (needs Oracle's monitoring plugin); A1 capacity in your region; the budget alert rule |
+| The metadata lock-down (instance setting plus iptables unit), journald logging, the Alloy journal source and its permission to read the journal, the textfile disk metrics; cAdvisor naming containers by cgroup id only |
 | Any container actually starting: the hardening flags (`cap_drop`, `read_only`), the TimescaleDB-HA init script and data path, Loki and Alloy configs, healthcheck commands; the Docker packages from Ubuntu's repository |
 | `update.sh` against a real checkout and a real stack (the git, sops, compose and rollback paths); `shellcheck` on any script (not installed here) |
 | Real memory use: the limits are the plan's estimates, to be replaced by `docker stats` numbers after the first run |

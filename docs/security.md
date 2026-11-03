@@ -56,6 +56,17 @@ Each later unit adds its boundary and updates the Status column. Nothing here sa
 - **No Docker daemon needed:** all of the above ran without Docker running. `docker compose config` (which only reads files) confirms the merged cloud profile publishes only `127.0.0.1:8883`,
   mounts the TLS config, ACL and certificates read-only, and still has the same 4 services; the default stack still publishes 1883. The containers themselves were **not started** (Docker was not running).
 
+## Cloud VM and containers (Unit 4): findings of the automated review, 2026-11-03
+
+- **Host mounts (HIGH, fixed):** the first compose draft let cAdvisor mount `/`, `/var/run` and Docker's data directory, and Alloy mount the container log directory. Any of those reaches the Docker socket (a read-only mount of a socket file still lets a process connect to it)
+  or every container's `config.v2.json`, which holds each container's environment, including the database passwords. The first test only looked for the text `docker.sock`, so it missed all of it.
+  Now: no container mounts the host root, `/run`, `/var/run` or the data directory; Docker logs to the **journal**, Alloy reads only the journal, node-exporter gets `/proc`, `/sys` and a metrics file written by cron (it no longer monitors host filesystems directly), cAdvisor gets `/sys`.
+  A test allows only five named host paths, read-only. Cost: cAdvisor shows containers by cgroup id, not name, and disk-space metrics come from the cron file (`ehg_disk_*_bytes`).
+- **Networks (fixed):** two networks. `internal` has `internal: true` (no route in or out of the host); only Caddy and Mosquitto also join `edge`. Anything that later needs the internet (Alertmanager's webhook) must be added to `edge` on purpose. A test enforces this.
+- **Metadata service (MEDIUM, fixed):** the VM now disables the legacy v1 metadata endpoint (`are_legacy_imds_endpoints_disabled = true`), and a systemd unit adds an iptables rule in `DOCKER-USER` so containers cannot reach `169.254.169.254` at all. UNVERIFIED on a real VM: if Oracle's agents need the v1 endpoint, the instance setting will show up as a failure at first boot.
+- **Still true, and not fixed:** the services' passwords are environment variables of those services (visible in `docker inspect` to anyone in the `docker` group, and in the container's `/proc/<pid>/environ`); Docker secrets or `_FILE` variables would be better where the image supports them. The `ehg` service user is in the `docker` group, which is root-equivalent on the VM.
+  Hardening flags (`cap_drop`, `read_only`) have never been run.
+
 ## Known limit: a gateway can publish for any node id
 
 `topic write ehg/+/pkt` lets an authenticated gateway publish packets labelled with another node's id. Pinning a gateway to its nodes needs either a gateway id in the topic or message (a change to the documented `ehg/<node>/pkt` interface that `eval/` and the recorded runs rely on) or a check against a registry of which gateway serves which node.

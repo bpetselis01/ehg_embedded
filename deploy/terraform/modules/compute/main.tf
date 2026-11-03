@@ -43,6 +43,10 @@ resource "oci_core_instance" "ehg" {
     is_management_disabled = false
   }
 
+  instance_options {
+    are_legacy_imds_endpoints_disabled = true # only the authenticated v2 metadata service: a server-side request forgery could not read it as easily
+  }
+
   metadata = {
     ssh_authorized_keys = var.ssh_public_key
     user_data           = base64encode(var.user_data)

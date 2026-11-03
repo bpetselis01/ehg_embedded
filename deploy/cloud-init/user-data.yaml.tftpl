@@ -3,7 +3,7 @@
 #   security list, the 150 GB data volume, Docker, a non-root service user, and the repository at a pinned tag.
 # INPUT: Terraform fills four values: admin_cidr, domain_name, repo_url, repo_tag (deploy/terraform/main.tf). NO secret is in this file.
 #   e.g. admin_cidr = 203.0.113.7/32, domain_name = ehg-demo.duckdns.org, repo_tag = v0.1.0
-# OUTPUT: a VM with /srv/ehg-data mounted, Docker running with its data there, /opt/ehg/repo checked out, and a status file
+# OUTPUT: a VM with /srv/ehg-data mounted, Docker running with its data there and its logs in the journal, /opt/ehg/repo checked out, and a status file
 #   /opt/ehg/state/first-boot.status that says what worked. The stack starts only once the age key is copied to /opt/ehg/secrets/age.key (by hand).
 # HOW: cloud-init writes the config files, then runs /usr/local/sbin/ehg-first-boot.sh once. Docker is installed AFTER the volume is mounted, so its
 #   data never lands on the small boot disk. Everything is idempotent: re-running the script changes nothing that is already right.
@@ -52,10 +52,53 @@ write_files:
     content: |
       {
         "data-root": "/srv/ehg-data/docker",
-        "log-driver": "json-file",
-        "log-opts": { "max-size": "10m", "max-file": "3" },
+        "log-driver": "journald",
         "live-restore": true
       }
+  - path: /etc/systemd/journald.conf.d/ehg.conf
+    permissions: "0644"
+    content: |
+      [Journal]
+      Storage=persistent
+      SystemMaxUse=2G
+  - path: /etc/systemd/system/ehg-block-imds.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Stop containers reaching the cloud metadata service (169.254.169.254)
+      After=docker.service
+      Requires=docker.service
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/bin/sh -c 'iptables -C DOCKER-USER -d 169.254.169.254 -j DROP 2>/dev/null || iptables -I DOCKER-USER -d 169.254.169.254 -j DROP'
+      [Install]
+      WantedBy=multi-user.target
+  - path: /usr/local/sbin/ehg-df-metrics.sh
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      # PURPOSE: Write disk size and free space of the boot and data volumes in Prometheus text format, once a minute (cron). node-exporter reads the file
+      #   through its textfile collector, so it needs no access to the host filesystem (a host-root mount would expose the Docker socket).
+      set -eu
+      out=/var/lib/ehg-metrics/disk.prom
+      tmp="$out.$$"
+      {
+        echo "# TYPE ehg_disk_size_bytes gauge"
+        echo "# TYPE ehg_disk_avail_bytes gauge"
+        for path in / /srv/ehg-data; do
+          [ "$path" = / ] || mountpoint -q "$path" || continue
+          df -B1 --output=size,avail "$path" | tail -n 1 | {
+            read -r size avail
+            printf 'ehg_disk_size_bytes{mount="%s"} %s\nehg_disk_avail_bytes{mount="%s"} %s\n' "$path" "$size" "$path" "$avail"
+          }
+        done
+      } > "$tmp"
+      mv "$tmp" "$out"
+  - path: /etc/cron.d/ehg-df-metrics
+    permissions: "0644"
+    content: |
+      * * * * * root /usr/local/sbin/ehg-df-metrics.sh
   - path: /etc/sysctl.d/99-ehg.conf
     permissions: "0644"
     content: |
@@ -86,8 +129,12 @@ write_files:
       fi
 
       # 2. Docker, only now that its data directory is on the volume (daemon.json already points there)
-      mkdir -p /srv/ehg-data/docker
+      mkdir -p /srv/ehg-data/docker /var/log/journal /var/lib/ehg-metrics
+      systemctl restart systemd-journald
       apt-get install -y docker.io docker-compose-v2 && status "docker installed" || status "ERROR docker install failed"
+      systemctl daemon-reload
+      systemctl enable --now ehg-block-imds.service && status "containers cannot reach the metadata service" || status "ERROR metadata block not active"
+      /usr/local/sbin/ehg-df-metrics.sh || status "ERROR disk metrics script failed"
       usermod -aG docker ehg
       sysctl --system >/dev/null
 

@@ -150,6 +150,29 @@ def test_first_boot_script_order_and_firewall():
     assert not re.search(r"age\.key|AGE-SECRET|PASSWORD=|BEGIN ", script), "no secret may be written by cloud-init"
 
 
+def test_metadata_service_is_locked_down_twice():
+    assert "are_legacy_imds_endpoints_disabled = true" in (TF / "modules/compute/main.tf").read_text()
+    doc = yaml.safe_load(render_cloud_init())
+    files = {f["path"]: f["content"] for f in doc["write_files"]}
+    unit = files["/etc/systemd/system/ehg-block-imds.service"]
+    assert "iptables -I DOCKER-USER -d 169.254.169.254 -j DROP" in unit and "After=docker.service" in unit
+    script = files["/usr/local/sbin/ehg-first-boot.sh"]
+    assert "enable --now ehg-block-imds.service" in script and script.index("apt-get install -y docker.io") < script.index("enable --now ehg-block-imds.service")
+
+
+def test_container_logs_go_to_the_journal_and_disk_metrics_need_no_host_mount():
+    doc = yaml.safe_load(render_cloud_init())
+    files = {f["path"]: f["content"] for f in doc["write_files"]}
+    assert yaml.safe_load(files["/etc/docker/daemon.json"])["log-driver"] == "journald"
+    assert "Storage=persistent" in files["/etc/systemd/journald.conf.d/ehg.conf"]
+    df = files["/usr/local/sbin/ehg-df-metrics.sh"]
+    assert subprocess.run(["sh", "-n"], input=df, text=True, capture_output=True).returncode == 0
+    assert "ehg_disk_avail_bytes" in df and "mv \"$tmp\" \"$out\"" in df, "written atomically"
+    assert "ehg-df-metrics.sh" in files["/etc/cron.d/ehg-df-metrics"]
+    alloy = (DEPLOY / "observability/config.alloy").read_text()
+    assert "loki.source.journal" in alloy and not re.search(r"^[^/\n]*(/var/lib/docker|docker\.sock)", alloy, re.M), "Alloy reads the journal only"
+
+
 # ---------------------------------------------------------------- update.sh and the Postgres init script
 
 def run_update(*args: str, tmp: Path | None = None) -> subprocess.CompletedProcess:
@@ -257,6 +280,30 @@ def test_only_80_443_8883_are_published_and_nothing_dangerous_is_mounted():
     mosquitto_mounts = " ".join(services()["mosquitto"]["volumes"])
     assert re.search(r"/pki\}?/ca-chain\.crt", mosquitto_mounts) and "/mosquitto/pki:" not in mosquitto_mounts, "mount single certificate files, never the PKI directory"
     assert not re.search(r"intermediate|root\.key|ca\.key", COMPOSE.read_text())
+
+
+# The only host paths a container may see. NOT allowed, with the reason: "/" , "/run", "/var/run" and "/var/lib/docker" or Docker's data-root (they reach
+# the Docker socket or every container's environment, which holds the database passwords), "/etc" and "/root" (credentials), "/srv/ehg-data" (all volumes).
+ALLOWED_HOST_MOUNTS = {"/proc", "/sys", "/var/log/journal", "/etc/machine-id", "/var/lib/ehg-metrics"}
+
+
+def test_no_host_mount_can_reach_the_docker_socket_or_other_containers_secrets():
+    for name, svc in services().items():
+        for v in svc.get("volumes", []):
+            source = str(v).split(":")[0]
+            if source.startswith("/"):
+                assert source in ALLOWED_HOST_MOUNTS, f"{name} mounts {source}: only {sorted(ALLOWED_HOST_MOUNTS)} are allowed"
+                assert str(v).endswith(":ro"), f"{name}: host path {source} must be read-only"
+    text = COMPOSE.read_text()
+    assert not re.search(r"^\s*-\s*(/|/run|/var/run|/var/lib/docker|/srv/ehg-data[^ ]*)\s*:", text, re.M)
+
+
+def test_only_caddy_and_mosquitto_have_a_route_to_the_internet():
+    doc = yaml.safe_load(COMPOSE.read_text())
+    assert doc["networks"]["internal"]["internal"] is True, "the internal network must have no route in or out"
+    assert not doc["networks"]["edge"].get("internal")
+    for name, svc in doc["services"].items():
+        assert svc["networks"] == (["edge", "internal"] if name in {"caddy", "mosquitto"} else ["internal"]), f"{name}: wrong networks {svc.get('networks')}"
 
 
 def test_every_service_is_hardened_limited_and_health_checked_or_says_why_not():
