@@ -1,5 +1,10 @@
 # Progress log
 
+## 2026-11-03: Unit 14, CI and supply chain (minimal, honest)
+
+- **Added:** `.github/workflows/security.yml` (shellcheck; the deployment guard tests; Linux only, read-only token), `.github/dependabot.yml` (uv, actions, Dockerfile bases, Terraform), `docs/supply-chain.md`, `tests/test_ci_config.py`. Only the two actions already vetted in `tests.yml` are used.
+- **NOT wired, on purpose:** Trivy, Syft, cosign, gitleaks (versions unverifiable from here) and CodeQL (private repository); `docs/supply-chain.md` has the local commands. The workflows have never run on GitHub. Dockerfile base images are tag-pinned only, not digest-pinned.
+
 ## 2026-11-03: Unit 11, the Caddyfile (front door); never run
 
 - **Added:** the real `deploy/caddy/Caddyfile` (routes `/`, `/api`, `/fhir` to the triage service; `/auth` to Keycloak; `/grafana` to Grafana; `/enroll-api` to the enrolment API; `/metrics` and probe paths answered 404; HSTS, nosniff, frame denial, strict CSP, no Server header; 1 MB / 16 KB body limits) and `tests/test_caddy_config.py` (28 structural tests; `caddy validate` runs only where Caddy is installed).

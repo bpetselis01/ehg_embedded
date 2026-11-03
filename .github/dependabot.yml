@@ -1,0 +1,25 @@
+# PURPOSE: Weekly update pull requests for everything that is pinned: Python packages (uv.lock), GitHub Actions, the Dockerfiles' base images and the Terraform provider.
+# HOW: Dependabot opens PRs; nothing is merged automatically. Container images in the compose files are pinned by digest by hand (docs/supply-chain.md), which Dependabot's docker ecosystem does not read from compose files.
+# STATUS: UNVERIFIED: written from Dependabot's documented format; the repository has never been pushed, so it has not run.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "docker"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "docker"
+    directory: "/backend/ingest"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "terraform"
+    directory: "/deploy/terraform"
+    schedule:
+      interval: "weekly"
