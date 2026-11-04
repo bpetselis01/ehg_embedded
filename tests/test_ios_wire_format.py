@@ -128,3 +128,41 @@ def test_swift_resend_policy_matches_python_and_vectors_replay():
         g, s = GapTracker(), ResendScheduler()
         got = [[list(r) for r in s.due(g, g.observe(seq) if seq is not None else [], when)] for when, seq in c["steps"]]
         assert got == c["requests"], c["name"]
+
+
+# ---- the app target (ios/EHGGateway) and the gateway core
+
+APP = ROOT / "ios/EHGGateway"
+
+
+def test_the_apps_bluetooth_constants_match_the_python_gateway():
+    from gateway import gateway
+    ble = (APP / "Sources/BleLink.swift").read_text()
+    for name, value in (("service", gateway.SERVICE_UUID), ("data", gateway.DATA_UUID), ("control", gateway.CTRL_UUID)):
+        assert f'static let {name} = CBUUID(string: "{value}")' in ble, name
+    assert "Data([0x01])" in ble and gateway.OP_START == 0x01
+    assert "var b: [UInt8] = [0x03]" in ble and gateway.OP_RESEND == 0x03
+    assert "for i in 0..<4" in ble and "for i in 0..<2" in ble, "RESEND = opcode, seq as 4 bytes little-endian, count as 2 bytes little-endian (struct '<BIH')"
+
+
+def test_the_app_declares_background_bluetooth_and_a_usage_text_and_is_not_signed_in_the_repository():
+    import yaml
+    spec = yaml.safe_load((APP / "project.yml").read_text())
+    props = spec["targets"]["EHGGateway"]["info"]["properties"]
+    assert props["UIBackgroundModes"] == ["bluetooth-central"] and "NSBluetoothAlwaysUsageDescription" in props
+    assert "DEVELOPMENT_TEAM" not in str(spec), "the signing team is the owner's choice and must not be committed"
+    assert "Not for clinical use" in props["NSBluetoothAlwaysUsageDescription"] or "not for clinical use" in props["NSBluetoothAlwaysUsageDescription"].lower()
+
+
+def test_the_publish_path_never_uses_the_system_trust_store_or_old_tls():
+    mqtt = (ROOT / "ios/EHGWire/Sources/EHGGatewayCore/MQTT.swift").read_text()
+    assert "sec_protocol_options_set_min_tls_protocol_version(sec, .TLSv13)" in mqtt
+    assert "SecTrustSetAnchorCertificatesOnly(t, true)" in mqtt, "trust our CA only"
+
+
+@pytest.mark.skipif(os.environ.get("EHG_INTEGRATION") != "1" or shutil.which("xcodegen") is None or shutil.which("xcodebuild") is None, reason="needs EHG_INTEGRATION=1, xcodegen and Xcode")
+def test_the_app_builds_for_the_ios_simulator(tmp_path):
+    subprocess.run(["xcodegen", "generate"], cwd=APP, check=True, capture_output=True)
+    r = subprocess.run(["xcodebuild", "-project", "EHGGateway.xcodeproj", "-scheme", "EHGGateway", "-destination", "generic/platform=iOS Simulator", "CODE_SIGNING_ALLOWED=NO", "CODE_SIGNING_REQUIRED=NO",
+                        "-derivedDataPath", str(tmp_path), "build"], cwd=APP, capture_output=True, text=True, timeout=900)
+    assert "BUILD SUCCEEDED" in r.stdout, r.stdout[-1500:]

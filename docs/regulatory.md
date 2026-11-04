@@ -26,7 +26,7 @@ and says plainly that a *clinical* version of an analysis layer would probably b
 |---|---|---|---|
 | Node firmware | Replays a recording as packets over Bluetooth, keeps 256 packets for re-send | `firmware/ehg_node/` | nRF52840 DK |
 | Python gateway | Decodes and checks packets, finds gaps and asks for re-sends, publishes over MQTT through a durable outbox | `gateway/` | Mac |
-| Swift wire library | Third copy of the packet format (the phone app itself is not written) | `ios/EHGWire/` | tested on the Mac only |
+| Swift wire library | Third copy of the packet format (plus the gateway core and an app that builds for the simulator; never run on a phone) | `ios/EHGWire/` | tested on the Mac only |
 | Broker and bridge | Mutual-TLS MQTT in; durable stream out; acknowledges only after the stream has stored the message | `backend/mosquitto/`, `backend/bridge/` | VM (never started) |
 | Writers | Store each packet exactly once in PostgreSQL/TimescaleDB (and InfluxDB, the reference) | `backend/ts_writer/`, `backend/ingest/` | VM / Mac |
 | Triage service | Pipeline-health rules, alert workflow with notes, audit chain, registry, API, page | `backend/triage/`, `viewer/triage.*` | VM (never started) |

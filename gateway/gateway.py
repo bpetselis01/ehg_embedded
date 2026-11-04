@@ -68,6 +68,20 @@ NAME_PREFIX = "EHG-"
 LOGS = Path("gateway/logs")
 
 
+def update_clock(clock: ClockMap, p: Packet, t_rx: float) -> None:
+    """Teach the clock map from one first-time packet (resends are late by design and are left out). Sendable once the LAST frame is injected: align that instant with t_rx,
+    otherwise the batching delay is folded into the clock offset and latency reads ~0. The iPhone port (ios/EHGWire/Sources/EHGGatewayCore) must do exactly this."""
+    if not p.flags & FLAG_RETRANS or clock.offset is None:  # a resend as the FIRST packet seen still has to give the clock an offset: without one to_host() fails and the packet would be lost;
+        t_last = p.t_inject + (p.n_frames - 1) * TICK_HZ // p.fs_hz  # the offset is then too large by the resend delay, and the next first-time packet corrects it (the offset is a minimum)
+        clock.update(t_last & 0xFFFFFFFF, t_rx)
+
+
+def packet_message(node_id: str, p: Packet, clock: ClockMap, t_rx: float) -> dict:
+    """The JSON object published to ehg/<node>/pkt, exactly (golden cases for the Swift port: tests/fixtures/packet_vectors.json, \"messages\")."""
+    return {"node_id": node_id, "seq": p.seq, "frame_idx": p.frame_idx, "t_inject": p.t_inject, "t_inject_host": clock.to_host(p.t_inject), "n_ch": p.n_ch,
+            "fs_hz": p.fs_hz, "record_id": p.record_id, "flags": p.flags, "samples": p.samples, "t_gw_rx": t_rx}
+
+
 class Node:
     """Per-node state: loss tracking, clock map, arrival log, publishing.
 
@@ -96,16 +110,9 @@ class Node:
             print(f"[{self.id}] bad packet: {e}")
             return
         self._log.writerow([p.seq, p.frame_idx, p.flags, f"{t_rx:.6f}", len(b)])
-        if not p.flags & FLAG_RETRANS:  # resends are late by design; keep them out of the offset estimate
-            # Sendable once the LAST frame is injected: align that instant with t_rx, otherwise
-            # the batching delay is folded into the clock offset and latency reads ~0.
-            t_last = p.t_inject + (p.n_frames - 1) * TICK_HZ // p.fs_hz
-            self.clock.update(t_last & 0xFFFFFFFF, t_rx)
+        update_clock(self.clock, p, t_rx)
         self._request_missing(self.gaps.observe(p.seq), t_rx)
-        msg = {"node_id": self.id, "seq": p.seq, "frame_idx": p.frame_idx, "t_inject": p.t_inject,
-               "t_inject_host": self.clock.to_host(p.t_inject), "n_ch": p.n_ch, "fs_hz": p.fs_hz,
-               "record_id": p.record_id, "flags": p.flags, "samples": p.samples, "t_gw_rx": t_rx}
-        self.publish(self.id, msg)
+        self.publish(self.id, packet_message(self.id, p, self.clock, t_rx))
 
     def _request_missing(self, new_gaps: list[int], t: float):
         """Ask the board for new gaps at once and for still-missing ones again (ResendScheduler in gateway/tracking.py)."""

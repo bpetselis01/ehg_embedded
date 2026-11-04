@@ -134,7 +134,7 @@ flowchart TB
 ```mermaid
 flowchart LR
   node["nRF52840 DK<br/>Zephyr firmware"] -->|"BLE GATT, wire v2 + CRC"| gw["Python gateway (Mac)<br/>outbox, RESEND"]
-  node -.->|"BLE (app not written)"| ios["iPhone gateway<br/>ios/EHGWire only"]
+  node -.->|"BLE (app built, never run on a phone)"| ios["iPhone gateway<br/>ios/EHGGateway (simulator build only)"]
   gw -->|"MQTT QoS 1, TLS 1.3 mTLS"| mq["Mosquitto :8883"]
   mq --> br["bridge"] -->|"JetStream EHG"| nats["NATS"]
   nats --> tsw["ts-writer"] --> pg[("PostgreSQL + TimescaleDB<br/>time series, registry, alerts, audit")]

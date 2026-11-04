@@ -125,3 +125,11 @@ def test_protected_explains_a_stale_bond_and_reraises(capsys):
     with pytest.raises(RuntimeError):
         asyncio.run(protected("EHG-T", refused))
     assert "Forget This Device" in capsys.readouterr().out
+
+
+def test_a_resend_as_the_very_first_packet_is_still_published_with_a_host_time(node):
+    """Found while generating the Swift golden cases: a gateway restarted mid-session can see a RETRANS packet first; the clock map had no offset and to_host() raised, losing the packet."""
+    node.on_bytes(pkt(7, FLAG_RETRANS), 1000.0)
+    assert len(node.published) == 1 and isinstance(node.published[0]["t_inject_host"], float)
+    node.on_bytes(pkt(8), 1000.6)                  # the next first-time packet corrects the offset (it is a minimum)
+    assert node.published[1]["t_inject_host"] <= node.published[0]["t_inject_host"] + 1.0

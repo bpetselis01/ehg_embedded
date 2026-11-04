@@ -53,3 +53,7 @@ deploy/**/*.tfplan
 # SwiftPM build output
 ios/**/.build/
 ios/**/.swiftpm/
+
+# iPhone gateway app: the Xcode project is generated from project.yml (xcodegen); the CA chain is copied in before a device build
+ios/EHGGateway/EHGGateway.xcodeproj/
+ios/EHGGateway/Sources/ca-chain.crt

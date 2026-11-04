@@ -26,7 +26,7 @@ Status, run results and open items: [`docs/progress.md`](docs/progress.md).
 | [`gateway/`](gateway) | Bleak central → MQTT; `--simulate N` software nodes use the same wire format |
 | [`backend/`](backend) | docker compose: Mosquitto, InfluxDB 2.7, ingest, Grafana (provisioned dashboard); optional `platform` profile; Python services: [`bridge/`](backend/bridge), [`ts_writer/`](backend/ts_writer), [`triage/`](backend/triage) (rules, alerts, audit, API), [`enroll/`](backend/enroll), [`fhir_sync/`](backend/fhir_sync), [`db/`](backend/db) (migrations) |
 | [`viewer/`](viewer) | WebSocket raw multichannel viewer; the [triage page](viewer/triage.html) (`triage.html`, `.css`, `.js`) |
-| [`ios/EHGWire/`](ios/EHGWire) | Swift package: the wire format for the future iPhone gateway (`swift test` on the command line; the app itself is not written) |
+| [`ios/EHGWire/`](ios/EHGWire) | Swift package: wire format, gateway core and a real-broker-tested MQTT client for the iPhone gateway (`swift test`); the app is [`ios/EHGGateway/`](ios/EHGGateway/project.yml), see [docs/ios-gateway.md](docs/ios-gateway.md) |
 | [`eval/`](eval) | [`latency.py`](eval/latency.py) (H1), [`integrity.py`](eval/integrity.py) (H2 + H4 bit-exact) |
 | [`papers/`](papers) | [`INDEX.md`](papers/INDEX.md) (tracked) + open-access PDFs (not tracked) |
 | [`tests/`](tests) | pytest for the host code, plus [`test_docs.py`](tests/test_docs.py) (docs and wire-format copies match the code) |

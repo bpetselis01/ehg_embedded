@@ -7,7 +7,7 @@
 - Branch / last commit: feat/enterprise-topology, see `git log -1`. Nothing pushed. Tag `baseline-pre-enterprise` marks the start.
 
 ## State of the repo
-- Tests: `uv run pytest -q` = 864 passed, 16 skipped. With `EHG_INTEGRATION=1 TF_PLUGIN_CACHE_DIR=<cache> SSL_CERT_FILE=/etc/ssl/cert.pem` = 777 passed, 3 skipped (a real Mosquitto broker, the Terraform validate against the real provider schema, `swift test`); skipped for lack of the tool: Caddy, TimescaleDB, shellcheck, and the real HAPI test (needs a running Docker daemon).
+- Tests: `uv run pytest -q` = 884 passed with integration (EHG_INTEGRATION=1 and Docker), fewer without. With `EHG_INTEGRATION=1 TF_PLUGIN_CACHE_DIR=<cache> SSL_CERT_FILE=/etc/ssl/cert.pem` = 777 passed, 3 skipped (a real Mosquitto broker, the Terraform validate against the real provider schema, `swift test`); skipped for lack of the tool: Caddy, TimescaleDB, shellcheck, and the real HAPI test (needs a running Docker daemon).
 - Uncommitted changes: none once the last commit is made.
 - Docker / compose: Byron started Docker Desktop on 2026-11-04 (pulls need `DOCKER_CONFIG=/tmp/dockercfg-nocreds` with `cli-plugins` linked, see progress.md). The 18-service cloud stack was started locally once and is stopped again; named volumes remain (remove with `docker volume ls` if the disk matters). Never restart Docker Desktop (another project, Supabase, lives there). `docker compose config` resolves the default stack (4 services), the `platform` profile (10) and the cloud file (18). Nothing has ever been started.
 - Background processes or runs: none.
@@ -18,7 +18,7 @@
 ## Open questions waiting for Byron
 - The Oracle card (phone number and credit card for verification; never Pay-As-You-Go). Asked once, deferred; ask again when Byron reports back on the runbook.
 - When the runbook is done: the log (what he saw), then Checkpoint 3.
-- Whether to run the iPhone app. Back up `~/.ehg-keys/mcuboot-p256.pem` (Unit 13 signing key; losing it loses OTA for secure boards).
+- Run the iPhone app on your phone (docs/ios-gateway.md: build steps and the feasibility-spike checklist; it compiles for the simulator and its MQTT client is proven against a real broker, but Bluetooth and the background behaviour have never run). Back up `~/.ehg-keys/mcuboot-p256.pem` (Unit 13 signing key; losing it loses OTA for secure boards).
 
 ## Byron's pending manual steps
 - Everything in `docs/deployment.md` (15 steps). Before step 2 he must decide about the card. He pushes the branch and an annotated tag himself.
