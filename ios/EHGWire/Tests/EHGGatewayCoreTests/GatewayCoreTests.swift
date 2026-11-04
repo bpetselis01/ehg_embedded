@@ -256,3 +256,56 @@ final class HardeningTests: XCTestCase {
         XCTAssertEqual(s.bad, 1); XCTAssertEqual(box.pending(), 0)
     }
 }
+
+final class EnrolmentTests: XCTestCase {
+    func testTheCSRIsWrittenWhereThePythonValidatorCanCheckIt() throws {
+        let key = try CSR.newKey()
+        let pem = CSR.pem(try CSR.build(commonName: "ios-test-1", key: key))
+        XCTAssertTrue(pem.hasPrefix("-----BEGIN CERTIFICATE REQUEST-----\n"))
+        if let out = ProcessInfo.processInfo.environment["EHG_CSR_OUT"] { try pem.write(toFile: out, atomically: true, encoding: .utf8) }
+    }
+
+    private func server(_ script: [(Int, String)]) -> (Enrolment, () -> [Double]) {
+        var calls = 0; var sleeps: [Double] = []
+        let e = Enrolment(fetch: { req in
+            defer { calls += 1 }
+            if req.url!.path.hasSuffix("/auth/device") { return (Data(#"{"device_code":"D","user_code":"ABCD-EFGH","verification_uri_complete":"https://h/x?c=ABCD","interval":2,"expires_in":60}"#.utf8), 200) }
+            let (status, body) = script[min(calls - 1, script.count - 1)]
+            return (Data(body.utf8), status)
+        }, sleep: { sleeps.append($0) })
+        return (e, { sleeps })
+    }
+
+    func testPollingWaitsThroughPendingAndSlowDownThenReturnsTheToken() async throws {
+        let (e, sleeps) = server([(400, #"{"error":"authorization_pending"}"#), (400, #"{"error":"slow_down"}"#), (200, #"{"access_token":"T"}"#)])
+        let code = try await e.begin(realm: "https://h/auth/realms/ehg", clientId: "ios-gateway")
+        XCTAssertEqual(code.userCode, "ABCD-EFGH")
+        let t = try await e.token(realm: "https://h/auth/realms/ehg", clientId: "ios-gateway", code: code)
+        XCTAssertEqual(t, "T"); XCTAssertEqual(sleeps(), [2, 2, 7], "slow_down adds 5 seconds")
+    }
+
+    func testDeniedAndExpiredStopWithTheirOwnErrors() async throws {
+        for (err, expected) in [("access_denied", EnrolmentError.denied), ("expired_token", EnrolmentError.expired)] {
+            let (e, _) = server([(400, "{\"error\":\"\(err)\"}")])
+            let code = try await e.begin(realm: "https://h/r", clientId: "c")
+            do { _ = try await e.token(realm: "https://h/r", clientId: "c", code: code); XCTFail("should throw") } catch { XCTAssertEqual(error as? EnrolmentError, expected) }
+        }
+    }
+
+    func testTheUserNameComesOutOfTheToken() {
+        let payload = Data(#"{"preferred_username":"ios-phone-9"}"#.utf8).base64EncodedString().replacingOccurrences(of: "=", with: "")
+        XCTAssertEqual(Enrolment.userName(inToken: "h.\(payload).s"), "ios-phone-9")
+        XCTAssertNil(Enrolment.userName(inToken: "garbage"))
+    }
+
+    func testTheEnrolmentCallSendsTheBearerTokenAndReturnsOnlyAWellFormedCertificate() async throws {
+        var seen: URLRequest?
+        let ok = Enrolment(fetch: { r in seen = r; return (Data(#"{"certificate":"-----BEGIN CERTIFICATE-----\nX\n-----END CERTIFICATE-----\n"}"#.utf8), 200) }, sleep: { _ in })
+        let cert = try await ok.enrol(url: "https://h/enroll-api/enroll", token: "T", csrPEM: "CSR")
+        XCTAssertTrue(cert.contains("BEGIN CERTIFICATE")); XCTAssertEqual(seen?.value(forHTTPHeaderField: "Authorization"), "Bearer T")
+        let bad = Enrolment(fetch: { _ in (Data(#"{"certificate":"nope"}"#.utf8), 200) }, sleep: { _ in })
+        do { _ = try await bad.enrol(url: "https://h/e", token: "T", csrPEM: "CSR"); XCTFail() } catch { XCTAssertEqual(error as? EnrolmentError, .malformed) }
+        let refused = Enrolment(fetch: { _ in (Data(), 403) }, sleep: { _ in })
+        do { _ = try await refused.enrol(url: "https://h/e", token: "T", csrPEM: "CSR"); XCTFail() } catch { XCTAssertEqual(error as? EnrolmentError, .badResponse(403)) }
+    }
+}

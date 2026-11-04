@@ -1,5 +1,9 @@
 # Progress log
 
+## 2026-11-04: in-app enrolment for the phone gateway
+
+- `EHGGatewayCore/Enrolment.swift`: Keycloak device grant (RFC 8628: pending, slow_down, denied, expired tested with a fake server), a PKCS#10 request built and signed in Swift (**accepted by `backend/enroll/csr.py:validate_csr` on the first try**: `tests/test_ios_csr.py`), the token's user name as the CN, the enrolment call. The app's model and screen got an "Enrol with Keycloak" button that stores the key and certificate in the Keychain (builds for the simulator). Checked against the REAL Keycloak from Python: the device endpoint returns `device_code, user_code, verification_uri(_complete), interval, expires_in` and the token endpoint answers `authorization_pending` with 400, exactly what the client parses. Not run: the full flow from Swift against the live stack, and anything Keychain on a phone. Renewal is the same flow (a person each week: no refresh token is kept).
+
 ## 2026-11-04: a Mosquitto exporter (the last metric gap)
 
 - `backend/mqtt_exporter.py` (own small exporter: the off-the-shelf one cannot present a client certificate to an mTLS-only broker): reads nine allowlisted `$SYS` topics as `ehg_mosquitto_*` gauges plus `ehg_mosquitto_up`; own identity `ehg-exporter` (new in `tools/pki.sh`, the ACL and `tools/gen_acl.py`) that may READ exactly those nine topics, no wildcard (the repository's ACL test forbids `#`; a test keeps the topic list and the ACL equal). Service `mosquitto-exporter` in the cloud compose file, Prometheus job `mosquitto`, alert `EhgMosquittoDown` (page; promtool-tested fire and quiet). **Run against a real Mosquitto in a test** (`tests/test_mqtt_exporter.py`): it reads clients connected and goes up. Two more certificate files now travel to the VM (nine, not seven: deployment.md, checklist and `fix-key-permissions.sh` updated). Not run in the full stack yet.

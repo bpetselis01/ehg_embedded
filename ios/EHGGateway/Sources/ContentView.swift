@@ -17,8 +17,11 @@ struct ContentView: View {
                     TextField("Broker host (e.g. ehg.duckdns.org)", text: $model.host).textInputAutocapitalization(.never).autocorrectionDisabled()
                     TextField("Gateway id (the certificate's CN)", text: $model.gatewayId).textInputAutocapitalization(.never).autocorrectionDisabled()
                     TextField("Allowed nodes (EHG-93C0, ...)", text: $model.allowedNodes).textInputAutocapitalization(.characters).autocorrectionDisabled()
-                    SecureField("PKCS#12 password", text: $password)
-                    Button("Import certificate (.p12)") { picking = true }
+                    Button("Enrol with Keycloak (device code)") { model.enrol() }
+                    if let code = model.userCode, let url = model.verificationURL { Link("Code \(code): open to approve", destination: url) }
+                    if !model.enrolStatus.isEmpty { Text(model.enrolStatus).font(.footnote).foregroundStyle(.secondary) }
+                    SecureField("PKCS#12 password (manual route)", text: $password)
+                    Button("Import certificate (.p12) instead") { picking = true }
                     LabeledContent("MQTT", value: model.mqtt)
                     LabeledContent("Last PUBACK", value: model.lastPuback.map { $0.formatted(date: .omitted, time: .standard) } ?? "never")
                     LabeledContent("Certificate expires", value: model.identityExpiry.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? "none imported")

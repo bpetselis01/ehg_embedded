@@ -22,6 +22,9 @@ final class GatewayModel: ObservableObject {
     @Published var mqtt = "not connected"
     @Published var lastPuback: Date?
     @Published var identityExpiry: Date?
+    @Published var enrolStatus = ""
+    @Published var userCode: String?
+    @Published var verificationURL: URL?
     @Published var logLines: [String] = []
     @Published var rows: [(node: String, received: Int, missing: Int, duplicates: Int, bad: Int)] = []
     @Published var pending = 0
@@ -57,6 +60,30 @@ final class GatewayModel: ObservableObject {
         let add = SecItemAdd([kSecValueRef as String: identity, kSecAttrLabel as String: "ehg-gateway", kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly] as CFDictionary, nil)
         log(add == errSecSuccess ? "certificate stored in the Keychain" : "Keychain refused the certificate (\(add))")
         refreshIdentity()
+    }
+
+    /// Keycloak device grant -> own P-256 key (kept in the Keychain) -> certificate request -> enrolment API -> certificate in the Keychain. Run it again before the certificate expires to renew.
+    /// The gateway id becomes the Keycloak user name (the server uses it as the certificate's CN). NEVER run on a phone; the logic is tested in EHGGatewayCore, the Keychain calls are not.
+    func enrol() {
+        guard !host.isEmpty else { log("set the broker host first"); return }
+        enrolStatus = "asking Keycloak for a code ..."
+        Task {
+            do {
+                let realm = "https://\(host)/auth/realms/ehg", client = "ios-gateway", e = Enrolment()
+                let dc = try await e.begin(realm: realm, clientId: client)
+                userCode = dc.userCode; verificationURL = URL(string: dc.verificationURL); enrolStatus = "open the link, sign in, approve code \(dc.userCode)"
+                let token = try await e.token(realm: realm, clientId: client, code: dc)
+                guard let user = Enrolment.userName(inToken: token) else { throw EnrolmentError.malformed }
+                for cls in [kSecClassIdentity, kSecClassCertificate, kSecClassKey] { SecItemDelete([kSecClass as String: cls, kSecAttrLabel as String: "ehg-gateway"] as CFDictionary) }
+                let key = try CSR.newKey(permanentLabel: "ehg-gateway")
+                let pem = try await e.enrol(url: "https://\(host)/enroll-api/enroll", token: token, csrPEM: CSR.pem(try CSR.build(commonName: user, key: key)))
+                let b64 = pem.components(separatedBy: "\n").filter { !$0.hasPrefix("-----") }.joined()
+                guard let der = Data(base64Encoded: b64), let cert = SecCertificateCreateWithData(nil, der as CFData) else { throw EnrolmentError.malformed }
+                let add = SecItemAdd([kSecValueRef as String: cert, kSecAttrLabel as String: "ehg-gateway"] as CFDictionary, nil)
+                guard add == errSecSuccess else { throw EnrolmentError.signing("Keychain refused the certificate (\(add))") }
+                gatewayId = user; userCode = nil; verificationURL = nil; enrolStatus = "enrolled as \(user)"; refreshIdentity(); log("enrolled as \(user)")
+            } catch { enrolStatus = "enrolment failed: \(error)"; userCode = nil; log("enrolment failed: \(error)") }
+        }
     }
 
     func loadIdentity() -> SecIdentity? {

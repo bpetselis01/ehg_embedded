@@ -18,7 +18,7 @@
 ## Open questions waiting for Byron
 - The Oracle card (phone number and credit card for verification; never Pay-As-You-Go). Asked once, deferred; ask again when Byron reports back on the runbook.
 - When the runbook is done: the log (what he saw), then Checkpoint 3.
-- Run the iPhone app on your phone (docs/ios-gateway.md: build steps and the feasibility-spike checklist; it compiles for the simulator and its MQTT client is proven against a real broker, but Bluetooth and the background behaviour have never run). Back up `~/.ehg-keys/mcuboot-p256.pem` (Unit 13 signing key; losing it loses OTA for secure boards).
+- Run the iPhone app on your phone (it can now enrol itself with a Keycloak device code) (docs/ios-gateway.md: build steps and the feasibility-spike checklist; it compiles for the simulator and its MQTT client is proven against a real broker, but Bluetooth and the background behaviour have never run). Back up `~/.ehg-keys/mcuboot-p256.pem` (Unit 13 signing key; losing it loses OTA for secure boards).
 
 ## Byron's pending manual steps
 - Everything in `docs/deployment.md` (15 steps). Before step 2 he must decide about the card. He pushes the branch and an annotated tag himself.
