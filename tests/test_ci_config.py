@@ -61,3 +61,10 @@ def test_the_supply_chain_doc_says_what_is_not_wired():
     for tool in ("Syft", "Trivy", "cosign", "gitleaks", "CodeQL"):
         assert tool in text
     assert "Planned, not wired" in text and "never been pushed" in text
+
+
+def test_every_scanner_job_pins_its_tool_by_digest_or_exact_version():
+    jobs = load(ROOT / ".github/workflows/security.yml")["jobs"]
+    assert {"shellcheck", "gitleaks", "hadolint", "python-lint"} <= set(jobs)
+    text = (ROOT / ".github/workflows/security.yml").read_text()
+    assert len(re.findall(r"@sha256:[0-9a-f]{64}", text)) >= 2 and "uvx ruff@0.17.3" in text and ":latest" not in text

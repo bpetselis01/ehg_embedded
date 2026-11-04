@@ -1,0 +1,1853 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.7.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.7",
+  "serialNumber": "urn:uuid:220ea705-0add-4564-b400-201bc1516661",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-11-04T05:23:09+00:00",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "manufacturer": {
+            "name": "Aqua Security Software Ltd."
+          },
+          "group": "aquasecurity",
+          "name": "trivy",
+          "version": "0.76.1"
+        }
+      ]
+    },
+    "component": {
+      "bom-ref": "c8dc9d97-bc3e-486e-8634-f3aaec2c1a53",
+      "type": "application",
+      "name": "/in/uv.lock",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:SchemaVersion",
+          "value": "2"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "bom-ref": "cd6c4ec0-de58-4e62-9391-e02a44119962",
+      "type": "application",
+      "name": "uv.lock",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:Class",
+          "value": "lang-pkgs"
+        },
+        {
+          "name": "aquasecurity:trivy:Type",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/aiohappyeyeballs@2.7.1",
+      "type": "library",
+      "name": "aiohappyeyeballs",
+      "version": "2.7.1",
+      "purl": "pkg:pypi/aiohappyeyeballs@2.7.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "aiohappyeyeballs@2.7.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/aiohttp@3.14.5",
+      "type": "library",
+      "name": "aiohttp",
+      "version": "3.14.5",
+      "purl": "pkg:pypi/aiohttp@3.14.5",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "aiohttp@3.14.5"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/aiosignal@1.4.0",
+      "type": "library",
+      "name": "aiosignal",
+      "version": "1.4.0",
+      "purl": "pkg:pypi/aiosignal@1.4.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "aiosignal@1.4.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/alembic@1.20.1",
+      "type": "library",
+      "name": "alembic",
+      "version": "1.20.1",
+      "purl": "pkg:pypi/alembic@1.20.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "alembic@1.20.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/annotated-doc@0.0.5",
+      "type": "library",
+      "name": "annotated-doc",
+      "version": "0.0.5",
+      "purl": "pkg:pypi/annotated-doc@0.0.5",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "annotated-doc@0.0.5"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/annotated-types@0.8.0",
+      "type": "library",
+      "name": "annotated-types",
+      "version": "0.8.0",
+      "purl": "pkg:pypi/annotated-types@0.8.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "annotated-types@0.8.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/anyio@4.16.0",
+      "type": "library",
+      "name": "anyio",
+      "version": "4.16.0",
+      "purl": "pkg:pypi/anyio@4.16.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "anyio@4.16.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/attrs@26.1.0",
+      "type": "library",
+      "name": "attrs",
+      "version": "26.1.0",
+      "purl": "pkg:pypi/attrs@26.1.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "attrs@26.1.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/bleak@3.0.2",
+      "type": "library",
+      "name": "bleak",
+      "version": "3.0.2",
+      "purl": "pkg:pypi/bleak@3.0.2",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "bleak@3.0.2"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/certifi@2026.10.23",
+      "type": "library",
+      "name": "certifi",
+      "version": "2026.10.23",
+      "purl": "pkg:pypi/certifi@2026.10.23",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "certifi@2026.10.23"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/cffi@2.1.1",
+      "type": "library",
+      "name": "cffi",
+      "version": "2.1.1",
+      "purl": "pkg:pypi/cffi@2.1.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "cffi@2.1.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/charset-normalizer@3.5.1",
+      "type": "library",
+      "name": "charset-normalizer",
+      "version": "3.5.1",
+      "purl": "pkg:pypi/charset-normalizer@3.5.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "charset-normalizer@3.5.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/click@8.5.0",
+      "type": "library",
+      "name": "click",
+      "version": "8.5.0",
+      "purl": "pkg:pypi/click@8.5.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "click@8.5.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/contourpy@1.4.0",
+      "type": "library",
+      "name": "contourpy",
+      "version": "1.4.0",
+      "purl": "pkg:pypi/contourpy@1.4.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "contourpy@1.4.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/cryptography@50.0.2",
+      "type": "library",
+      "name": "cryptography",
+      "version": "50.0.2",
+      "purl": "pkg:pypi/cryptography@50.0.2",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "cryptography@50.0.2"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/cycler@0.12.1",
+      "type": "library",
+      "name": "cycler",
+      "version": "0.12.1",
+      "purl": "pkg:pypi/cycler@0.12.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "cycler@0.12.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/dbus-fast@5.0.22",
+      "type": "library",
+      "name": "dbus-fast",
+      "version": "5.0.22",
+      "purl": "pkg:pypi/dbus-fast@5.0.22",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "dbus-fast@5.0.22"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/fastapi@0.162.0",
+      "type": "library",
+      "name": "fastapi",
+      "version": "0.162.0",
+      "purl": "pkg:pypi/fastapi@0.162.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "fastapi@0.162.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/fonttools@4.66.0",
+      "type": "library",
+      "name": "fonttools",
+      "version": "4.66.0",
+      "purl": "pkg:pypi/fonttools@4.66.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "fonttools@4.66.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/frozenlist@1.8.0",
+      "type": "library",
+      "name": "frozenlist",
+      "version": "1.8.0",
+      "purl": "pkg:pypi/frozenlist@1.8.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "frozenlist@1.8.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/fsspec@2026.9.0",
+      "type": "library",
+      "name": "fsspec",
+      "version": "2026.9.0",
+      "purl": "pkg:pypi/fsspec@2026.9.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "fsspec@2026.9.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/h11@0.16.0",
+      "type": "library",
+      "name": "h11",
+      "version": "0.16.0",
+      "purl": "pkg:pypi/h11@0.16.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "h11@0.16.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/httpcore@1.0.9",
+      "type": "library",
+      "name": "httpcore",
+      "version": "1.0.9",
+      "purl": "pkg:pypi/httpcore@1.0.9",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "httpcore@1.0.9"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/httpx@0.28.1",
+      "type": "library",
+      "name": "httpx",
+      "version": "0.28.1",
+      "purl": "pkg:pypi/httpx@0.28.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "httpx@0.28.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/idna@3.20",
+      "type": "library",
+      "name": "idna",
+      "version": "3.20",
+      "purl": "pkg:pypi/idna@3.20",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "idna@3.20"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/influxdb-client@1.50.0",
+      "type": "library",
+      "name": "influxdb-client",
+      "version": "1.50.0",
+      "purl": "pkg:pypi/influxdb-client@1.50.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "influxdb-client@1.50.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/kiwisolver@1.5.1",
+      "type": "library",
+      "name": "kiwisolver",
+      "version": "1.5.1",
+      "purl": "pkg:pypi/kiwisolver@1.5.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "kiwisolver@1.5.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/mako@1.4.3",
+      "type": "library",
+      "name": "mako",
+      "version": "1.4.3",
+      "purl": "pkg:pypi/mako@1.4.3",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "mako@1.4.3"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/markupsafe@3.0.4",
+      "type": "library",
+      "name": "markupsafe",
+      "version": "3.0.4",
+      "purl": "pkg:pypi/markupsafe@3.0.4",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "markupsafe@3.0.4"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/matplotlib@3.11.2",
+      "type": "library",
+      "name": "matplotlib",
+      "version": "3.11.2",
+      "purl": "pkg:pypi/matplotlib@3.11.2",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "matplotlib@3.11.2"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/multidict@6.9.1",
+      "type": "library",
+      "name": "multidict",
+      "version": "6.9.1",
+      "purl": "pkg:pypi/multidict@6.9.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "multidict@6.9.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/nats-py@2.16.0",
+      "type": "library",
+      "name": "nats-py",
+      "version": "2.16.0",
+      "purl": "pkg:pypi/nats-py@2.16.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "nats-py@2.16.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/numpy@2.5.3",
+      "type": "library",
+      "name": "numpy",
+      "version": "2.5.3",
+      "purl": "pkg:pypi/numpy@2.5.3",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "numpy@2.5.3"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/opentelemetry-api@1.45.2",
+      "type": "library",
+      "name": "opentelemetry-api",
+      "version": "1.45.2",
+      "purl": "pkg:pypi/opentelemetry-api@1.45.2",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "opentelemetry-api@1.45.2"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/packaging@26.3",
+      "type": "library",
+      "name": "packaging",
+      "version": "26.3",
+      "purl": "pkg:pypi/packaging@26.3",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "packaging@26.3"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/paho-mqtt@2.1.0",
+      "type": "library",
+      "name": "paho-mqtt",
+      "version": "2.1.0",
+      "purl": "pkg:pypi/paho-mqtt@2.1.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "paho-mqtt@2.1.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/pandas@3.0.6",
+      "type": "library",
+      "name": "pandas",
+      "version": "3.0.6",
+      "purl": "pkg:pypi/pandas@3.0.6",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "pandas@3.0.6"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/pillow@13.0.0",
+      "type": "library",
+      "name": "pillow",
+      "version": "13.0.0",
+      "purl": "pkg:pypi/pillow@13.0.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "pillow@13.0.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/prometheus-client@0.26.0",
+      "type": "library",
+      "name": "prometheus-client",
+      "version": "0.26.0",
+      "purl": "pkg:pypi/prometheus-client@0.26.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "prometheus-client@0.26.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/propcache@0.5.4",
+      "type": "library",
+      "name": "propcache",
+      "version": "0.5.4",
+      "purl": "pkg:pypi/propcache@0.5.4",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "propcache@0.5.4"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/psycopg-binary@3.3.7",
+      "type": "library",
+      "name": "psycopg-binary",
+      "version": "3.3.7",
+      "purl": "pkg:pypi/psycopg-binary@3.3.7",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "psycopg-binary@3.3.7"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/psycopg@3.3.7",
+      "type": "library",
+      "name": "psycopg",
+      "version": "3.3.7",
+      "purl": "pkg:pypi/psycopg@3.3.7",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "psycopg@3.3.7"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/pycparser@3.0",
+      "type": "library",
+      "name": "pycparser",
+      "version": "3.0",
+      "purl": "pkg:pypi/pycparser@3.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "pycparser@3.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/pydantic-core@2.50.2",
+      "type": "library",
+      "name": "pydantic-core",
+      "version": "2.50.2",
+      "purl": "pkg:pypi/pydantic-core@2.50.2",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "pydantic-core@2.50.2"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/pydantic@2.14.2",
+      "type": "library",
+      "name": "pydantic",
+      "version": "2.14.2",
+      "purl": "pkg:pypi/pydantic@2.14.2",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "pydantic@2.14.2"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/pyjwt@2.15.1",
+      "type": "library",
+      "name": "pyjwt",
+      "version": "2.15.1",
+      "purl": "pkg:pypi/pyjwt@2.15.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "pyjwt@2.15.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/pyobjc-core@12.2.2",
+      "type": "library",
+      "name": "pyobjc-core",
+      "version": "12.2.2",
+      "purl": "pkg:pypi/pyobjc-core@12.2.2",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "pyobjc-core@12.2.2"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/pyobjc-framework-cocoa@12.2.2",
+      "type": "library",
+      "name": "pyobjc-framework-cocoa",
+      "version": "12.2.2",
+      "purl": "pkg:pypi/pyobjc-framework-cocoa@12.2.2",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "pyobjc-framework-cocoa@12.2.2"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/pyobjc-framework-corebluetooth@12.2.2",
+      "type": "library",
+      "name": "pyobjc-framework-corebluetooth",
+      "version": "12.2.2",
+      "purl": "pkg:pypi/pyobjc-framework-corebluetooth@12.2.2",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "pyobjc-framework-corebluetooth@12.2.2"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/pyobjc-framework-libdispatch@12.2.2",
+      "type": "library",
+      "name": "pyobjc-framework-libdispatch",
+      "version": "12.2.2",
+      "purl": "pkg:pypi/pyobjc-framework-libdispatch@12.2.2",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "pyobjc-framework-libdispatch@12.2.2"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/pyparsing@3.3.3",
+      "type": "library",
+      "name": "pyparsing",
+      "version": "3.3.3",
+      "purl": "pkg:pypi/pyparsing@3.3.3",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "pyparsing@3.3.3"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/python-dateutil@2.9.0.post0",
+      "type": "library",
+      "name": "python-dateutil",
+      "version": "2.9.0.post0",
+      "purl": "pkg:pypi/python-dateutil@2.9.0.post0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "python-dateutil@2.9.0.post0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/reactivex@5.1.0",
+      "type": "library",
+      "name": "reactivex",
+      "version": "5.1.0",
+      "purl": "pkg:pypi/reactivex@5.1.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "reactivex@5.1.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/requests@2.34.2",
+      "type": "library",
+      "name": "requests",
+      "version": "2.34.2",
+      "purl": "pkg:pypi/requests@2.34.2",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "requests@2.34.2"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/scipy@1.18.1",
+      "type": "library",
+      "name": "scipy",
+      "version": "1.18.1",
+      "purl": "pkg:pypi/scipy@1.18.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "scipy@1.18.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/six@1.17.0",
+      "type": "library",
+      "name": "six",
+      "version": "1.17.0",
+      "purl": "pkg:pypi/six@1.17.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "six@1.17.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/soundfile@0.14.0",
+      "type": "library",
+      "name": "soundfile",
+      "version": "0.14.0",
+      "purl": "pkg:pypi/soundfile@0.14.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "soundfile@0.14.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/sqlalchemy@2.1.6",
+      "type": "library",
+      "name": "sqlalchemy",
+      "version": "2.1.6",
+      "purl": "pkg:pypi/sqlalchemy@2.1.6",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "sqlalchemy@2.1.6"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/starlette@1.10.0",
+      "type": "library",
+      "name": "starlette",
+      "version": "1.10.0",
+      "purl": "pkg:pypi/starlette@1.10.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "starlette@1.10.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/thesis-b-ehg@0.1.0",
+      "type": "library",
+      "name": "thesis-b-ehg",
+      "version": "0.1.0",
+      "purl": "pkg:pypi/thesis-b-ehg@0.1.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "thesis-b-ehg@0.1.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/typing-extensions@4.16.0",
+      "type": "library",
+      "name": "typing-extensions",
+      "version": "4.16.0",
+      "purl": "pkg:pypi/typing-extensions@4.16.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "typing-extensions@4.16.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/typing-inspection@0.4.4",
+      "type": "library",
+      "name": "typing-inspection",
+      "version": "0.4.4",
+      "purl": "pkg:pypi/typing-inspection@0.4.4",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "typing-inspection@0.4.4"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/tzdata@2026.4",
+      "type": "library",
+      "name": "tzdata",
+      "version": "2026.4",
+      "purl": "pkg:pypi/tzdata@2026.4",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "tzdata@2026.4"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/urllib3@2.8.0",
+      "type": "library",
+      "name": "urllib3",
+      "version": "2.8.0",
+      "purl": "pkg:pypi/urllib3@2.8.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "urllib3@2.8.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/uvicorn@0.54.0",
+      "type": "library",
+      "name": "uvicorn",
+      "version": "0.54.0",
+      "purl": "pkg:pypi/uvicorn@0.54.0",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "uvicorn@0.54.0"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/websockets@17.1",
+      "type": "library",
+      "name": "websockets",
+      "version": "17.1",
+      "purl": "pkg:pypi/websockets@17.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "websockets@17.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/wfdb@4.3.1",
+      "type": "library",
+      "name": "wfdb",
+      "version": "4.3.1",
+      "purl": "pkg:pypi/wfdb@4.3.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "wfdb@4.3.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/winrt-runtime@3.2.1",
+      "type": "library",
+      "name": "winrt-runtime",
+      "version": "3.2.1",
+      "purl": "pkg:pypi/winrt-runtime@3.2.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "winrt-runtime@3.2.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/winrt-windows-devices-bluetooth-advertisement@3.2.1",
+      "type": "library",
+      "name": "winrt-windows-devices-bluetooth-advertisement",
+      "version": "3.2.1",
+      "purl": "pkg:pypi/winrt-windows-devices-bluetooth-advertisement@3.2.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "winrt-windows-devices-bluetooth-advertisement@3.2.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/winrt-windows-devices-bluetooth-genericattributeprofile@3.2.1",
+      "type": "library",
+      "name": "winrt-windows-devices-bluetooth-genericattributeprofile",
+      "version": "3.2.1",
+      "purl": "pkg:pypi/winrt-windows-devices-bluetooth-genericattributeprofile@3.2.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "winrt-windows-devices-bluetooth-genericattributeprofile@3.2.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/winrt-windows-devices-bluetooth@3.2.1",
+      "type": "library",
+      "name": "winrt-windows-devices-bluetooth",
+      "version": "3.2.1",
+      "purl": "pkg:pypi/winrt-windows-devices-bluetooth@3.2.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "winrt-windows-devices-bluetooth@3.2.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/winrt-windows-devices-enumeration@3.2.1",
+      "type": "library",
+      "name": "winrt-windows-devices-enumeration",
+      "version": "3.2.1",
+      "purl": "pkg:pypi/winrt-windows-devices-enumeration@3.2.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "winrt-windows-devices-enumeration@3.2.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/winrt-windows-devices-radios@3.2.1",
+      "type": "library",
+      "name": "winrt-windows-devices-radios",
+      "version": "3.2.1",
+      "purl": "pkg:pypi/winrt-windows-devices-radios@3.2.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "winrt-windows-devices-radios@3.2.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/winrt-windows-foundation-collections@3.2.1",
+      "type": "library",
+      "name": "winrt-windows-foundation-collections",
+      "version": "3.2.1",
+      "purl": "pkg:pypi/winrt-windows-foundation-collections@3.2.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "winrt-windows-foundation-collections@3.2.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/winrt-windows-foundation@3.2.1",
+      "type": "library",
+      "name": "winrt-windows-foundation",
+      "version": "3.2.1",
+      "purl": "pkg:pypi/winrt-windows-foundation@3.2.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "winrt-windows-foundation@3.2.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/winrt-windows-storage-streams@3.2.1",
+      "type": "library",
+      "name": "winrt-windows-storage-streams",
+      "version": "3.2.1",
+      "purl": "pkg:pypi/winrt-windows-storage-streams@3.2.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "winrt-windows-storage-streams@3.2.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    },
+    {
+      "bom-ref": "pkg:pypi/yarl@1.25.1",
+      "type": "library",
+      "name": "yarl",
+      "version": "1.25.1",
+      "purl": "pkg:pypi/yarl@1.25.1",
+      "properties": [
+        {
+          "name": "aquasecurity:trivy:PkgID",
+          "value": "yarl@1.25.1"
+        },
+        {
+          "name": "aquasecurity:trivy:PkgType",
+          "value": "uv"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "c8dc9d97-bc3e-486e-8634-f3aaec2c1a53",
+      "dependsOn": [
+        "cd6c4ec0-de58-4e62-9391-e02a44119962"
+      ]
+    },
+    {
+      "ref": "cd6c4ec0-de58-4e62-9391-e02a44119962",
+      "dependsOn": [
+        "pkg:pypi/thesis-b-ehg@0.1.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/aiohappyeyeballs@2.7.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/aiohttp@3.14.5",
+      "dependsOn": [
+        "pkg:pypi/aiohappyeyeballs@2.7.1",
+        "pkg:pypi/aiosignal@1.4.0",
+        "pkg:pypi/attrs@26.1.0",
+        "pkg:pypi/frozenlist@1.8.0",
+        "pkg:pypi/multidict@6.9.1",
+        "pkg:pypi/propcache@0.5.4",
+        "pkg:pypi/typing-extensions@4.16.0",
+        "pkg:pypi/yarl@1.25.1"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/aiosignal@1.4.0",
+      "dependsOn": [
+        "pkg:pypi/frozenlist@1.8.0",
+        "pkg:pypi/typing-extensions@4.16.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/alembic@1.20.1",
+      "dependsOn": [
+        "pkg:pypi/mako@1.4.3",
+        "pkg:pypi/sqlalchemy@2.1.6",
+        "pkg:pypi/typing-extensions@4.16.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/annotated-doc@0.0.5",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/annotated-types@0.8.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/anyio@4.16.0",
+      "dependsOn": [
+        "pkg:pypi/idna@3.20",
+        "pkg:pypi/typing-extensions@4.16.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/attrs@26.1.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/bleak@3.0.2",
+      "dependsOn": [
+        "pkg:pypi/dbus-fast@5.0.22",
+        "pkg:pypi/pyobjc-core@12.2.2",
+        "pkg:pypi/pyobjc-framework-corebluetooth@12.2.2",
+        "pkg:pypi/pyobjc-framework-libdispatch@12.2.2",
+        "pkg:pypi/winrt-runtime@3.2.1",
+        "pkg:pypi/winrt-windows-devices-bluetooth-advertisement@3.2.1",
+        "pkg:pypi/winrt-windows-devices-bluetooth-genericattributeprofile@3.2.1",
+        "pkg:pypi/winrt-windows-devices-bluetooth@3.2.1",
+        "pkg:pypi/winrt-windows-devices-enumeration@3.2.1",
+        "pkg:pypi/winrt-windows-devices-radios@3.2.1",
+        "pkg:pypi/winrt-windows-foundation-collections@3.2.1",
+        "pkg:pypi/winrt-windows-foundation@3.2.1",
+        "pkg:pypi/winrt-windows-storage-streams@3.2.1"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/certifi@2026.10.23",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/cffi@2.1.1",
+      "dependsOn": [
+        "pkg:pypi/pycparser@3.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/charset-normalizer@3.5.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/click@8.5.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/contourpy@1.4.0",
+      "dependsOn": [
+        "pkg:pypi/numpy@2.5.3"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/cryptography@50.0.2",
+      "dependsOn": [
+        "pkg:pypi/cffi@2.1.1"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/cycler@0.12.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/dbus-fast@5.0.22",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/fastapi@0.162.0",
+      "dependsOn": [
+        "pkg:pypi/annotated-doc@0.0.5",
+        "pkg:pypi/opentelemetry-api@1.45.2",
+        "pkg:pypi/pydantic@2.14.2",
+        "pkg:pypi/starlette@1.10.0",
+        "pkg:pypi/typing-extensions@4.16.0",
+        "pkg:pypi/typing-inspection@0.4.4"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/fonttools@4.66.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/frozenlist@1.8.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/fsspec@2026.9.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/h11@0.16.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/httpcore@1.0.9",
+      "dependsOn": [
+        "pkg:pypi/certifi@2026.10.23",
+        "pkg:pypi/h11@0.16.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/httpx@0.28.1",
+      "dependsOn": [
+        "pkg:pypi/anyio@4.16.0",
+        "pkg:pypi/certifi@2026.10.23",
+        "pkg:pypi/httpcore@1.0.9",
+        "pkg:pypi/idna@3.20"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/idna@3.20",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/influxdb-client@1.50.0",
+      "dependsOn": [
+        "pkg:pypi/certifi@2026.10.23",
+        "pkg:pypi/python-dateutil@2.9.0.post0",
+        "pkg:pypi/reactivex@5.1.0",
+        "pkg:pypi/urllib3@2.8.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/kiwisolver@1.5.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/mako@1.4.3",
+      "dependsOn": [
+        "pkg:pypi/markupsafe@3.0.4"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/markupsafe@3.0.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/matplotlib@3.11.2",
+      "dependsOn": [
+        "pkg:pypi/contourpy@1.4.0",
+        "pkg:pypi/cycler@0.12.1",
+        "pkg:pypi/fonttools@4.66.0",
+        "pkg:pypi/kiwisolver@1.5.1",
+        "pkg:pypi/numpy@2.5.3",
+        "pkg:pypi/packaging@26.3",
+        "pkg:pypi/pillow@13.0.0",
+        "pkg:pypi/pyparsing@3.3.3",
+        "pkg:pypi/python-dateutil@2.9.0.post0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/multidict@6.9.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/nats-py@2.16.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/numpy@2.5.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/opentelemetry-api@1.45.2",
+      "dependsOn": [
+        "pkg:pypi/typing-extensions@4.16.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/packaging@26.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/paho-mqtt@2.1.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/pandas@3.0.6",
+      "dependsOn": [
+        "pkg:pypi/numpy@2.5.3",
+        "pkg:pypi/python-dateutil@2.9.0.post0",
+        "pkg:pypi/tzdata@2026.4"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/pillow@13.0.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/prometheus-client@0.26.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/propcache@0.5.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/psycopg-binary@3.3.7",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/psycopg@3.3.7",
+      "dependsOn": [
+        "pkg:pypi/psycopg-binary@3.3.7",
+        "pkg:pypi/typing-extensions@4.16.0",
+        "pkg:pypi/tzdata@2026.4"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/pycparser@3.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/pydantic-core@2.50.2",
+      "dependsOn": [
+        "pkg:pypi/typing-extensions@4.16.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/pydantic@2.14.2",
+      "dependsOn": [
+        "pkg:pypi/annotated-types@0.8.0",
+        "pkg:pypi/pydantic-core@2.50.2",
+        "pkg:pypi/typing-extensions@4.16.0",
+        "pkg:pypi/typing-inspection@0.4.4"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/pyjwt@2.15.1",
+      "dependsOn": [
+        "pkg:pypi/cryptography@50.0.2"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/pyobjc-core@12.2.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/pyobjc-framework-cocoa@12.2.2",
+      "dependsOn": [
+        "pkg:pypi/pyobjc-core@12.2.2"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/pyobjc-framework-corebluetooth@12.2.2",
+      "dependsOn": [
+        "pkg:pypi/pyobjc-core@12.2.2",
+        "pkg:pypi/pyobjc-framework-cocoa@12.2.2"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/pyobjc-framework-libdispatch@12.2.2",
+      "dependsOn": [
+        "pkg:pypi/pyobjc-core@12.2.2",
+        "pkg:pypi/pyobjc-framework-cocoa@12.2.2"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/pyparsing@3.3.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/python-dateutil@2.9.0.post0",
+      "dependsOn": [
+        "pkg:pypi/six@1.17.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/reactivex@5.1.0",
+      "dependsOn": [
+        "pkg:pypi/typing-extensions@4.16.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/requests@2.34.2",
+      "dependsOn": [
+        "pkg:pypi/certifi@2026.10.23",
+        "pkg:pypi/charset-normalizer@3.5.1",
+        "pkg:pypi/idna@3.20",
+        "pkg:pypi/urllib3@2.8.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/scipy@1.18.1",
+      "dependsOn": [
+        "pkg:pypi/numpy@2.5.3"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/six@1.17.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/soundfile@0.14.0",
+      "dependsOn": [
+        "pkg:pypi/cffi@2.1.1",
+        "pkg:pypi/numpy@2.5.3",
+        "pkg:pypi/typing-extensions@4.16.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/sqlalchemy@2.1.6",
+      "dependsOn": [
+        "pkg:pypi/typing-extensions@4.16.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/starlette@1.10.0",
+      "dependsOn": [
+        "pkg:pypi/anyio@4.16.0",
+        "pkg:pypi/typing-extensions@4.16.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/thesis-b-ehg@0.1.0",
+      "dependsOn": [
+        "pkg:pypi/alembic@1.20.1",
+        "pkg:pypi/bleak@3.0.2",
+        "pkg:pypi/fastapi@0.162.0",
+        "pkg:pypi/httpx@0.28.1",
+        "pkg:pypi/influxdb-client@1.50.0",
+        "pkg:pypi/matplotlib@3.11.2",
+        "pkg:pypi/nats-py@2.16.0",
+        "pkg:pypi/numpy@2.5.3",
+        "pkg:pypi/paho-mqtt@2.1.0",
+        "pkg:pypi/prometheus-client@0.26.0",
+        "pkg:pypi/psycopg@3.3.7",
+        "pkg:pypi/pyjwt@2.15.1",
+        "pkg:pypi/uvicorn@0.54.0",
+        "pkg:pypi/websockets@17.1",
+        "pkg:pypi/wfdb@4.3.1"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/typing-extensions@4.16.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/typing-inspection@0.4.4",
+      "dependsOn": [
+        "pkg:pypi/typing-extensions@4.16.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/tzdata@2026.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/urllib3@2.8.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/uvicorn@0.54.0",
+      "dependsOn": [
+        "pkg:pypi/click@8.5.0",
+        "pkg:pypi/h11@0.16.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/websockets@17.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/wfdb@4.3.1",
+      "dependsOn": [
+        "pkg:pypi/aiohttp@3.14.5",
+        "pkg:pypi/fsspec@2026.9.0",
+        "pkg:pypi/matplotlib@3.11.2",
+        "pkg:pypi/numpy@2.5.3",
+        "pkg:pypi/pandas@3.0.6",
+        "pkg:pypi/requests@2.34.2",
+        "pkg:pypi/scipy@1.18.1",
+        "pkg:pypi/soundfile@0.14.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/winrt-runtime@3.2.1",
+      "dependsOn": [
+        "pkg:pypi/typing-extensions@4.16.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/winrt-windows-devices-bluetooth-advertisement@3.2.1",
+      "dependsOn": [
+        "pkg:pypi/winrt-runtime@3.2.1"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/winrt-windows-devices-bluetooth-genericattributeprofile@3.2.1",
+      "dependsOn": [
+        "pkg:pypi/winrt-runtime@3.2.1"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/winrt-windows-devices-bluetooth@3.2.1",
+      "dependsOn": [
+        "pkg:pypi/winrt-runtime@3.2.1"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/winrt-windows-devices-enumeration@3.2.1",
+      "dependsOn": [
+        "pkg:pypi/winrt-runtime@3.2.1"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/winrt-windows-devices-radios@3.2.1",
+      "dependsOn": [
+        "pkg:pypi/winrt-runtime@3.2.1"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/winrt-windows-foundation-collections@3.2.1",
+      "dependsOn": [
+        "pkg:pypi/winrt-runtime@3.2.1"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/winrt-windows-foundation@3.2.1",
+      "dependsOn": [
+        "pkg:pypi/winrt-runtime@3.2.1"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/winrt-windows-storage-streams@3.2.1",
+      "dependsOn": [
+        "pkg:pypi/winrt-runtime@3.2.1"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/yarl@1.25.1",
+      "dependsOn": [
+        "pkg:pypi/idna@3.20",
+        "pkg:pypi/multidict@6.9.1",
+        "pkg:pypi/propcache@0.5.4"
+      ]
+    }
+  ],
+  "vulnerabilities": []
+}

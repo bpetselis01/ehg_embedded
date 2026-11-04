@@ -371,7 +371,7 @@ SIM_RECORD = "data/converted/tpehgdb/tpehg1007.npz"
 
 @needs_openssl
 @needs_broker
-def test_broker_outage_loses_nothing_and_replays_in_order(broker, tmp_path):
+def test_broker_outage_loses_nothing_and_replays_in_order(broker, tmp_path):  # noqa: F811  (broker is the imported fixture)
     """gateway --simulate 1 --outbox into the real TLS broker; the broker is stopped for 5 s mid-run and started again.
     A persistent reader must then see every seq from 0 with no gap, and the late ones must be marked replayed."""
     import signal

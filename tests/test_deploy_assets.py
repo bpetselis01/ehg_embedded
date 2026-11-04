@@ -635,3 +635,12 @@ def test_the_image_scanner_is_pinned_and_never_gets_the_docker_socket():
     assert "docker.sock" not in text.replace("NOT mounted", "") .split("set -eu")[1], "the script body must not mount the socket"
     assert ":latest" not in text.split("set -eu")[1]
     assert '"$TMP:/in:ro"' in text and "docker save" in text
+
+
+def test_the_sbom_script_pins_trivy_like_the_scanner_and_never_mounts_the_socket():
+    text = (DEPLOY / "make-sbom.sh").read_text()
+    scan = (DEPLOY / "scan-images.sh").read_text()
+    assert re.search(r"^TRIVY=(\S+)$", text, re.M).group(1) == re.search(r"^TRIVY=(\S+)$", scan, re.M).group(1), "one trivy version for both scripts"
+    assert "docker.sock" not in text.split("set -eu")[1] and ":latest" not in text and "--format cyclonedx" in text
+    for f in ("ehg-platform", "ehg-caddy", "python-lock"):
+        assert (ROOT / f"docs/sbom/{f}.cdx.json").is_file()

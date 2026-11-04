@@ -18,7 +18,7 @@ needs_swift = pytest.mark.skipif(shutil.which("swift") is None, reason="Swift to
 @needs_openssl
 @needs_broker
 @needs_swift
-def test_outbox_to_a_real_broker_over_tls13_with_a_client_certificate(broker, tmp_path):
+def test_outbox_to_a_real_broker_over_tls13_with_a_client_certificate(broker, tmp_path):  # noqa: F811  (broker is the imported fixture)
     pki = broker.pki
     p12 = tmp_path / "gw.p12"
     subprocess.run(["openssl", "pkcs12", "-export", "-inkey", str(pki / "clients/ehg-gw-01.key"), "-in", str(pki / "clients/ehg-gw-01.crt"), "-certfile", str(pki / "ca-chain.crt"),
