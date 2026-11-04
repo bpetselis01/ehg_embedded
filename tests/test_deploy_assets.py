@@ -67,7 +67,10 @@ def test_terraform_validates_against_the_real_provider_schema(tmp_path):
 
 def test_every_terraform_file_parses_and_the_provider_is_pinned_exactly():
     files = sorted(TF.rglob("*.tf"))
-    assert len(files) == 16, "4 root files + 4 modules x (main, variables, outputs)"
+    assert len(files) == 20, "4 root files + 4 modules x (main, variables, outputs, versions)"
+    for m in ("compute", "monitoring", "network", "storage"):  # each module names its provider source itself (tflint)
+        v = (TF / "modules" / m / "versions.tf").read_text()
+        assert 'source  = "oracle/oci"' in v and 'required_version = ">= 1.6"' in v, m
     for f in files:
         with f.open() as fh:
             hcl2.load(fh)
@@ -298,11 +301,13 @@ def test_compose_has_exactly_the_planned_services():
 def test_every_image_is_pinned_by_version_and_digest_for_arm64_hosts():
     for name, svc in services().items():
         if "build" in svc:  # the Python services: built on the VM from the repository; the base image of that build is what must be pinned (checked below)
-            assert svc["image"] == "ehg-platform:cloud" and svc["pull_policy"] == "build", name
+            assert svc["image"] in ("ehg-platform:cloud", "ehg-caddy:cloud") and svc["pull_policy"] == "build", name
             continue
         assert re.fullmatch(r"[\w./-]+:[\w.-]+@sha256:[0-9a-f]{64}", svc["image"]), f"{name}: {svc['image']} must be repo:tag@sha256:digest"
         assert ":latest" not in svc["image"]
-    assert re.search(r"^FROM [\w./-]+:[\w.-]+@sha256:[0-9a-f]{64}$", (ROOT / "backend/platform.Dockerfile").read_text(), re.M), "the base image of the built image must be pinned by digest"
+    for dockerfile in ("backend/platform.Dockerfile", "deploy/caddy/Dockerfile"):
+        froms = re.findall(r"^FROM (\S+)", (ROOT / dockerfile).read_text(), re.M)
+        assert froms and all(re.fullmatch(r"[\w./-]+:[\w.-]+@sha256:[0-9a-f]{64}", f) for f in froms), f"every base image of {dockerfile} must be pinned by digest"
 
 
 def test_only_80_443_8883_are_published_and_nothing_dangerous_is_mounted():

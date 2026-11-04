@@ -47,7 +47,12 @@ services:
   caddy:
     <<: *service
     networks: [edge, internal]
-    image: caddy:2.11.7-alpine@sha256:e70b164da81ef698b3ad19af799ea6086ce6d9e48ed4079eb9fe26f6fbf14ee5
+    # rebuilt from the same Caddy release with a patched Go and libraries (deploy/caddy/Dockerfile): the official image has 1 CRITICAL + 8 HIGH fixable findings and it is the one service on the internet
+    build:
+      context: ../caddy
+      dockerfile: Dockerfile
+    image: ehg-caddy:cloud
+    pull_policy: build
     ports:
       - "80:80"
       - "443:443"
@@ -256,7 +261,7 @@ services:
   nats-exporter:
     <<: *service
     networks: [internal]
-    image: natsio/prometheus-nats-exporter:0.17.3@sha256:26c826662ac8424597cc9bdf89ea5b606eb66e3c11db9b1215c27d2076bbb01b
+    image: natsio/prometheus-nats-exporter:0.20.3@sha256:4b8ddc1c86fec360b5cd3d5e1fbc6fb52bdafd5805bba3901cc52926538af255
     command: ["-varz", "-jsz=all", "-connz", "http://nats:8222"]
     depends_on:
       nats:

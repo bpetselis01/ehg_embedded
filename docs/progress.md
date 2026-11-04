@@ -1,5 +1,10 @@
 # Progress log
 
+## 2026-11-04: third-party images scanned; the edge rebuilt; Terraform modules declare their provider
+
+- **All 16 pinned images scanned** (`deploy/scan-images.sh`, table in docs/supply-chain.md). Every pinned release is already the newest, so for most images no fixed build exists: the findings are inside vendor-bundled libraries. Two things were possible and done: **Caddy** (the only service on the internet; 1 CRITICAL, 8 HIGH) is rebuilt from the same v2.11.7 with Go 1.27.3 and the two patched modules (`deploy/caddy/Dockerfile`, builds in under a minute on this Mac; 0/0 after; config validates; all routes and headers unchanged on the 22-service stack), and the **NATS exporter** moved 0.17.3 -> 0.20.3 (clean; the three metrics the alerts use are still exported). The rest are internal-only and recorded as accepted with their exposure; HAPI (28 CRITICAL, Java libraries) is not routed by Caddy.
+- **Terraform:** tflint found that no module declared its provider or required Terraform version; each module has a `versions.tf` now (tflint 0 warnings, real-provider `validate` still passes). `terraform plan/apply` need the Oracle account and API key and cannot be run without them.
+
 ## 2026-11-04: review finding on the secret-scan allowlist (valid, fixed)
 
 - `.gitleaks.toml` listed `paths` and `regexes` in one allowlist, which gitleaks combines with OR: every finding in `tests/test_deploy_assets.py` and the fake key in any file were skipped (shown: with the old config a scan of a tree holding the fake key elsewhere reported nothing). Adding `condition = "AND"` was not enough in gitleaks 8.30.1: with `regexTarget` `secret` or `match` a DIFFERENT key in the allowed file was still skipped. The allowlist now uses `condition = "AND"`, `regexTarget = "line"`, one anchored line, and `targetRules = ["aws-access-token"]`. Proved on throwaway trees: the exact line is allowed; a different key in the file, the fake and a real key on one line, and the fake line in another file are all reported. Real repository (history and tests): no leaks. Guard: `tests/test_gitleaks_config.py`.
