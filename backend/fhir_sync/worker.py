@@ -5,7 +5,7 @@ INPUT: the stored frames of each node (eval/backend_client.py:query_frames, the 
   e.g. node EHG-1, subject tpehg1007 with consent_status 'active', frames 0..1399 of record 0 at 20 Hz, chunk size 600.
 OUTPUT: one FHIR transaction per COMPLETE chunk of `chunk_frames` frames (frames i with i // chunk_frames == k). The chunk is built by tools/fhir_export.py:bundle() unchanged (raw counts, "E" for a frame that never arrived), then:
     Device       POST ... If-None-Exist identifier=urn:thesisb:ehg/node-id|EHG-1   (created once, never duplicated)
-    Observation  PUT Observation?identifier=urn:thesisb:ehg/obs-key|EHG-1/0/1     (conditional update: created the first time, replaced if a late frame changed the chunk)
+    Observation  PUT Observation?identifier=urn:thesisb:ehg/obs-key|EHG-1/s1/0/1   (conditional update: created the first time, replaced if a late frame changed the chunk)
   e.g. the example gives chunks 0 and 1 (frames 0..599, 600..1199); frames 1200..1399 stay pending until a frame of chunk 3 arrives.
 HOW: A chunk counts as complete once a frame of a LATER chunk exists, because frames arrive in order (recovered gaps can still change it, and the conditional PUT then replaces the earlier version, never adds a second).
   Idempotent by construction: re-running the worker, restarting it, or running two copies sends the same conditional requests, and the server keeps one Device and one Observation per chunk. A fingerprint per chunk avoids resending unchanged data.
@@ -76,11 +76,14 @@ class FhirClient:
 
 class Worker:
     """frames_for(node) -> (record_id, {frame: [counts]}, time of the first frame) or None; meta_for(record_id) -> the record's fs/gain/baseline/channels;
-    consent_ok(node) -> True / False / None (registry semantics); client has .send(transaction)."""
+    consent_ok(node) -> True / False / None (registry semantics); client has .send(transaction).
+    since_for(node) -> when the node's current subject was assigned (earlier frames belong to someone else and are never sent); subject_for(node) -> that subject's id.
+    consent_ok, since_for and subject_for are asked AGAIN right before every transaction, so a withdrawal or a reassignment that happens while a round is running stops the very next send."""
 
-    def __init__(self, frames_for, meta_for, consent_ok, client, chunk_frames: int = CHUNK_FRAMES, since_for=None):
+    def __init__(self, frames_for, meta_for, consent_ok, client, chunk_frames: int = CHUNK_FRAMES, since_for=None, subject_for=None):
         self._frames, self._meta, self._consent, self._client, self._n = frames_for, meta_for, consent_ok, client, chunk_frames
-        self._since_for = since_for or (lambda node: None)  # when the node's current subject was assigned: earlier frames belong to someone else and are never sent
+        self._since_for = since_for or (lambda node: None)
+        self._subject_for = subject_for or (lambda node: "-")
         self._since_seen: dict[str, object] = {}
         self._sent: dict[str, str] = {}  # observation key -> fingerprint of what the server has
 
@@ -97,10 +100,11 @@ class Worker:
         record_id, frames, start = got
         src = self._meta(record_id)
         fs = float(src["fs"])
-        since = self._since_for(node)
-        if self._since_seen.get(node, since) != since:  # the node was given to another subject: forget what was sent for the old one
+        since, subject = self._since_for(node), self._subject_for(node)
+        period = (since, subject)
+        if self._since_seen.get(node, period) != period:  # the node was given to another subject: forget what was sent for the old one
             self._sent = {k: v for k, v in self._sent.items() if not k.startswith(node + "/")}
-        self._since_seen[node] = since
+        self._since_seen[node] = period
         first = min(frames)  # `start` is the time of THIS frame
         if since is not None:
             frames = {i: c for i, c in frames.items() if start + timedelta(seconds=(i - first) / fs) >= since}
@@ -116,12 +120,16 @@ class Worker:
                 out["pending"] += len(chunks[k])
                 continue
             part = chunks[k]
-            key = f"{node}/{record_id}/{k}"
+            key = f"{node}/{subject}/{record_id}/{k}"  # the SUBJECT is part of the key: a conditional PUT can never replace a window that was written for another subject
             print_ = hashlib.sha256(json.dumps(sorted(part.items())).encode()).hexdigest()
             if self._sent.get(key) == print_:
                 out["unchanged"] += 1
                 continue
             t0 = start + timedelta(seconds=(min(part) - first) / fs)
+            if self._consent(node) is not True or self._since_for(node) != since or self._subject_for(node) != subject:  # re-read now, not at the start of the round
+                log.warning("%s: consent or subject changed while syncing; nothing more is sent this round", node)
+                out["skipped"] = "changed"
+                return out
             try:
                 self._client.send(transaction(bundle(part, src, node, f"record {record_id}", record_id, t0), node, key))
             except FhirError as e:
@@ -131,6 +139,14 @@ class Worker:
             self._sent[key] = print_
             out["sent"] += 1
         return out
+
+
+def node_state(dsn: str, node: str) -> tuple:
+    """(consent_ok, subject id, subject_since) of one node, read NOW from the registry. consent is None for a node with no subject (or an unknown node)."""
+    import psycopg
+    with psycopg.connect(dsn) as c:
+        r = c.execute("SELECT s.consent_status = 'active', n.subject_id, n.subject_since FROM registry.node n LEFT JOIN registry.subject s ON s.id = n.subject_id WHERE n.id = %s", (node,)).fetchone()
+    return tuple(r) if r else (None, None, None)
 
 
 def load_records(path) -> "callable":
@@ -167,9 +183,12 @@ def main() -> None:
         except SystemExit:  # query_frames says "no data" this way
             return None
 
+    def state(node):
+        return node_state(dsn, node)
+
     def nodes():
         with psycopg.connect(dsn) as c:
-            return [(r[0], r[1], r[2]) for r in c.execute("SELECT n.id, s.consent_status = 'active', n.subject_since FROM registry.node n LEFT JOIN registry.subject s ON s.id = n.subject_id ORDER BY n.id")]
+            return [r[0] for r in c.execute("SELECT id FROM registry.node ORDER BY id")]
 
     def meta_from_npz(record_id):
         d = Path(a.converted_dir)
@@ -178,16 +197,11 @@ def main() -> None:
 
     meta_for = load_records(a.records_file) if a.records_file else meta_from_npz
 
-    consent, since = {}, {}
-    w = Worker(frames_for, meta_for, lambda n: consent.get(n), client, since_for=lambda n: since.get(n))
+    w = Worker(frames_for, meta_for, lambda n: state(n)[0], client, since_for=lambda n: state(n)[2], subject_for=lambda n: state(n)[1])
     logging.basicConfig(level=logging.INFO)
     while True:
         try:
-            consent.clear()
-            since.clear()
-            for n, ok, s in nodes():
-                consent[n], since[n] = ok, s  # a node with no subject has ok None and is not exported
-            for n in consent:
+            for n in nodes():  # a node with no subject has consent None and is not exported
                 try:
                     log.info("%s: %s", n, w.sync_node(n))
                 except KeyError as e:  # a record the metadata file does not know: this node is skipped and the others still sync

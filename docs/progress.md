@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-11-04: second review of the sync worker: two more valid findings, fixed
+
+- **Key collision across subjects (MEDIUM):** the Observation key was `<node>/<record>/<chunk>`. A node handed to another subject (or the same record played again) produced the same key, and the conditional PUT would have REPLACED the first subject's window with the second's. The key is now `<node>/<subject>/<record>/<chunk>` (docs/interface-spec.md updated; the facade's per-node check is unchanged). Test: after a subject change the first subject's windows are byte-identical and the new ones have their own keys; the Device stays one.
+- **Stale snapshot (MEDIUM):** the service read consent and `subject_since` once per round, so a withdrawal could be ignored for up to a round (a minute) and a reassignment mid-round used the old subject. The worker now asks consent, `subject_since` and the subject again right before EVERY transaction (`node_state()`, one small query, tested on a real PostgreSQL) and stops the round with `skipped: changed` if any differs. Tests: a withdrawal after the first send stops the second; a subject change between the start and the first send stops it.
+- Remaining window, stated: the few milliseconds between that last read and HAPI accepting the request. The consent check cannot be atomic with a call to another server; withdrawal never recalls what was already sent (docs/security.md).
+- Existing windows written under the old key form (none outside the local test stacks) would not be replaced, only duplicated under the new key.
+
 ## 2026-11-04: review finding on node reassignment (valid): a node moved to another subject must not carry the first subject's data
 
 - **Finding (MEDIUM):** `assign_node` could point a node at a different subject at any time. The FHIR worker then exports the node's last 24 hours (and the facade shows what HAPI holds for the node) under the NEW subject's consent, although those frames were recorded for the old one: a consent bypass by misattribution.

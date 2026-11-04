@@ -74,7 +74,7 @@ def test_only_complete_chunks_are_sent_and_the_rest_is_pending():
     assert (r["sent"], r["pending"], r["skipped"]) == (3, 5, None)
     assert len(server.of("Observation")) == 3 and len(server.of("Device")) == 1, "one Device however many chunks"
     keys = sorted(o["identifier"][0]["value"] for o in server.of("Observation"))
-    assert keys == ["EHG-1/0/0", "EHG-1/0/1", "EHG-1/0/2"]
+    assert keys == ["EHG-1/-/0/0", "EHG-1/-/0/1", "EHG-1/-/0/2"]
 
 
 def test_repeating_the_worker_sends_nothing_new_and_a_restarted_worker_creates_no_duplicates():
@@ -91,18 +91,18 @@ def test_a_late_recovered_frame_replaces_the_chunk_and_never_adds_a_second_one()
     frames = {i: [i, -i] for i in range(35) if i != 4}  # frame 4 never arrived
     w, server, data = make(frames=frames)
     w.sync_node("EHG-1")
-    first = next(o for o in server.of("Observation") if o["identifier"][0]["value"] == "EHG-1/0/0")
+    first = next(o for o in server.of("Observation") if o["identifier"][0]["value"] == "EHG-1/-/0/0")
     assert first["component"][0]["valueSampledData"]["data"].split()[4] == "E"
     data["frames"][4] = [4, -4]  # RESEND recovers it
     assert w.sync_node("EHG-1")["sent"] == 1, "only the changed chunk is sent again"
-    obs = [o for o in server.of("Observation") if o["identifier"][0]["value"] == "EHG-1/0/0"]
+    obs = [o for o in server.of("Observation") if o["identifier"][0]["value"] == "EHG-1/-/0/0"]
     assert len(obs) == 1 and obs[0]["component"][0]["valueSampledData"]["data"].split()[4] == "4"
 
 
 def test_samples_stay_raw_counts_and_chunk_times_follow_the_frame_index():
     w, server, _ = make()
     w.sync_node("EHG-1")
-    second = next(o for o in server.of("Observation") if o["identifier"][0]["value"] == "EHG-1/0/1")
+    second = next(o for o in server.of("Observation") if o["identifier"][0]["value"] == "EHG-1/-/0/1")
     assert [int(v) for v in second["component"][0]["valueSampledData"]["data"].split()] == list(range(10, 20)), "raw int16 counts, unscaled (H4)"
     assert second["effectivePeriod"]["start"] == "2026-11-03T09:00:00.500000+00:00", "frame 10 at 20 Hz is 0.5 s after frame 0"
 
@@ -232,7 +232,7 @@ def test_only_frames_from_the_assignment_time_on_are_sent():
     w, server, _ = make_since(T0 + timedelta(seconds=0.5))   # 20 Hz: frame 10 is the first at or after 0.5 s; chunk 0 (frames 0..9) belongs to the previous subject
     r = w.sync_node("EHG-1")
     assert r["skipped"] is None
-    assert sorted(o["identifier"][0]["value"] for o in server.of("Observation")) == ["EHG-1/0/1", "EHG-1/0/2"], "chunk 0 is never sent; chunk 3 is still filling"
+    assert sorted(o["identifier"][0]["value"] for o in server.of("Observation")) == ["EHG-1/-/0/1", "EHG-1/-/0/2"], "chunk 0 is never sent; chunk 3 is still filling"
     values = [int(v) for o in server.of("Observation") for c in o["component"][:1] for v in c["valueSampledData"]["data"].split() if v != "E"]
     assert min(values) == 10 and max(values) == 29
 
@@ -259,4 +259,62 @@ def test_reassignment_forgets_what_was_sent_for_the_old_subject():
     assert any(k.startswith("EHG-1/") for k in w._sent)
     since["v"] = T0 + timedelta(seconds=0.5)
     w.sync_node("EHG-1")
-    assert all(not k.startswith("EHG-1/0/0") for k in w._sent), "chunk 0 (frames 0..9) is entirely before the assignment and is no longer remembered as sent"
+    assert all(not k.startswith("EHG-1/-/0/0") for k in w._sent), "chunk 0 (frames 0..9) is entirely before the assignment and is no longer remembered as sent"
+
+
+# ---- review findings, 2026-11-04: keys must not collide across subjects, and consent is re-read right before every send
+
+def test_a_node_handed_to_another_subject_never_overwrites_the_first_subjects_windows():
+    """The same node, the same record and the same chunk number now give DIFFERENT observation keys for different subjects, so a conditional PUT cannot replace the first subject's window."""
+    server = FakeFhir()
+    frames = {i: [i, -i] for i in range(35)}
+    state = {"subject": "s1", "since": None}
+    w = Worker(lambda n: (0, frames, T0), lambda rid: SRC, lambda n: True, FhirClient("http://fhir/fhir", http=httpx.Client(transport=httpx.MockTransport(server.handle))),
+               chunk_frames=10, since_for=lambda n: state["since"], subject_for=lambda n: state["subject"])
+    w.sync_node("EHG-1")
+    before = {o["identifier"][0]["value"]: json.dumps(o["component"], sort_keys=True) for o in server.of("Observation")}
+    assert sorted(before) == ["EHG-1/s1/0/0", "EHG-1/s1/0/1", "EHG-1/s1/0/2"]
+    state.update(subject="s2", since=T0)       # the same frames now count for the next subject (a new session of the same record)
+    w.sync_node("EHG-1")
+    after = {o["identifier"][0]["value"]: json.dumps(o["component"], sort_keys=True) for o in server.of("Observation")}
+    assert all(after[k] == v for k, v in before.items()), "the first subject's windows are untouched"
+    assert sorted(set(after) - set(before)) == ["EHG-1/s2/0/0", "EHG-1/s2/0/1", "EHG-1/s2/0/2"]
+    assert len(server.of("Device")) == 1, "the Device is the node, shared by both"
+
+
+def test_a_withdrawal_during_a_round_stops_the_next_send():
+    """Consent is not read once at the start of the round: it is asked again before each transaction (a stale snapshot would send up to a whole round after a withdrawal)."""
+    server, answers = FakeFhir(), iter([True, True, False, False, False])   # start of the round, first send, then withdrawn
+    w = Worker(lambda n: (0, {i: [i, -i] for i in range(35)}, T0), lambda rid: SRC, lambda n: next(answers),
+               FhirClient("http://fhir/fhir", http=httpx.Client(transport=httpx.MockTransport(server.handle))), chunk_frames=10)
+    r = w.sync_node("EHG-1")
+    assert r["sent"] == 1 and r["skipped"] == "changed" and len(server.of("Observation")) == 1, "chunk 0 went out, then the withdrawal stopped chunks 1 and 2"
+
+
+def test_a_subject_change_during_a_round_also_stops_the_send():
+    server, calls = FakeFhir(), {"n": 0}
+
+    def subject(node):
+        calls["n"] += 1
+        return "s1" if calls["n"] <= 1 else "s2"        # read once at the start of the round, different when asked again before the first send
+    w = Worker(lambda n: (0, {i: [i, -i] for i in range(35)}, T0), lambda rid: SRC, lambda n: True,
+               FhirClient("http://fhir/fhir", http=httpx.Client(transport=httpx.MockTransport(server.handle))), chunk_frames=10, subject_for=subject)
+    r = w.sync_node("EHG-1")
+    assert r["skipped"] == "changed" and server.posts == 0
+
+
+def test_node_state_reads_the_registry_now(pg_url):
+    """The query the service uses before every send, on a real PostgreSQL."""
+    import psycopg
+    from backend.db import migrate
+    from backend.fhir_sync.worker import node_state
+    migrate.main(["upgrade", "0002", "--url", pg_url])
+    dsn = pg_url.replace("+psycopg", "")
+    with psycopg.connect(dsn) as c:
+        c.execute("INSERT INTO registry.subject (id, pseudonym, source_dataset, consent_status) VALUES ('s1', 'p', 'd', 'active')")
+        c.execute("INSERT INTO registry.node (id, subject_id, subject_since) VALUES ('EHG-1', 's1', '2026-11-03T12:00:00+00:00'), ('EHG-2', NULL, NULL)")
+    assert node_state(dsn, "EHG-1")[:2] == (True, "s1") and node_state(dsn, "EHG-1")[2] == datetime(2026, 11, 3, 12, tzinfo=timezone.utc)  # an instant, whatever zone the server prints
+    assert node_state(dsn, "EHG-2") == (None, None, None) and node_state(dsn, "ghost") == (None, None, None)
+    with psycopg.connect(dsn) as c:
+        c.execute("UPDATE registry.subject SET consent_status = 'withdrawn'")
+    assert node_state(dsn, "EHG-1")[0] is False, "a withdrawal is visible on the very next read"
