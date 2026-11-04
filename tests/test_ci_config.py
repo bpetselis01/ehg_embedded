@@ -34,10 +34,10 @@ def test_the_security_workflow_has_read_only_permissions_and_the_authorship_chec
     assert "co-authored-by" in (ROOT / ".github/workflows/tests.yml").read_text()
 
 
-def test_the_scripts_checked_by_shellcheck_exist():
+def test_shellcheck_covers_every_tracked_script_at_warning_level():
     cmd = next(s["run"] for s in load(ROOT / ".github/workflows/security.yml")["jobs"]["shellcheck"]["steps"] if "run" in s)
-    for path in cmd.split()[3:]:
-        assert (ROOT / path).is_file(), path
+    assert "git ls-files '*.sh'" in cmd, "a new script must be checked without editing the workflow"
+    assert "-S warning" in cmd
 
 
 def test_dependabot_covers_every_pinned_ecosystem():
