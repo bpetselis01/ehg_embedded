@@ -121,6 +121,17 @@ class Worker:
         return out
 
 
+def load_records(path) -> "callable":
+    """meta_for(record_id) from the JSON file tools/export_record_meta.py writes (fs, gain, baseline, channels per record). An unknown record is a KeyError the caller reports; nothing is guessed."""
+    import numpy as np
+    table = json.loads(Path(path).read_text())
+
+    def meta_for(record_id):
+        r = table[str(record_id)]
+        return {"fs": np.float64(r["fs"]), "gain": np.array(r["gain"], dtype=float), "baseline": np.array(r["baseline"], dtype=int), "channels": np.array(r["channels"])}
+    return meta_for
+
+
 def main() -> None:
     """Run forever: every --interval seconds, sync every registered node."""
     import numpy as np
@@ -129,9 +140,10 @@ def main() -> None:
     from eval.backend_client import query_frames
 
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--interval", type=float, default=60)
-    ap.add_argument("--since", default="24h")
+    ap.add_argument("--interval", type=float, default=float(os.environ.get("FHIR_SYNC_INTERVAL", 60)))
+    ap.add_argument("--since", default=os.environ.get("FHIR_SYNC_SINCE", "24h"))
     ap.add_argument("--converted-dir", default="data/converted/tpehgdb", help="folder with manifest.json and the .npz files (gain, baseline, channel names)")
+    ap.add_argument("--records-file", default=os.environ.get("FHIR_RECORDS_FILE"), help="JSON from tools/export_record_meta.py; used INSTEAD of --converted-dir (this is how the cloud service runs)")
     a = ap.parse_args()
     dsn = os.environ["EHG_DB_DSN"]
     os.environ.setdefault("EHG_TS_DSN", dsn)  # eval/backend_client.py reads the timescale store from this name
@@ -147,10 +159,12 @@ def main() -> None:
         with psycopg.connect(dsn) as c:
             return [(r[0], r[1]) for r in c.execute("SELECT n.id, s.consent_status = 'active' FROM registry.node n LEFT JOIN registry.subject s ON s.id = n.subject_id ORDER BY n.id")]
 
-    def meta_for(record_id):
+    def meta_from_npz(record_id):
         d = Path(a.converted_dir)
         manifest = json.loads((d / "manifest.json").read_text())
         return np.load(d / next(e["file"] for e in manifest if e["record_id"] == record_id))  # same lookup as tools/convert.py:source_file, without its wfdb import
+
+    meta_for = load_records(a.records_file) if a.records_file else meta_from_npz
 
     consent = {}
     w = Worker(frames_for, meta_for, lambda n: consent.get(n), client)
@@ -160,7 +174,10 @@ def main() -> None:
             consent.clear()
             consent.update({n: ok for n, ok in nodes()})  # a node with no subject has ok None and is not exported
             for n in consent:
-                log.info("%s: %s", n, w.sync_node(n))
+                try:
+                    log.info("%s: %s", n, w.sync_node(n))
+                except KeyError as e:  # a record the metadata file does not know: this node is skipped and the others still sync
+                    log.error("%s: no signal metadata for record %s (run tools/export_record_meta.py)", n, e)
         except psycopg.Error as e:
             log.error("registry unavailable: %s", type(e).__name__)
         time.sleep(a.interval)

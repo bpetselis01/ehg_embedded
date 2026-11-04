@@ -24,12 +24,12 @@ UPDATE_SH = DEPLOY / "update.sh"
 INTEGRATION = os.environ.get("EHG_INTEGRATION") == "1"
 
 # Services that arrive with later units (their config does not exist yet). Their memory is reserved NOW so the finished stack is known to fit (MiB).
-RESERVED_MIB = {"fhir-sync (Unit 9; not in the compose file yet: it needs the recordings' gain and baseline)": 64}
+RESERVED_MIB: dict[str, int] = {}  # every planned service is in the compose file now; kept so a future unit can reserve memory before its config exists
 BUDGET_MIB = int(9.5 * 1024)  # the whole-stack ceiling: ~9.5 GB of the 12 GB, leaving the OS, Docker and headroom
-EXPECTED_SERVICES = {"caddy", "mosquitto", "nats", "postgres", "prometheus", "alertmanager", "loki", "grafana", "alloy", "node-exporter", "cadvisor", "postgres-exporter", "nats-exporter",
+EXPECTED_SERVICES = {"caddy", "mosquitto", "nats", "postgres", "prometheus", "alertmanager", "loki", "grafana", "alloy", "node-exporter", "cadvisor", "postgres-exporter", "nats-exporter", "fhir-sync",
                      "migrate", "bridge", "ts-writer", "triage", "keycloak", "hapi"}
 SECRET_ENV = {"EHG_DOMAIN": "x.example", "POSTGRES_PASSWORD": "x", "EHG_DB_PASSWORD": "x", "HAPI_DB_PASSWORD": "x", "KEYCLOAK_DB_PASSWORD": "x",
-              "EXPORTER_DB_PASSWORD": "x", "TRIAGE_DB_PASSWORD": "x", "ENROLL_DB_PASSWORD": "x", "GRAFANA_ADMIN_PASSWORD": "x", "KEYCLOAK_ADMIN_PASSWORD": "x",
+              "EXPORTER_DB_PASSWORD": "x", "TRIAGE_DB_PASSWORD": "x", "ENROLL_DB_PASSWORD": "x", "FHIR_DB_PASSWORD": "x", "GRAFANA_ADMIN_PASSWORD": "x", "KEYCLOAK_ADMIN_PASSWORD": "x",
               "TRIAGE_API_CLIENT_SECRET": "x", "ENROLL_API_CLIENT_SECRET": "x", "FHIR_SYNC_CLIENT_SECRET": "x"}
 
 

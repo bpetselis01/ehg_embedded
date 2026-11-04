@@ -6,11 +6,16 @@ import json
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, unquote, urlparse
 
+from pathlib import Path
+
 import httpx
 import numpy as np
+import pytest
 
 from backend.fhir_sync.worker import NODE_SYSTEM, OBS_SYSTEM, FhirClient, FhirError, Worker, transaction
 from tools.fhir_export import bundle
+
+ROOT = Path(__file__).parents[1]
 
 SRC = {"fs": np.float64(20.0), "gain": np.array([13107.0, 100.0]), "baseline": np.array([0, 5]), "channels": np.array(["1", "2"])}
 T0 = datetime(2026, 11, 3, 9, 0, tzinfo=timezone.utc)
@@ -180,3 +185,33 @@ def test_resources_validate_as_fhir_r5_models():
     o = Observation.model_validate(obs["resource"])
     sd = o.component[0].valueSampledData
     assert sd.data == "1 E 5" and sd.dimensions == 1 and float(sd.interval) == 50.0
+
+
+# ---- running as a service: metadata from the small JSON file instead of the .npz recordings
+
+def test_load_records_gives_what_bundle_needs(tmp_path):
+    import json
+    from backend.fhir_sync.worker import load_records
+    f = tmp_path / "records.json"
+    f.write_text(json.dumps({"0": {"record": "tpehg1007", "fs": 20.0, "gain": [13107.0], "baseline": [0], "channels": ["1"]}}))
+    meta = load_records(f)(0)
+    assert float(meta["fs"]) == 20.0 and list(meta["channels"]) == ["1"] and float(meta["gain"][0]) == 13107.0 and int(meta["baseline"][0]) == 0
+    with pytest.raises(KeyError):
+        load_records(f)(7)  # unknown record: reported by the caller, never guessed
+
+
+def test_the_committed_metadata_matches_the_converted_data_when_it_is_present():
+    from tools import export_record_meta
+    data = ROOT / "data/converted/tpehgdb/manifest.json"
+    if not data.exists():
+        pytest.skip("data/converted is not present (README step 0)")
+    assert export_record_meta.main(["--check"]) == 0
+
+
+def test_the_committed_metadata_is_well_formed_and_holds_no_samples():
+    import json
+    table = json.loads((ROOT / "deploy/fhir/records.json").read_text())
+    assert len(table) >= 1
+    for rid, r in table.items():
+        assert rid.isdigit() and set(r) == {"record", "fs", "gain", "baseline", "channels"}, rid
+        assert len(r["gain"]) == len(r["baseline"]) == len(r["channels"]) >= 1 and r["fs"] > 0

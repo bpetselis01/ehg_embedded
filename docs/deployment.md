@@ -143,7 +143,7 @@ Your gateway certificate stays on the Mac: `~/ehg-pki/clients/ehg-gw-01.{crt,key
 ### 13. Start the edge subset (Caddy and Mosquitto only)
 
 Since Unit 11b the compose file also holds the Python services (`migrate`, `bridge`, `ts-writer`, `triage`), Keycloak and HAPI. **They have never been started anywhere**, so this runbook still brings up only the edge first; start the rest only after step 14 works, one service at a time
-(`update.sh --services "postgres nats"`, then `"migrate ts-writer"`, `bridge`, `triage`, and last `keycloak hapi`, which together need about 3.7 GB), and expect first-start fixes. Optional: the `enrol` profile (step-ca + enrolment API: run `deploy/step-ca/init-offline.sh ~/ehg-ca` on your computer, copy `~/ehg-ca/vm` to `/opt/ehg/step-ca` with `chown -R 1000:1000`, append `~/ehg-ca/env.txt` to `/opt/ehg/etc/site.env`, keep `~/ehg-ca/offline` OFFLINE; the broker must then trust `intermediate_ca.crt` + `root_ca.crt` for gateway certificates). Not in the file at all: the FHIR sync worker (`deploy/README.md`).
+(`update.sh --services "postgres nats"`, then `"migrate ts-writer"`, `bridge`, `triage`, and last `keycloak hapi`, which together need about 3.7 GB), and expect first-start fixes. Optional: the `enrol` profile (step-ca + enrolment API: run `deploy/step-ca/init-offline.sh ~/ehg-ca` on your computer, copy `~/ehg-ca/vm` to `/opt/ehg/step-ca` with `chown -R 1000:1000`, append `~/ehg-ca/env.txt` to `/opt/ehg/etc/site.env`, keep `~/ehg-ca/offline` OFFLINE; the broker must then trust `intermediate_ca.crt` + `root_ca.crt` for gateway certificates).
 
 ```sh
 sudo -H -u ehg /opt/ehg/repo/deploy/update.sh --bootstrap --services "caddy mosquitto"

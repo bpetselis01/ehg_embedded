@@ -2,9 +2,9 @@
 # Run (on the VM, by deploy/update.sh): docker compose --env-file /run/ehg/runtime.env --env-file /opt/ehg/etc/site.env -f deploy/compose/docker-compose.cloud.yml up -d
 #
 # PURPOSE: The cloud stack as one file: edge (Caddy), MQTT broker with mTLS, NATS JetStream bus, PostgreSQL + TimescaleDB, and the observability stack.
-#   The private CA and the enrolment API are in the optional profile "enrol" (make the CA first with deploy/step-ca/init-offline.sh). The FHIR sync worker is NOT in it: it needs the converted recordings'
-#   gain and baseline, which are not on the VM (64 MiB are reserved for it in tests/test_deploy_assets.py).
-# INPUT: /run/ehg/runtime.env (decrypted secrets: POSTGRES_PASSWORD, EHG_DB_PASSWORD, HAPI_DB_PASSWORD, KEYCLOAK_DB_PASSWORD, EXPORTER_DB_PASSWORD, TRIAGE_DB_PASSWORD, ENROLL_DB_PASSWORD,
+#   The private CA and the enrolment API are in the optional profile "enrol" (make the CA first with deploy/step-ca/init-offline.sh). The FHIR sync worker (`fhir-sync`) reads each record's gain and baseline from deploy/fhir/records.json
+#   (tools/export_record_meta.py), exports only nodes whose subject has ACTIVE consent, and does nothing until a subject is registered.
+# INPUT: /run/ehg/runtime.env (decrypted secrets: POSTGRES_PASSWORD, EHG_DB_PASSWORD, HAPI_DB_PASSWORD, KEYCLOAK_DB_PASSWORD, EXPORTER_DB_PASSWORD, TRIAGE_DB_PASSWORD, ENROLL_DB_PASSWORD, FHIR_DB_PASSWORD,
 #   KEYCLOAK_ADMIN_PASSWORD, TRIAGE_API_CLIENT_SECRET, ENROLL_API_CLIENT_SECRET, FHIR_SYNC_CLIENT_SECRET, GRAFANA_ADMIN_PASSWORD; generate with openssl rand -hex 24, because passwords go into URLs and connection strings), /opt/ehg/etc/site.env (EHG_DOMAIN), certificates in EHG_PKI_DIR (default /opt/ehg/pki: ca-chain.crt, broker.crt, broker.key, ca.crl).
 #   A missing secret stops `up` with a message naming it (the "?" in the variable).
 # OUTPUT: the host publishes ONLY 80, 443 (Caddy) and 8883 (Mosquitto). Postgres, NATS, Grafana, Prometheus, Loki are on the private Docker network only.
@@ -119,6 +119,7 @@ services:
       EXPORTER_DB_PASSWORD: ${EXPORTER_DB_PASSWORD:?EXPORTER_DB_PASSWORD is not set}
       TRIAGE_DB_PASSWORD: ${TRIAGE_DB_PASSWORD:?TRIAGE_DB_PASSWORD is not set}
       ENROLL_DB_PASSWORD: ${ENROLL_DB_PASSWORD:?ENROLL_DB_PASSWORD is not set}
+      FHIR_DB_PASSWORD: ${FHIR_DB_PASSWORD:?FHIR_DB_PASSWORD is not set}
     volumes:
       - ../postgres/10-init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro
       - pg-data:/home/postgres/pgdata
@@ -405,6 +406,25 @@ services:
     mem_limit: 1360m
     labels:
       ehg.healthcheck: "none: the right probe (the management port, /health/ready) was not verified and a wrong one would roll back every release; sign-in itself is the check"
+
+  fhir-sync:
+    <<: *python
+    command: ["python", "-m", "backend.fhir_sync.worker"]
+    environment:
+      EHG_DB_DSN: host=postgres port=5432 dbname=ehg user=ehg_fhir password=${FHIR_DB_PASSWORD:?FHIR_DB_PASSWORD is not set}
+      FHIR_BASE_URL: http://hapi:8080/fhir
+      FHIR_RECORDS_FILE: /records.json
+      FHIR_SYNC_INTERVAL: "60"
+    volumes:
+      - ../fhir/records.json:/records.json:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      hapi:
+        condition: service_started
+    mem_limit: 64m
+    labels:
+      ehg.healthcheck: "none: no HTTP port; it logs one line per node per round (Loki), and exports nothing until a subject with ACTIVE consent is registered for a node (backend/fhir_sync/worker.py)"
 
   hapi:
     <<: *service

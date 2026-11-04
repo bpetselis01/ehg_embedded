@@ -166,12 +166,12 @@ def test_unsafe_names_and_options_are_refused(tmp_path):
 def test_the_init_script_runs_on_a_real_server_and_tolerates_a_missing_timescaledb(init_cluster):
     """deploy/postgres/10-init-databases.sh against a plain PostgreSQL 14: five roles, three databases, and the extension step only prints a notice (this server has no TimescaleDB)."""
     host, port = init_cluster
-    env = env_for(host, port, EHG_DB_PASSWORD="a", HAPI_DB_PASSWORD="b", KEYCLOAK_DB_PASSWORD="c", EXPORTER_DB_PASSWORD="d", TRIAGE_DB_PASSWORD="e q'uote", ENROLL_DB_PASSWORD="f")
+    env = env_for(host, port, EHG_DB_PASSWORD="a", HAPI_DB_PASSWORD="b", KEYCLOAK_DB_PASSWORD="c", EXPORTER_DB_PASSWORD="d", TRIAGE_DB_PASSWORD="e q'uote", ENROLL_DB_PASSWORD="f", FHIR_DB_PASSWORD="g")
     r = sh(ROOT / "deploy/postgres/10-init-databases.sh", env=env)
     assert r.returncode == 0, r.stdout + r.stderr
     assert "timescaledb could not be created here" in r.stderr, "the tolerant path ran (no TimescaleDB in this server)"
     with psycopg.connect(f"host={host} port={port} user=postgres dbname=postgres") as c:
-        assert {x[0] for x in c.execute("SELECT rolname FROM pg_roles WHERE rolname IN ('ehg','hapi','keycloak','ehg_exporter','ehg_triage','ehg_enroll')")} == {"ehg", "hapi", "keycloak", "ehg_exporter", "ehg_triage", "ehg_enroll"}
+        assert {x[0] for x in c.execute("SELECT rolname FROM pg_roles WHERE rolname IN ('ehg','hapi','keycloak','ehg_exporter','ehg_triage','ehg_enroll','ehg_fhir')")} == {"ehg", "hapi", "keycloak", "ehg_exporter", "ehg_triage", "ehg_enroll", "ehg_fhir"}
         assert {x[0] for x in c.execute("SELECT datname FROM pg_database WHERE datname IN ('ehg','hapi','keycloak')")} == {"ehg", "hapi", "keycloak"}
         assert c.execute("SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = 'ehg'").fetchone()[0] == "ehg"
 

@@ -1,5 +1,17 @@
 # Progress log
 
+## 2026-11-04: registry command line for subjects, consent and node assignment
+
+- `backend/triage/registry_cli.py` (`subject add`, `consent <subject> <none|active|withdrawn>`, `node <id> --subject/--gateway`, `list`) over new audited `Registry` methods (`add_subject`, `set_consent`, `assign_node`). Every change appends to the hash-chained audit log with actor `cli:<user>`, role `admin`, and (for consent) the old and new value. Ids must be plain ids; unknown subject or gateway, a duplicate id and a non-state like "maybe" are refused with nothing changed. 5 tests on a real PostgreSQL, plus the real run: inside the triage container of the 19-service stack the three commands changed the registry and left three audit rows. This closes the "SQL is the only way" gap noted for `fhir-sync`.
+- A subject is a CODE (the pseudonym), never a name; the tool cannot enforce that, and the docstring says so. It is a data-model demonstration, not a legal consent process.
+
+## 2026-11-04: FHIR sync worker as a compose service (`fhir-sync`), run end to end
+
+- The worker no longer needs `data/converted`: `tools/export_record_meta.py` writes each record's fs, gain, baseline and channel names (the public PhysioNet headers, 56 KB, no samples) into `deploy/fhir/records.json`, which the service mounts (`--records-file` / `FHIR_RECORDS_FILE`; `--check` and a test keep it equal to the data when the data is present). Settings come from the environment (`FHIR_SYNC_INTERVAL`, `FHIR_SYNC_SINCE`); an unknown record skips that node instead of stopping the loop.
+- Its own database login **`ehg_fhir`** (secret `FHIR_DB_PASSWORD`, migration 0002): SELECT only on `registry.node`, `registry.subject`, `ehg_pkt`, `ehg_raw`; a test shows it cannot read gateways, the audit log or alerts, nor write anything. The service is in the default stack (19 services); with no registered subject it exports nothing.
+- **Run on the clean stack:** a subject with ACTIVE consent and a node were inserted by SQL (nothing creates them yet: no API for subjects/consent exists), `gateway --simulate 1` ran over mTLS for 140 s, and the worker sent 4 complete 30-second windows to HAPI; the consent-checked facade returned the Observations and the Device to a Keycloak viewer. **Withdrawing consent** stopped both: the worker logged `skipped: consent`, the facade answered 403.
+- Subjects and consent are now managed with `backend/triage/registry_cli.py` (next entry). Not done: the worker has no metrics endpoint (one log line per node per round).
+
 ## 2026-11-04: NATS exporter and two alerts; a flaky alert test fixed
 
 - **`nats-exporter`** (natsio/prometheus-nats-exporter 0.17.3, pinned by digest, arm64) in the cloud compose file and a Prometheus job `nats`; run on the local stack, target up. Two new alerts with promtool tests: `EhgNatsStorageHigh` (JetStream file storage above 80 % of `max_file_store`, ticket) and `EhgNatsSlowConsumers` (a client dropped as slow, ticket). `EhgTargetDown` now also covers NATS itself. 14 alerts, 17 promtool cases. A Mosquitto exporter was not added (its metrics come from `$SYS` topics over an authenticated TLS session: more moving parts than the value).

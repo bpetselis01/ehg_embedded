@@ -7,7 +7,7 @@
 - Branch / last commit: feat/enterprise-topology, see `git log -1`. Nothing pushed. Tag `baseline-pre-enterprise` marks the start.
 
 ## State of the repo
-- Tests: `uv run pytest -q` = 835 passed, 16 skipped. With `EHG_INTEGRATION=1 TF_PLUGIN_CACHE_DIR=<cache> SSL_CERT_FILE=/etc/ssl/cert.pem` = 777 passed, 3 skipped (a real Mosquitto broker, the Terraform validate against the real provider schema, `swift test`); skipped for lack of the tool: Caddy, TimescaleDB, shellcheck, and the real HAPI test (needs a running Docker daemon).
+- Tests: `uv run pytest -q` = 844 passed, 16 skipped. With `EHG_INTEGRATION=1 TF_PLUGIN_CACHE_DIR=<cache> SSL_CERT_FILE=/etc/ssl/cert.pem` = 777 passed, 3 skipped (a real Mosquitto broker, the Terraform validate against the real provider schema, `swift test`); skipped for lack of the tool: Caddy, TimescaleDB, shellcheck, and the real HAPI test (needs a running Docker daemon).
 - Uncommitted changes: none once the last commit is made.
 - Docker / compose: Byron started Docker Desktop on 2026-11-04 (pulls need `DOCKER_CONFIG=/tmp/dockercfg-nocreds` with `cli-plugins` linked, see progress.md). The 18-service cloud stack was started locally once and is stopped again; named volumes remain (remove with `docker volume ls` if the disk matters). Never restart Docker Desktop (another project, Supabase, lives there). `docker compose config` resolves the default stack (4 services), the `platform` profile (10) and the cloud file (18). Nothing has ever been started.
 - Background processes or runs: none.
@@ -26,7 +26,7 @@
 
 ## Next three actions
 1. Read the report, then decide: apply the runbook (cloud), or start Docker for real-server checks. Until one of these happens nothing more can be verified here.
-2. Known non-cloud gaps worth doing if asked (each is written down in progress.md): the FHIR sync worker is not in the cloud compose file (step-ca and the enrolment API are, as the optional profile `enrol`, run end to end locally); Alertmanager receiver; a Mosquitto exporter (NATS has one now).
+2. Known non-cloud gaps worth doing if asked (each is written down in progress.md): every planned service is now in the cloud compose file (step-ca and the enrolment API as the optional profile `enrol`; the FHIR sync worker as `fhir-sync`), all run end to end locally; Alertmanager receiver; a Mosquitto exporter (NATS has one now).
 3. After any change: `uv run pytest -q && git add -A && git commit` (the `&&` matters); add new file names to docs/codebase-guide.md; update progress.md, security.md and licences.md; treat automated security reviews as input (failing test first). Report honestly: fakes versus real servers, what needs Docker, hardware or the cloud.
 
 ## Done in this non-cloud sweep (all committed)

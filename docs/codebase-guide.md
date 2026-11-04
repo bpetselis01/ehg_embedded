@@ -135,6 +135,8 @@ Step by step:
 | [`firmware/ehg_node/CMakeLists.txt`](../firmware/ehg_node/CMakeLists.txt) | which C files to compile |
 | [`deploy/step-ca/init-offline.sh`](../deploy/step-ca/init-offline.sh) | makes the private CA on YOUR computer (root key stays offline) and the folder to copy to the VM for the compose profile `enrol` |
 | [`deploy/step-ca/local-check.sh`](../deploy/step-ca/local-check.sh), [`local_check.py`](../deploy/step-ca/local_check.py) | proves sign, revoke and the CRL against a real step-ca in Docker (no cloud) |
+| [`backend/triage/registry_cli.py`](../backend/triage/registry_cli.py) | command line to add subjects, set consent and assign nodes (audited); run with `docker exec -i ehg-triage-1 python -m backend.triage.registry_cli ...` |
+| [`tools/export_record_meta.py`](../tools/export_record_meta.py) | writes `deploy/fhir/records.json`, the per-record gain/baseline the FHIR sync worker needs on the VM |
 | [`tools/gen_acl.py`](../tools/gen_acl.py) | writes the Mosquitto ACL that pins each gateway to its own nodes (`deploy/acl/gateways.json` or the registry); tests in `tests/test_gen_acl.py` and, with a real broker, `tests/test_mqtt_tls_config.py` |
 | [`firmware/ehg_node/Kconfig`](../firmware/ehg_node/Kconfig) | our tunable settings (frames per packet, buffer sizes, `EHG_REQUIRE_PAIRING`) |
 | [`firmware/ehg_node/security.conf`](../firmware/ehg_node/security.conf) | overlay of the SECURE build (`build.sh --secure`): LESC passkey pairing, bonds in flash, protected OTA service |

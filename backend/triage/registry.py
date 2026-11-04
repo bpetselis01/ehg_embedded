@@ -14,14 +14,21 @@ BEFORE -> AFTER: Before: nothing recorded which gateway or subject a node belong
 
 from datetime import datetime, timedelta, timezone
 
+from backend.bus import valid_id
+
 RANGES = {"24h": (timedelta(hours=24), None, "minute"), "7d": (timedelta(days=7), "hour", "hour"), "30d": (timedelta(days=30), "day", "day"), "90d": (timedelta(days=90), "day", "day")}
 G_COLS = "id, kind, cert_serial, enrolled_at, revoked_at, last_seen, app_version"
 N_COLS = "id, fw_version, record, fs_hz, channels, assigned_gateway, subject_id, last_seen"
 S_COLS = "id, pseudonym, source_dataset, consent_status"
+CONSENT_STATES = ("none", "active", "withdrawn")
 
 
 class UnknownGateway(Exception):
     """No such gateway in the registry."""
+
+
+class UnknownSubject(Exception):
+    """No such subject in the registry."""
 
 
 class RevokedGateway(Exception):
@@ -111,6 +118,56 @@ class Registry:
         with self._connect() as c:
             r = c.execute("SELECT s.consent_status FROM registry.node n JOIN registry.subject s ON s.id = n.subject_id WHERE n.id = %s", (node_id,)).fetchone()
         return None if r is None else r[0] == "active"
+
+    # ---------------------------------------------------------------- subjects, consent, node assignment (every change is audited: consent is the most sensitive fact here)
+
+    def add_subject(self, subject_id: str, pseudonym: str, source_dataset: str, actor: str, role: str, consent: str = "none", now: datetime | None = None) -> dict:
+        """Register a pseudonymous subject. `pseudonym` must be a code, never a name (nothing here can tell the difference, so the caller is responsible). Consent starts as `none` unless said otherwise."""
+        self._check(subject_id, "subject id")
+        if consent not in CONSENT_STATES:
+            raise ValueError(f"consent must be one of {', '.join(CONSENT_STATES)}")
+        with self._connect() as c:
+            c.execute("INSERT INTO registry.subject (id, pseudonym, source_dataset, consent_status) VALUES (%s, %s, %s, %s)", (subject_id, pseudonym, source_dataset, consent))
+            self._audit.append(actor, role, "registry.subject_add", f"subject:{subject_id}", {"source_dataset": source_dataset, "consent": consent}, conn=c, now=now)
+        return self._subject(subject_id)
+
+    def set_consent(self, subject_id: str, status: str, actor: str, role: str, now: datetime | None = None) -> dict:
+        """Change a subject's consent record (none / active / withdrawn). Withdrawing stops FURTHER exports and reads at once; it does not recall what was already sent (docs/security.md)."""
+        if status not in CONSENT_STATES:
+            raise ValueError(f"consent must be one of {', '.join(CONSENT_STATES)}")
+        with self._connect() as c:
+            r = c.execute("SELECT consent_status FROM registry.subject WHERE id = %s FOR UPDATE", (subject_id,)).fetchone()
+            if r is None:
+                raise UnknownSubject(subject_id)
+            c.execute("UPDATE registry.subject SET consent_status = %s WHERE id = %s", (status, subject_id))
+            self._audit.append(actor, role, "registry.consent_set", f"subject:{subject_id}", {"from": r[0], "to": status}, conn=c, now=now)
+        return self._subject(subject_id)
+
+    def assign_node(self, node_id: str, actor: str, role: str, subject_id: str | None = None, gateway_id: str | None = None, now: datetime | None = None) -> dict:
+        """Create the node row if needed and set its subject and/or gateway (None leaves the existing value). Both must already exist."""
+        self._check(node_id, "node id")
+        with self._connect() as c:
+            c.execute("INSERT INTO registry.node (id) VALUES (%s) ON CONFLICT (id) DO NOTHING", (node_id,))
+            if subject_id is not None:
+                if c.execute("SELECT 1 FROM registry.subject WHERE id = %s", (subject_id,)).fetchone() is None:
+                    raise UnknownSubject(subject_id)
+                c.execute("UPDATE registry.node SET subject_id = %s WHERE id = %s", (subject_id, node_id))
+            if gateway_id is not None:
+                if c.execute("SELECT 1 FROM registry.gateway WHERE id = %s", (gateway_id,)).fetchone() is None:
+                    raise UnknownGateway(gateway_id)
+                c.execute("UPDATE registry.node SET assigned_gateway = %s WHERE id = %s", (gateway_id, node_id))
+            self._audit.append(actor, role, "registry.node_assign", f"node:{node_id}", {"subject": subject_id, "gateway": gateway_id}, conn=c, now=now)
+        return self.node(node_id)
+
+    def _subject(self, subject_id: str) -> dict:
+        with self._connect() as c:
+            r = c.execute(f"SELECT {S_COLS} FROM registry.subject WHERE id = %s", (subject_id,)).fetchone()
+        return _dicts(S_COLS, [r])[0]
+
+    @staticmethod
+    def _check(value: str, what: str) -> None:
+        if not valid_id(value):
+            raise ValueError(f"{what} must be a plain id (letters, digits, _ and -)")
 
     # ---------------------------------------------------------------- health history
 

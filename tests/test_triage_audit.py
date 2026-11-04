@@ -153,6 +153,18 @@ def test_the_enrolment_role_can_touch_gateways_and_the_audit_log_and_nothing_els
                 c.execute(sql)
 
 
+def test_the_fhir_sync_role_only_reads_the_registry_and_the_frames(db):
+    fill(db, 1)
+    app = db.dsn.replace("user=postgres", "user=ehg_fhir") if "user=" in db.dsn else db.dsn.replace("postgresql://postgres@", "postgresql://ehg_fhir@")
+    with psycopg.connect(app, autocommit=True) as c:
+        for sql in ("SELECT count(*) FROM registry.node", "SELECT consent_status FROM registry.subject", "SELECT count(*) FROM ehg_pkt", "SELECT count(*) FROM ehg_raw"):
+            c.execute(sql)
+        for sql in ("SELECT count(*) FROM registry.gateway", "SELECT count(*) FROM triage.audit_log", "SELECT count(*) FROM triage.alerts", "INSERT INTO registry.subject (id, pseudonym, source_dataset, consent_status) VALUES ('s', 'p', 'd', 'active')",
+                    "UPDATE registry.subject SET consent_status = 'active'", "INSERT INTO ehg_raw SELECT * FROM ehg_raw", "DELETE FROM ehg_pkt"):
+            with pytest.raises(psycopg.Error):
+                c.execute(sql)
+
+
 def test_each_append_prints_one_json_line_for_loki_and_calls_the_sinks(db):
     seen = []
     db.add_sink(seen.append)
