@@ -3,7 +3,6 @@
 import threading
 import time
 
-import pytest
 from test_mqtt_tls_config import ACL, acl_stanzas, broker, client_context, needs_broker, needs_openssl  # noqa: F401  (broker is a fixture)
 
 from backend import mqtt_exporter
