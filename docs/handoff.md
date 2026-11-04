@@ -2,7 +2,7 @@
 
 ## Resume from
 - Unit: Unit 17 is DONE. Everything Byron asked for ("complete all the units that do not require the cloud first", 2026-11-03) is committed on `feat/enterprise-topology`: Units 6, 7, 8, 9, 10, 11, 11b (the compose file completed as far as possible), 12, 14, 15 (the phone-free part only) and 17.
-  The units still open all need Byron or the cloud: Unit 13 is DONE on the DK as of 2026-11-04 (see progress.md; board left on the default build; end-to-end H1/integrity with pairing still to measure once Docker runs), Unit 15's app (needs an Apple ID and the iPhone), Unit 16 (needs the Oracle account and the VM).
+  The units still open all need Byron or the cloud: Unit 13 is DONE on the DK as of 2026-11-04 (see progress.md; board left on the SECURE build, bonded to this Mac; end-to-end 100 % / H1 266 / 481 ms measured with pairing), Unit 15's app (needs an Apple ID and the iPhone), Unit 16 (needs the Oracle account and the VM).
 - Phase / checkpoint status: Checkpoints 1 and 2 passed. Unit 5 runbook written (Byron executes it; the Oracle card is still PENDING). Checkpoints 3 to 8 are NOT reached: they need Docker or the VM or Byron. Say so in every report.
 - Branch / last commit: feat/enterprise-topology, see `git log -1`. Nothing pushed. Tag `baseline-pre-enterprise` marks the start.
 
@@ -18,7 +18,7 @@
 ## Open questions waiting for Byron
 - The Oracle card (phone number and credit card for verification; never Pay-As-You-Go). Asked once, deferred; ask again when Byron reports back on the runbook.
 - When the runbook is done: the log (what he saw), then Checkpoint 3.
-- Whether to run the iPhone app. Back up `~/.ehg-keys/mcuboot-p256.pem` (Unit 13 signing key; losing it loses OTA for secure boards). When Docker runs: repeat run 3 with the secure build for the end-to-end integrity and H1 numbers.
+- Whether to run the iPhone app. Back up `~/.ehg-keys/mcuboot-p256.pem` (Unit 13 signing key; losing it loses OTA for secure boards).
 
 ## Byron's pending manual steps
 - Everything in `docs/deployment.md` (15 steps). Before step 2 he must decide about the card. He pushes the branch and an annotated tag himself.

@@ -19,8 +19,18 @@ Byron attached the DK and chose "Full Unit 13" (build, new key, flash). All of i
 | secure (pairing + own key) | 834 (seq 0..833) | 0 | 1 | 69 / 8 / 3 | 8 | 136 | 0 | 1435 us |
 | default (open, dev key) | 834 (seq 0..833) | 0 | 1 | 69 / 8 / 3 | 8 | 134 | 7 | 428 us |
 
-  Same faults, same recovery, no difference in delivery at the link. The two small differences (`resent` 136 vs 134; `max_inject_late` 1435 vs 428 us, still far under the 50 ms frame period) are single runs and are not explained. Run 3's published row (100 %, 259 / 478 ms) is untouched. **Not measured:** end-to-end delivery against the stored data and H1 latency with pairing; repeat with Docker running.
-- **State left on the board:** the DEFAULT build with Nordic's development key (as before). The Mac's bond to the secure build was forgotten by Byron. To go secure again: `EHG_MCUBOOT_KEY=... firmware/build.sh --secure flash`, then type the passkey from the UART log once.
+  Same faults, same recovery, no difference in delivery at the link. The two small differences (`resent` 136 vs 134; `max_inject_late` 1435 vs 428 us, still far under the 50 ms frame period) are single runs and are not explained. Run 3's published row (100 %, 259 / 478 ms) is untouched. (End-to-end numbers were measured later the same day, see below.)
+- **Follow-up the same day, END TO END (Docker backend up, gateway `--no-outbox` as in run 3, same faults and seed, 7 min each, `eval/integrity.py` and `eval/latency.py`):**
+
+| Build | Delivery | Bit-exact | H1 median / p95 / p99 | Notes |
+|---|---|---|---|---|
+| default (open, dev key) | **100.0000 %** (8330/8330 frames) | 0 | 265 / 483 / 494 ms | sync offset method serial, +-1.8 ms |
+| secure (passkey pairing, bonded, own key) | **100.0000 %** (8340/8340 frames) | 0 | 266 / 481 / 492 ms | same |
+| run 3 (published, 2026-10-20) | 100.0000 % (8410/8410) | 0 | 259 / 478 ms | untouched |
+
+  Pairing adds no measurable delivery or latency cost in this setup (differences of 1-2 ms are inside run-to-run noise; single runs, no repeats). Stage medians are unchanged (inject to gateway 472 ms of it is the 10-frame batching at 20 Hz). The board was left on the SECURE build and the Mac holds its bond; moving back to the default build needs "Forget This Device" first.
+
+- **State left on the board (superseded by the end-to-end follow-up above):** see that paragraph. Secure build: `EHG_MCUBOOT_KEY=... firmware/build.sh --secure flash`, then type the passkey from the UART log once. Default build: `firmware/build.sh flash` after forgetting the device on the Mac.
 - **Not done / not verified:** iPhone pairing (no app); OTA with the new key (not tried); the "Forget This Device" dependence is a usability cost, documented in troubleshooting.md; `BT_SMP_SC_ONLY` forcing level 4 on macOS is now observed (level 4 reached).
 
 ## 2026-11-04: automated review of the review fixes: poison messages (2 findings), both valid, fixed
