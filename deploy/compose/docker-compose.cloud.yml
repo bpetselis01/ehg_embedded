@@ -2,8 +2,8 @@
 # Run (on the VM, by deploy/update.sh): docker compose --env-file /run/ehg/runtime.env --env-file /opt/ehg/etc/site.env -f deploy/compose/docker-compose.cloud.yml up -d
 #
 # PURPOSE: The cloud stack as one file: edge (Caddy), MQTT broker with mTLS, NATS JetStream bus, PostgreSQL + TimescaleDB, and the observability stack.
-#   It is still PARTIAL: step-ca, the enrolment API and the FHIR sync worker are NOT in it (the enrolment API has no service entry point yet; step-ca is initialised by hand; the sync worker needs the converted
-#   recordings' gain and baseline, which are not on the VM). Their memory is reserved in tests/test_deploy_assets.py so the finished stack is known to fit.
+#   The private CA and the enrolment API are in the optional profile "enrol" (make the CA first with deploy/step-ca/init-offline.sh). The FHIR sync worker is NOT in it: it needs the converted recordings'
+#   gain and baseline, which are not on the VM (64 MiB are reserved for it in tests/test_deploy_assets.py).
 # INPUT: /run/ehg/runtime.env (decrypted secrets: POSTGRES_PASSWORD, EHG_DB_PASSWORD, HAPI_DB_PASSWORD, KEYCLOAK_DB_PASSWORD, EXPORTER_DB_PASSWORD, TRIAGE_DB_PASSWORD,
 #   KEYCLOAK_ADMIN_PASSWORD, TRIAGE_API_CLIENT_SECRET, ENROLL_API_CLIENT_SECRET, FHIR_SYNC_CLIENT_SECRET, GRAFANA_ADMIN_PASSWORD; generate with openssl rand -hex 24, because passwords go into URLs and connection strings), /opt/ehg/etc/site.env (EHG_DOMAIN), certificates in EHG_PKI_DIR (default /opt/ehg/pki: ca-chain.crt, broker.crt, broker.key, ca.crl).
 #   A missing secret stops `up` with a message naming it (the "?" in the variable).
@@ -20,7 +20,8 @@
 #   Named volumes live in Docker's data-root on the 150 GB data volume (/srv/ehg-data/docker). Containers that need to reach the internet later (Alertmanager's
 #   webhook, Unit 12) must be added to "edge" deliberately.
 #   A service that cannot run a health check (its image has no shell or wget) says so in the label ehg.healthcheck instead of silently having none.
-# STATUS: NEVER STARTED. Docker was not running when this was written; `docker compose config` is the only check done. Expect first-boot fixes.
+# STATUS: started once on a laptop (2026-11-04, throwaway PKI, EHG_DOMAIN=localhost): all 18 services up, every Prometheus target up, mTLS packets stored; the "enrol" profile too. Four defects were found and fixed that way (see docs/progress.md).
+#   NEVER run on the VM (journald, arm64, 12 GB): expect first-boot fixes there.
 # ROLE IN THESIS: The cloud core of docs/production-topology.md, sized by docs/decisions/0010 and the budget in tests/test_deploy_assets.py.
 # BEFORE -> AFTER: Before: backend/docker-compose.yml on a laptop. After: this file on the VM, next to (not replacing) the local stack.
 name: ehg
@@ -407,6 +408,66 @@ services:
     mem_limit: 2300m
     labels:
       ehg.healthcheck: "none: believed to be a distroless image with no shell or wget (not verified); readiness is seen through the triage facade (/fhir/metadata answers 502 while HAPI is down)"
+
+  # ---- profile "enrol": the private CA and the enrolment API for gateway certificates. NOT started by default: make the CA first (deploy/step-ca/init-offline.sh on YOUR computer),
+  # copy its vm/ folder to EHG_STEPCA_DIR on the VM, then add EHG_STEPCA_ROOT_FP and COMPOSE_PROFILES=enrol to /opt/ehg/etc/site.env (the script writes both lines to env.txt).
+  # Started once locally with such a CA on 2026-11-04; the enrolment API was called with a real Keycloak token (see docs/progress.md).
+  step-ca:
+    <<: *service
+    profiles: [enrol]
+    networks: [internal]
+    image: smallstep/step-ca:0.30.2@sha256:a2b17872915c193259b75a5474c398326f41bd199f0842093e52cf4182bc8270
+    environment:
+      PWDPATH: /home/step/secrets/password
+    volumes:
+      # config, certificates and the INTERMEDIATE key only; the root key never reaches the VM. The database (issued/revoked serials) is a host folder owned by uid 1000, the CA's user:
+      # a NAMED volume would be root-owned and the CA could not open its database ("Cannot write pid file /home/step/db/LOCK", seen 2026-11-04).
+      - ${EHG_STEPCA_DIR:-/opt/ehg/step-ca}/config:/home/step/config:ro
+      - ${EHG_STEPCA_DIR:-/opt/ehg/step-ca}/certs:/home/step/certs:ro
+      - ${EHG_STEPCA_DIR:-/opt/ehg/step-ca}/keys:/home/step/secrets:ro
+      - ${EHG_STEPCA_DIR:-/opt/ehg/step-ca}/db:/home/step/db
+    healthcheck:
+      test: ["CMD", "step", "ca", "health", "--ca-url", "https://localhost:9000", "--root", "/home/step/certs/root_ca.crt"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]   # the step-ca binary carries a file capability (cap_net_bind_service); with ALL dropped it fails to start: "Operation not permitted" (seen 2026-11-04)
+    mem_limit: 100m
+
+  enroll:
+    <<: *python
+    profiles: [enrol]
+    command: ["python", "-m", "backend.enroll.service"]
+    environment:
+      AUTH_MODE: oidc
+      OIDC_ISSUER: https://${EHG_DOMAIN:?EHG_DOMAIN is not set (site.env)}/auth/realms/ehg
+      OIDC_AUDIENCE: enroll-api
+      OIDC_JWKS_URL: http://keycloak:8080/auth/realms/ehg/protocol/openid-connect/certs
+      EHG_ENROLL_DSN: host=postgres port=5432 dbname=ehg user=ehg_triage password=${TRIAGE_DB_PASSWORD:?TRIAGE_DB_PASSWORD is not set}
+      STEPCA_URL: https://step-ca:9000
+      STEPCA_PROVISIONER: ehg-enroll
+      STEPCA_KEY_FILE: /stepca/provisioner.pem
+      STEPCA_ROOT_CERT: /stepca/root_ca.crt
+      STEPCA_ROOT_FP: ${EHG_STEPCA_ROOT_FP:-}   # empty stops the service with a message naming it (see deploy/step-ca/init-offline.sh, env.txt)
+      BIND_HOST: 0.0.0.0
+      ENROLL_PORT: "8790"
+    volumes:
+      - ${EHG_STEPCA_DIR:-/opt/ehg/step-ca}/enroll/provisioner.pem:/stepca/provisioner.pem:ro
+      - ${EHG_STEPCA_DIR:-/opt/ehg/step-ca}/enroll/root_ca.crt:/stepca/root_ca.crt:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      step-ca:
+        condition: service_healthy
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8790/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
 networks:
   edge: {}

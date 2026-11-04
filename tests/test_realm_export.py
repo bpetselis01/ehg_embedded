@@ -87,3 +87,12 @@ def test_builtin_scopes_that_the_apis_need_are_in_the_file():
     username = next(m for m in scopes["profile"]["protocolMappers"] if m["name"] == "username")
     assert username["config"]["claim.name"] == "preferred_username"
     assert set(realm["defaultDefaultClientScopes"]) >= {"basic", "roles", "profile"}
+
+
+def test_the_phone_client_carries_its_user_name_because_that_is_the_gateway_id():
+    """backend/enroll/app.py uses the token's preferred_username as the gateway id (the certificate's CN). Without this mapper the id silently became the user's UUID
+    (found by enrolling through a real Keycloak and step-ca, 2026-11-04). The client is not given the whole `profile` scope, only this claim."""
+    mappers = {m["name"]: m for m in clients["ios-gateway"]["protocolMappers"]}
+    m = mappers["gateway-id-from-username"]
+    assert m["config"]["claim.name"] == "preferred_username" and m["config"]["user.attribute"] == "username" and m["config"]["access.token.claim"] == "true"
+    assert "profile" not in clients["ios-gateway"]["defaultClientScopes"]

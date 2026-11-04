@@ -24,7 +24,7 @@ UPDATE_SH = DEPLOY / "update.sh"
 INTEGRATION = os.environ.get("EHG_INTEGRATION") == "1"
 
 # Services that arrive with later units (their config does not exist yet). Their memory is reserved NOW so the finished stack is known to fit (MiB).
-RESERVED_MIB = {"step-ca (Unit 7)": 100, "enroll + fhir-sync (Units 7, 9; not in the compose file yet)": 192}
+RESERVED_MIB = {"fhir-sync (Unit 9; not in the compose file yet: it needs the recordings' gain and baseline)": 64}
 BUDGET_MIB = int(9.5 * 1024)  # the whole-stack ceiling: ~9.5 GB of the 12 GB, leaving the OS, Docker and headroom
 EXPECTED_SERVICES = {"caddy", "mosquitto", "nats", "postgres", "prometheus", "alertmanager", "loki", "grafana", "alloy", "node-exporter", "cadvisor", "postgres-exporter",
                      "migrate", "bridge", "ts-writer", "triage", "keycloak", "hapi"}
@@ -286,8 +286,13 @@ def mib(value: str) -> int:
     return int(m.group(1)) * (1024 if m.group(2) == "g" else 1)
 
 
+ENROL_PROFILE = {"step-ca", "enroll"}  # started only with COMPOSE_PROFILES=enrol, after deploy/step-ca/init-offline.sh
+
+
 def test_compose_has_exactly_the_planned_services():
-    assert set(services()) == EXPECTED_SERVICES
+    assert set(services()) == EXPECTED_SERVICES | ENROL_PROFILE
+    assert {n for n, s in services().items() if s.get("profiles")} == ENROL_PROFILE, "only the CA and the enrolment API are optional"
+    assert all(s["profiles"] == ["enrol"] for n, s in services().items() if n in ENROL_PROFILE)
 
 
 def test_every_image_is_pinned_by_version_and_digest_for_arm64_hosts():
