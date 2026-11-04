@@ -13,8 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      # shellcheck is preinstalled on GitHub's Ubuntu runners (UNVERIFIED for this repository: this workflow has not run yet)
-      - run: shellcheck -s sh tools/pki.sh deploy/update.sh deploy/postgres/10-init-databases.sh deploy/backup/backup.sh deploy/backup/restore_drill.sh deploy/crl-sync.sh
+      # shellcheck is preinstalled on GitHub's Ubuntu runners. Warnings and errors fail the build; info/style notes (a runner's older shellcheck reported SC2015 on a safe `a && b || c`) do not.
+      - run: shellcheck -S warning -s sh $(git ls-files '*.sh')
   deployment-guards:
     runs-on: ubuntu-latest
     steps:

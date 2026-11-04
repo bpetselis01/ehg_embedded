@@ -202,9 +202,9 @@ def test_load_records_gives_what_bundle_needs(tmp_path):
 
 def test_the_committed_metadata_matches_the_converted_data_when_it_is_present():
     from tools import export_record_meta
-    data = ROOT / "data/converted/tpehgdb/manifest.json"
-    if not data.exists():
-        pytest.skip("data/converted is not present (README step 0)")
+    manifest = ROOT / "data/converted/tpehgdb/manifest.json"
+    if not manifest.exists() or not all((manifest.parent / e["file"]).exists() for e in json.loads(manifest.read_text())):
+        pytest.skip("data/converted is not complete (README step 0); CI has the manifest but not the recordings")
     assert export_record_meta.main(["--check"]) == 0
 
 
