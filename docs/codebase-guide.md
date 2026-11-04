@@ -133,7 +133,10 @@ Step by step:
 | [`tools/demo.sh`](../tools/demo.sh) | starts the whole pipeline in 6 tiled windows, one per hop (demos) |
 | [`firmware/build.sh`](../firmware/build.sh) | build and flash the board (works around spaces in this folder's path). Overview of all firmware: [firmware.md](firmware.md) |
 | [`firmware/ehg_node/CMakeLists.txt`](../firmware/ehg_node/CMakeLists.txt) | which C files to compile |
-| [`firmware/ehg_node/Kconfig`](../firmware/ehg_node/Kconfig) | our tunable settings (frames per packet, buffer sizes) |
+| [`firmware/ehg_node/Kconfig`](../firmware/ehg_node/Kconfig) | our tunable settings (frames per packet, buffer sizes, `EHG_REQUIRE_PAIRING`) |
+| [`firmware/ehg_node/security.conf`](../firmware/ehg_node/security.conf) | overlay of the SECURE build (`build.sh --secure`): LESC passkey pairing, bonds in flash, protected OTA service |
+| [`firmware/gen_signing_key.sh`](../firmware/gen_signing_key.sh) | makes the ECDSA P-256 MCUboot signing key OUTSIDE the repository (`$EHG_MCUBOOT_KEY`) |
+| [`tests/test_firmware_security.py`](../tests/test_firmware_security.py) | static guard: default build stays open, the secure overlay keeps its protections, no key in git |
 | [`firmware/ehg_node/prj.conf`](../firmware/ehg_node/prj.conf) | Bluetooth and logging settings |
 | [`firmware/ehg_node/src/main.c`](../firmware/ehg_node/src/main.c) | start-up, advertising, connection events, stats every 10 s |
 | `firmware/ehg_node/src/replay.c/.h` | fake sensor: timed frame release into the ring buffer |

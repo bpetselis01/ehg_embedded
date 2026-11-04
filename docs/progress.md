@@ -1,5 +1,28 @@
 # Progress log
 
+## 2026-11-04: Unit 13 on the DK: LESC passkey pairing, own MCUboot key, and a latent bootloader defect found
+
+Byron attached the DK and chose "Full Unit 13" (build, new key, flash). All of it ran on the board EHG-93C0 with the Mac gateway.
+
+- **Built (opt-in; the default build is unchanged in behaviour):** `CONFIG_EHG_REQUIRE_PAIRING` (default n) and `firmware/ehg_node/security.conf`; `firmware/build.sh --secure` builds into `build-secure/` with `$EHG_MCUBOOT_KEY`; `firmware/gen_signing_key.sh` makes the ECDSA P-256 key OUTSIDE the repo (`~/.ehg-keys/mcuboot-p256.pem`, mode 600, **Byron must back it up**). The CCC, the command slot AND the MCUmgr (OTA) service need an authenticated link (`_AUTHEN`); DisplayOnly passkey (random, printed as `PASSKEY nnnnnn` on the UART log); `BT_SMP_SC_ONLY`, `BT_SMP_ENFORCE_MITM`, bonds in flash (NVS). The board never requests security itself. Every symbol was grepped in `~/ncs/v3.4.1` first.
+- **Gateway:** `protected()` wraps the first `start_notify` (60 s, one retry, passkey hint after 3 s) and `stale_bond()` explains a bond mismatch; the gateway never calls `pair()`.
+- **Defects found by running it (none would have shown in unit tests):**
+  1. **`sysbuild/mcuboot.overlay` replaced MCUboot's own `app.overlay`, so MCUboot was linked into the app slot (0xC000) instead of the boot partition.** Both the default and the secure build produced such a bootloader; a flash left the board's OLD bootloader running (it only looked fine). Fixed by choosing `boot_partition` in the overlay (bootloader now 32 KB of 48 KB at 0x0). Found because the new-key image was rejected ("Image in the primary slot is not valid") by the old dev-key bootloader.
+  2. NCS's OTA helper sets the MCUmgr Bluetooth service to open read/write; `security.conf` now forces `_AUTHEN`, otherwise firmware upload would be unauthenticated in the secure build.
+  3. `CONFIG_SETTINGS` without a backend silently became `SETTINGS_NONE` (bonds never stored, `Unable to store name`); `CONFIG_NVS=y` added; `settings_load()` moved to right after `bt_enable`.
+  4. macOS reports a board without a bond as `CBErrorDomain 14 "Peer removed pairing information"`, which `stale_bond()` did not recognise: fixed, and the hint now also prints when the connect itself fails.
+- **Pairing on the bench:** the system dialog appears on the first protected access; two attempts failed (30 s timeout, then a wrong code), the third succeeded: `security level 4`, bonded. The bond survived four forced reconnects and a board reset (no new dialog, same identity address).
+- **Run 3 repeated at LINK level, 7 min, tpehg1007, `drop=0.05,burst=3,corrupt=0.01,disc=120,seed=3`, no backend** (Docker was not running and was not started, so there is NO H1 latency and NO integrity.py number for these runs):
+
+| Build | Packets in gateway CSV | Missing after recovery | Streams | Injected (drop / corrupt / disc) | Gateway `bad` | Board `resent` | `notify_err` | `max_inject_late` |
+|---|---|---|---|---|---|---|---|---|
+| secure (pairing + own key) | 834 (seq 0..833) | 0 | 1 | 69 / 8 / 3 | 8 | 136 | 0 | 1435 us |
+| default (open, dev key) | 834 (seq 0..833) | 0 | 1 | 69 / 8 / 3 | 8 | 134 | 7 | 428 us |
+
+  Same faults, same recovery, no difference in delivery at the link. The two small differences (`resent` 136 vs 134; `max_inject_late` 1435 vs 428 us, still far under the 50 ms frame period) are single runs and are not explained. Run 3's published row (100 %, 259 / 478 ms) is untouched. **Not measured:** end-to-end delivery against the stored data and H1 latency with pairing; repeat with Docker running.
+- **State left on the board:** the DEFAULT build with Nordic's development key (as before). The Mac's bond to the secure build was forgotten by Byron. To go secure again: `EHG_MCUBOOT_KEY=... firmware/build.sh --secure flash`, then type the passkey from the UART log once.
+- **Not done / not verified:** iPhone pairing (no app); OTA with the new key (not tried); the "Forget This Device" dependence is a usability cost, documented in troubleshooting.md; `BT_SMP_SC_ONLY` forcing level 4 on macOS is now observed (level 4 reached).
+
 ## 2026-11-04: automated review of the review fixes: poison messages (2 findings), both valid, fixed
 
 - **Bridge (HIGH):** my new restart-on-failure would have turned one poison message into a crash loop: `json.loads` on absurd nesting raises `RecursionError` (not a `ValueError`), which escaped the router and was treated as a publish failure; an oversized payload would have been refused by the stream on every redelivery. Now only a failure of the publish itself raises (and restarts); anything that cannot be routed goes to `EHG.BAD.unroutable`, an oversized payload is replaced by a short marker under `EHG.BAD.too_large`, both are acknowledged, and the broker refuses packets above 256 KiB (`max_packet_size`, checked with the real Mosquitto 2.1.2).

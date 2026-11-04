@@ -33,6 +33,9 @@
 #include <zephyr/drivers/hwinfo.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#ifdef CONFIG_EHG_REQUIRE_PAIRING
+#include <zephyr/settings/settings.h>
+#endif
 
 #include <dk_buttons_and_leds.h>
 
@@ -121,6 +124,41 @@ BT_CONN_CB_DEFINE(conn_cb) = {
 	.le_data_len_updated = data_len_updated,
 };
 
+#ifdef CONFIG_EHG_REQUIRE_PAIRING
+/* Pairing (security.conf build only). The board can only DISPLAY a passkey (no keyboard, no yes/no button), so the
+ * laptop or phone types it in its own system dialog. The host makes a fresh random 6-digit passkey for every pairing.
+ * The board never asks for security itself: the central starts pairing when its first protected access is refused. */
+static void passkey_display(struct bt_conn *conn, unsigned int passkey)
+{
+	LOG_INF("PASSKEY %06u (type this in the pairing dialog)", passkey);
+}
+
+static void pairing_cancel(struct bt_conn *conn)
+{
+	LOG_WRN("pairing cancelled");
+}
+
+static const struct bt_conn_auth_cb auth_cb = {.passkey_display = passkey_display, .cancel = pairing_cancel};
+
+static void pairing_complete(struct bt_conn *conn, bool bonded)
+{
+	LOG_INF("pairing complete (bonded: %s)", bonded ? "yes" : "no");
+}
+
+static void pairing_failed(struct bt_conn *conn, enum bt_security_err reason)
+{
+	LOG_WRN("pairing failed (reason %d)", reason);
+}
+
+static void security_changed(struct bt_conn *conn, bt_security_t level, enum bt_security_err err)
+{
+	LOG_INF("security level %d (err %d)", level, err);
+}
+
+static struct bt_conn_auth_info_cb auth_info_cb = {.pairing_complete = pairing_complete, .pairing_failed = pairing_failed};
+BT_CONN_CB_DEFINE(security_cb) = {.security_changed = security_changed};
+#endif
+
 /* MTU = biggest message the link allows. Ours need up to 247 bytes (see prj.conf). */
 static void mtu_updated(struct bt_conn *conn, uint16_t tx, uint16_t rx)
 {
@@ -160,6 +198,16 @@ int main(void)
 		LOG_ERR("bt_enable failed (%d)", err);
 		return 0;
 	}
+#ifdef CONFIG_EHG_REQUIRE_PAIRING
+	if (bt_conn_auth_cb_register(&auth_cb) || bt_conn_auth_info_cb_register(&auth_info_cb)) {
+		LOG_ERR("pairing callbacks not registered");
+		return 0;
+	}
+	/* bonds (the keys of paired laptops) are kept in flash across resets. Right after bt_enable and BEFORE bt_set_name: the name and the GATT
+	 * database hash are saved through the settings, which only work once they are loaded. */
+	settings_load();
+	LOG_INF("pairing REQUIRED (LESC passkey)");
+#endif
 	bt_set_name(name);
 	bt_gatt_cb_register(&gatt_cb);
 	k_work_submit(&adv_work);

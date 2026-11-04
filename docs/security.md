@@ -16,8 +16,8 @@ Each later unit adds its boundary and updates the Status column. Nothing here sa
 | Client side of the above | `gateway --mqtt-tls`; `MQTT_*` variables for ingest and the viewer | Implemented (Unit 2); half-set TLS configuration refuses to start instead of falling back to plain MQTT |
 | Private CA bootstrap (root, intermediate, broker and client certificates, CRL) | `tools/pki.sh` | Implemented (Unit 2). Client certificates last 30 days by default |
 | Short-lived (7-day) gateway certificates, CSR enrolment, revocation by an admin | Enrolment API and registry | **Written** (Unit 7): CSR vetting, rate limit, revocation of every live certificate; tested with a fake CA; never run against step-ca |
-| LESC passkey pairing, `_AUTHEN` GATT permissions | Firmware | Planned, optional flag (Unit 13) |
-| MCUboot with our own ECDSA P-256 key | Firmware | Planned, optional; key kept outside the repo (Unit 13) |
+| LESC passkey pairing, `_AUTHEN` GATT permissions | Firmware | **Implemented, optional** (`build.sh --secure`; bench-tested with the Mac gateway 2026-11-04, see progress.md) |
+| MCUboot with our own ECDSA P-256 key | Firmware | **Implemented, optional** (`build.sh --secure`); key outside the repo, backup is the owner's job |
 | OIDC sign-in, TOTP multi-factor, roles, token validation | Keycloak realm as code and the services' token checks | **Written** (Units 7, 8): token validation tested against forged, expired, wrong-audience and `alg=none` tokens; the realm never imported into a real Keycloak |
 | Hash-chained audit log, FHIR `AuditEvent` | Triage service | **Written** and tested on a real PostgreSQL: tamper-evident, **not** write-once; no FHIR `AuditEvent` is written |
 | Secrets kept out of git | `.gitignore` (`backend/pki/`, `*.key`, `*.pem`, `*.p12`) | Implemented for keys and certificates. SOPS with age for deployment secrets: **written** in Unit 4 (`deploy/.sops.yaml` holds a placeholder key; nothing is encrypted yet) |
@@ -44,7 +44,7 @@ Mapping of the HTTP APIs (triage, enrolment, FHIR facade) to the 2023 list, from
 | API9 Improper inventory management | OpenAPI documents are generated from the code and diffed in a test | `test_api_docs` |
 | API10 Unsafe consumption of APIs | Upstream answers are validated and failures become a 502 without details; the CA's answer is re-checked before a certificate is returned | `test_fhir_facade`, `test_enroll` |
 
-**Still not done, in one place:** none of this has run against Keycloak, step-ca, Caddy, HAPI, NATS or TimescaleDB; revocation reaches the broker only through the cron job that has never run; a gateway can publish for any node id; service passwords are container environment variables; the audit log is not write-once; no scanner has been run; no SBOM exists; firmware still uses Nordic's development signing key.
+**Still not done, in one place:** none of this has run against Keycloak, step-ca, Caddy, HAPI, NATS or TimescaleDB; revocation reaches the broker only through the cron job that has never run; a gateway can publish for any node id; service passwords are container environment variables; the audit log is not write-once; no scanner has been run; no SBOM exists; the DEFAULT firmware build still uses Nordic's development signing key and an open link (the secure build, `build.sh --secure`, does not).
 
 ## Threat model: gateway to broker (MQTT QoS 1, JSON on `ehg/<node>/pkt`)
 

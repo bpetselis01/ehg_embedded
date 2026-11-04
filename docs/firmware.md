@@ -200,6 +200,14 @@ again from C2, and `feed.py` notices (no `@LVL` for 3 s) and sends CONFIG again.
 `nrfutil mcu-manager ble` also exists but needs a second Nordic board as its Bluetooth radio, so the phone app is
 the one-board route.
 
+### Stage G: the secure build (LESC passkey pairing and your own signing key)
+
+`firmware/build.sh --secure [flash]` builds into `build-secure/` (the default `build/` is untouched). It differs from the default in two ways:
+1. **Pairing** (`security.conf`, `CONFIG_EHG_REQUIRE_PAIRING`): the subscribe switch (CCC), the command slot and the MCUmgr (OTA) service need an authenticated, encrypted link. LE Secure Connections only, passkey mandatory (`BT_SMP_SC_ONLY`, `BT_SMP_ENFORCE_MITM`), bonds kept in the flash `storage` partition (NVS). The board can only display a passkey: it prints `PASSKEY 123456` on the UART log; the Mac (or iPhone) shows a system dialog. The board never asks for security itself: the central starts pairing when its first protected access is refused. Service and characteristic discovery stay open.
+2. **Own MCUboot key**: an ECDSA P-256 key made by `firmware/gen_signing_key.sh` at `$EHG_MCUBOOT_KEY` (outside the repo; the script and `build.sh` refuse a path inside it). **Back it up.** A bootloader built with this key refuses images signed with Nordic's development key, and the other way round, so moving a board between the two builds means flashing both bootloader and app (`west flash` does) over the DK's J-Link. Lose the key and no update can be accepted by boards carrying its public half.
+
+The macOS gateway never calls `pair()` (Bleak cannot on macOS); `gateway.gateway.protected` waits up to 60 s for the first protected access, retries once, and explains a stale bond. Measurements: [progress.md](progress.md) (Unit 13 row).
+
 ## Settings (Kconfig, change in prj.conf)
 
 | Setting | Default | Meaning |

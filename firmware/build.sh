@@ -5,6 +5,9 @@
 #   firmware/build.sh pristine flash  clean build + flash
 #   firmware/build.sh flash --record data/converted/tpehgdb/tpehg1007.npz [--seconds 120]
 #                                     built-in mode: the recording is compiled in (no laptop feed needed)
+#   firmware/build.sh --secure [flash] SECURE build: LESC passkey pairing (security.conf) and your own MCUboot signing key
+#                                     ($EHG_MCUBOOT_KEY, made by firmware/gen_signing_key.sh; never in the repo). Builds in
+#                                     build-secure/, so the default build/ and its settings are never touched.
 # Two modes, picked here at every build (a plain build always goes back to the serial feed):
 #   serial feed (default)  tools/feed.py streams the recording over the serial port at run time
 #   built-in (--record)    tools/make_replay.py writes src/replay_data.h, compiled in; stand-alone runs
@@ -36,14 +39,15 @@ export ZEPHYR_BASE="$HOME/ncs/v3.4.1/zephyr"
 WEST="nrfutil toolchain-manager launch --ncs-version v3.4.1 -- west"
 DEV_ID="${DEV_ID:-1050208294}"   # nRF52840 DK serial; `nrfutil device list` shows yours
 APP="$LINK/firmware/ehg_node"
-P=""; FLASH=""; RECORD=""; SECS=""
+P=""; FLASH=""; RECORD=""; SECS=""; SECURE=""
 while [ $# -gt 0 ]; do
 	case "$1" in
 		pristine) P="-p" ;;
 		flash) FLASH=1 ;;
 		--record) RECORD="$2"; shift ;;
 		--seconds) SECS="$2"; shift ;;
-		*) echo "unknown argument: $1 (use: [pristine] [flash] [--record <npz> [--seconds S]])"; exit 1 ;;
+		--secure) SECURE=1 ;;
+		*) echo "unknown argument: $1 (use: [pristine] [flash] [--secure] [--record <npz> [--seconds S]])"; exit 1 ;;
 	esac
 	shift
 done
@@ -56,9 +60,18 @@ else
 fi
 # Always set explicitly: west remembers -D options, so a built-in build would otherwise stick.
 # The "ehg_node_" prefix sends it to the app image, not to sysbuild/MCUboot.
-$WEST build $P -b nrf52840dk/nrf52840 -d "$APP/build" "$APP" -- -Dehg_node_CONFIG_EHG_BAKED_RECORD=$BAKED
+BUILD="$APP/build"; EXTRA=""
+if [ -n "$SECURE" ]; then
+	# A separate build folder keeps the signing-key and pairing options out of the default build (west remembers -D options).
+	BUILD="$APP/build-secure"
+	[ -n "$EHG_MCUBOOT_KEY" ] && [ -f "$EHG_MCUBOOT_KEY" ] || { echo "--secure: set EHG_MCUBOOT_KEY to your signing key (make one with firmware/gen_signing_key.sh)"; exit 1; }
+	case "$(cd "$(dirname "$EHG_MCUBOOT_KEY")" && pwd -P)/" in "$REPO"/*) echo "--secure: the signing key must be OUTSIDE the repository"; exit 1 ;; esac
+	EXTRA="-Dehg_node_EXTRA_CONF_FILE=$APP/security.conf -DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE=\"$EHG_MCUBOOT_KEY\""
+	MODE="$MODE + SECURE (LESC pairing, own signing key)"
+fi
+$WEST build $P -b nrf52840dk/nrf52840 -d "$BUILD" "$APP" -- -Dehg_node_CONFIG_EHG_BAKED_RECORD=$BAKED $EXTRA
 # only "file" lines: the "command" lines must keep space-free paths
-sed '/"file":/s#'"$LINK"'#'"$REPO"'#' "$APP/build/ehg_node/compile_commands.json" > "$APP/build/compile_commands.json"
-[ -n "$FLASH" ] && $WEST flash -d "$APP/build" --dev-id "$DEV_ID"
+sed '/"file":/s#'"$LINK"'#'"$REPO"'#' "$BUILD/ehg_node/compile_commands.json" > "$BUILD/compile_commands.json"
+[ -n "$FLASH" ] && $WEST flash -d "$BUILD" --dev-id "$DEV_ID"
 echo "built: $MODE"
 exit 0

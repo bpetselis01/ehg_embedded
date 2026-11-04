@@ -22,6 +22,8 @@ Known failures, each as **symptom → cause → fix**. Found something new? Add 
 | Symptom | Cause | Fix |
 |---|---|---|
 | `gateway.gateway` scan hangs or finds nothing, with no error | macOS never granted Bluetooth access to the app running the terminal | System Settings → Privacy & Security → Bluetooth → enable the terminal app (or VS Code). Or run `uv run python -m gateway.gateway --no-mqtt` once and click Allow |
+| Secure board (`build.sh --secure`): the gateway connects, then waits or prints `Encryption is insufficient` / `Code=15` | macOS starts pairing itself on the first protected access; the passkey is on the board's UART log (`PASSKEY 123456`) and must be typed in the system dialog within about 30 s (a new code every try; a wrong or late code fails and the gateway retries). A bond left over from before a reflash or bond erase gives the error with NO dialog | Type the passkey shown on the UART log. For a stale bond: System Settings → Bluetooth → the board → Forget This Device (iPhone: Settings → Bluetooth → Forget), then run again. The gateway prints this hint itself |
+| Board prints `Image in the primary slot is not valid` (MCUboot's boot messages) after a flash | The bootloader on the board holds a different signing key than the image (default dev key versus `$EHG_MCUBOOT_KEY`) | Flash the bootloader AND app from the same build folder: `firmware/build.sh [--secure] flash` (west flashes both) |
 | Gateway finds the board but no data arrives | Sampling starts on START; in serial-feed mode the board also needs `feed.py`'s CONFIG first | Run `feed.py` first, then the gateway (or press DK Button 1). LED2 on = sampling |
 
 ## Backend

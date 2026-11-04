@@ -246,6 +246,42 @@ def make_publisher(args):
 
 # ---------------------------------------------------------------- BLE source
 
+PAIRING_TIMEOUT_S = 60  # a secure board (firmware/build.sh --secure) holds the first protected access until the person types the passkey
+
+PASSKEY_HINT = "[{n}] if the board needs pairing, macOS shows a dialog now: enter the passkey shown on the board's UART log (the line 'PASSKEY ...')"
+BOND_HINT = ("[{n}] pairing information does not match ('encryption insufficient' or 'peer removed pairing information'): this Mac and the board disagree about a bond (the board was reflashed, its bonds erased, or the build changed). "
+             "Open System Settings > Bluetooth, choose Forget This Device for {n}, then run again")
+
+
+def stale_bond(exc: BaseException) -> bool:
+    """True for the macOS errors a stale bond causes: 'Encryption is insufficient' (CBATTErrorDomain 15, the Mac has a bond the board lost)
+    and 'Peer removed pairing information' (CBErrorDomain 14, the board has no bond the Mac still holds; seen when moving between the secure and default builds)."""
+    s = str(exc).lower()
+    return "insufficient" in s and ("encryption" in s or "authentication" in s) or "code=15" in s or "peer removed pairing" in s
+
+
+async def protected(node_id: str, call, timeout_s: float = PAIRING_TIMEOUT_S):
+    """First access to a protected characteristic: wait up to timeout_s for pairing, retry once, explain a stale bond.
+
+    Bleak cannot pair on macOS, so it never calls pair(): the system starts pairing itself when the board refuses an access, and
+    the call returns only after the person has typed the passkey. On an open board the call returns at once and the hint never prints."""
+    hint = asyncio.get_running_loop().call_later(3, print, PASSKEY_HINT.format(n=node_id))
+    try:
+        for attempt in (1, 2):
+            try:
+                return await asyncio.wait_for(call(), timeout_s)
+            except asyncio.TimeoutError:
+                if attempt == 2:
+                    raise
+                print(f"[{node_id}] no answer after {timeout_s:.0f} s (pairing not finished?); trying once more")
+            except Exception as e:
+                if stale_bond(e):
+                    print(BOND_HINT.format(n=node_id))
+                raise
+    finally:
+        hint.cancel()
+
+
 async def run_ble_node(device, publish, stop: asyncio.Event):
     """Connect to one board, stream until stopped, reconnect automatically if the link drops."""
     from bleak import BleakClient
@@ -254,6 +290,7 @@ async def run_ble_node(device, publish, stop: asyncio.Event):
     # One Node for the whole run: after a reconnect its gap tracker still knows the last seq, so the
     # packets the board made while disconnected (it keeps sampling) are requested from its history.
     node = Node(node_id, publish, lambda start, count: None)
+    hinted = False
     while not stop.is_set():
         try:
             async with BleakClient(device) as client:
@@ -263,7 +300,7 @@ async def run_ble_node(device, publish, stop: asyncio.Event):
 
                 node.request_resend = resend
                 print(f"[{node_id}] connected, mtu={client.mtu_size}")
-                await client.start_notify(DATA_UUID, lambda _, data: node.on_bytes(bytes(data), time.time()))
+                await protected(node_id, lambda: client.start_notify(DATA_UUID, lambda _, data: node.on_bytes(bytes(data), time.time())))
                 await client.write_gatt_char(CTRL_UUID, bytes([OP_START]), response=True)  # no-op if already running
                 while client.is_connected and not stop.is_set():
                     await asyncio.sleep(10)
@@ -272,6 +309,9 @@ async def run_ble_node(device, publish, stop: asyncio.Event):
                     await client.write_gatt_char(CTRL_UUID, bytes([OP_STOP]), response=True)
         except Exception as e:  # BLE drops are expected; log and reconnect
             print(f"[{node_id}] {type(e).__name__}: {e}; reconnecting in 2 s")
+            if stale_bond(e) and not hinted:  # the connect itself can fail this way, outside protected()
+                print(BOND_HINT.format(n=node_id))
+                hinted = True
             await asyncio.sleep(2)
     node.close()
 

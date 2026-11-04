@@ -43,4 +43,13 @@ config EHG_HISTORY_PACKETS
 	  How far back a lost packet can still be re-sent (256 x 10 frames = 128 s at 20 Hz).
 	  Older requests can't be served; counted as resend_miss (ehg_service.c).
 
+config EHG_REQUIRE_PAIRING
+	bool "Require LESC passkey pairing before the EHG service can be used"
+	default n
+	help
+	  n (default) = open link, behaviour unchanged. y = the data CCC, the command slot and the
+	  MCUmgr (OTA) service need an AUTHENTICATED, encrypted link (LE Secure Connections with a
+	  passkey the board prints on the UART log). Set by the security.conf overlay
+	  (firmware/build.sh --secure), which also turns on the Bluetooth security options this needs.
+
 endmenu
