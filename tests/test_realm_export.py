@@ -23,9 +23,9 @@ def test_the_ui_client_uses_the_code_flow_with_pkce_and_nothing_weaker():
     assert all(u.startswith("https://") for u in ui["redirectUris"] + ui["webOrigins"]) and not any(u == "*" or u.endswith("//*") for u in ui["redirectUris"])
 
 
-def test_the_phone_client_uses_the_device_grant_and_only_the_enrol_scope():
+def test_the_phone_client_uses_the_device_grant_and_only_the_enrol_scope():  # plus basic (the `sub` claim) and roles (realm_access): the API refuses a token without them
     ios = clients["ios-gateway"]
-    assert ios["attributes"]["oauth2.device.authorization.grant.enabled"] == "true" and not ios["standardFlowEnabled"] and not ios["implicitFlowEnabled"] and ios["defaultClientScopes"] == ["gateway:enrol"]
+    assert ios["attributes"]["oauth2.device.authorization.grant.enabled"] == "true" and not ios["standardFlowEnabled"] and not ios["implicitFlowEnabled"] and ios["defaultClientScopes"] == ["gateway:enrol", "basic", "roles"]
 
 
 def test_service_clients_have_secrets_only_as_environment_placeholders():
@@ -73,3 +73,17 @@ def test_access_tokens_carry_the_audience_the_apis_require():
     def audiences(client):
         return {m["config"]["included.client.audience"] for m in clients[client].get("protocolMappers", []) if m["protocolMapper"] == "oidc-audience-mapper" and m["config"]["access.token.claim"] == "true"}
     assert audiences("triage-ui") == {"triage-api"} and audiences("ios-gateway") == {"enroll-api"}
+
+
+def test_builtin_scopes_that_the_apis_need_are_in_the_file():
+    """Importing a realm with its own clientScopes list creates NO built-in scopes (shown on a real Keycloak 26.8.1, 2026-11-04): without these,
+    tokens had no `sub`, no `preferred_username` and no realm_access, and the APIs (backend/jwtauth.py requires sub) would have refused every login."""
+    scopes = {s["name"]: s for s in realm["clientScopes"]}
+    assert {"basic", "roles", "profile", "email", "web-origins", "acr", "gateway:enrol"} <= set(scopes)
+    basic = {m["protocolMapper"]: m for m in scopes["basic"]["protocolMappers"]}
+    assert "oidc-sub-mapper" in basic and basic["oidc-sub-mapper"]["config"]["access.token.claim"] == "true"
+    realm_roles = next(m for m in scopes["roles"]["protocolMappers"] if m["protocolMapper"] == "oidc-usermodel-realm-role-mapper")
+    assert realm_roles["config"]["claim.name"] == "realm_access.roles" and realm_roles["config"]["access.token.claim"] == "true"
+    username = next(m for m in scopes["profile"]["protocolMappers"] if m["name"] == "username")
+    assert username["config"]["claim.name"] == "preferred_username"
+    assert set(realm["defaultDefaultClientScopes"]) >= {"basic", "roles", "profile"}

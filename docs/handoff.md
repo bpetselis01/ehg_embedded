@@ -7,9 +7,9 @@
 - Branch / last commit: feat/enterprise-topology, see `git log -1`. Nothing pushed. Tag `baseline-pre-enterprise` marks the start.
 
 ## State of the repo
-- Tests: `uv run pytest -q` = 801 passed, 14 skipped. With `EHG_INTEGRATION=1 TF_PLUGIN_CACHE_DIR=<cache> SSL_CERT_FILE=/etc/ssl/cert.pem` = 777 passed, 3 skipped (a real Mosquitto broker, the Terraform validate against the real provider schema, `swift test`); skipped for lack of the tool: Caddy, TimescaleDB, shellcheck, and the real HAPI test (needs a running Docker daemon).
+- Tests: `uv run pytest -q` = 823 passed, 15 skipped. With `EHG_INTEGRATION=1 TF_PLUGIN_CACHE_DIR=<cache> SSL_CERT_FILE=/etc/ssl/cert.pem` = 777 passed, 3 skipped (a real Mosquitto broker, the Terraform validate against the real provider schema, `swift test`); skipped for lack of the tool: Caddy, TimescaleDB, shellcheck, and the real HAPI test (needs a running Docker daemon).
 - Uncommitted changes: none once the last commit is made.
-- Docker / compose: the Docker daemon is not running and I must not start it (another project, Supabase, lives there). `docker compose config` resolves the default stack (4 services), the `platform` profile (10) and the cloud file (18). Nothing has ever been started.
+- Docker / compose: Byron started Docker Desktop on 2026-11-04 (pulls need `DOCKER_CONFIG=/tmp/dockercfg-nocreds` with `cli-plugins` linked, see progress.md). The default stack and the `platform` profile are RUNNING from my session (`cd backend && docker compose down` / add `--profile platform -f docker-compose.platform.yml` to stop both). Never restart Docker Desktop (another project, Supabase, lives there). `docker compose config` resolves the default stack (4 services), the `platform` profile (10) and the cloud file (18). Nothing has ever been started.
 - Background processes or runs: none.
 
 ## Decisions made this session (not yet in an ADR or progress.md)
