@@ -3,7 +3,8 @@
 # OUTPUT: series named ehg:<what>:<window>. delivery ratio and latency are fleet-wide; a node-level view is on the triage page.
 # HOW: The fleet gauges are per-minute values sampled every 15 s, so sum_over_time over a window weights every minute equally; the ratio of two sums is the packet-weighted delivery ratio. An empty window gives no value (0/0), never "100 %".
 #   Targets: delivery ratio >= 0.99 (the H2 bound), p95 latency < 2 s on the home path (the H1 bound), consumer backlog < 100 messages (about 5 s of traffic at the nominal 2 packets/s per node for ~10 nodes), API availability, backup age < 26 h.
-# STATUS: UNVERIFIED with promtool (not installed here) and never evaluated by a Prometheus server; tests/test_observability_rules.py checks the structure and that every metric used is defined somewhere.
+# STATUS: syntax checked with promtool and EVALUATED by promtool unit tests (deploy/observability/tests/rules_test.yml). Those tests found that the first form of the delivery ratio, rx / (rx + missing) written with two differently labelled
+#   selectors, matched nothing (the `kind` labels differ) and so never produced a value; the sums are now taken first. tests/test_observability_rules.py checks the structure and that every metric used is defined somewhere.
 # ROLE IN THESIS: Measured service levels of the cloud core.
 # BEFORE -> AFTER: Before: no service-level numbers from the VM. After: five recording rules per window.
 groups:
@@ -12,12 +13,12 @@ groups:
     rules:
       - record: ehg:delivery_ratio:5m
         expr: >-
-          sum_over_time(ehg_fleet_packets_60s{kind="rx"}[5m])
-          / (sum_over_time(ehg_fleet_packets_60s{kind="rx"}[5m]) + sum_over_time(ehg_fleet_packets_60s{kind="missing"}[5m]))
+          sum(sum_over_time(ehg_fleet_packets_60s{kind="rx"}[5m]))
+          / sum(sum_over_time(ehg_fleet_packets_60s{kind=~"rx|missing"}[5m]))
       - record: ehg:delivery_ratio:1h
         expr: >-
-          sum_over_time(ehg_fleet_packets_60s{kind="rx"}[1h])
-          / (sum_over_time(ehg_fleet_packets_60s{kind="rx"}[1h]) + sum_over_time(ehg_fleet_packets_60s{kind="missing"}[1h]))
+          sum(sum_over_time(ehg_fleet_packets_60s{kind="rx"}[1h]))
+          / sum(sum_over_time(ehg_fleet_packets_60s{kind=~"rx|missing"}[1h]))
       - record: ehg:latency_p95_seconds:5m
         expr: max_over_time(ehg_fleet_latency_p95_seconds[5m])
       - record: ehg:consumer_pending:max

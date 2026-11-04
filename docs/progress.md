@@ -1,5 +1,10 @@
 # Progress log
 
+## 2026-11-04: promtool unit tests for every alert: the delivery SLO never produced a value (fixed)
+
+- `deploy/observability/tests/rules_test.yml` (`promtool test rules`, run in the pinned Prometheus image; wrapped by `tests/test_promtool_rules.py` with `EHG_INTEGRATION=1`): 14 cases, every one of the 12 alerts fires after its `for` and is shown quiet when healthy (a plain test fails if an alert has no test or lacks one of the two directions).
+- **Defect found (HIGH for the SLO):** the recording rules `ehg:delivery_ratio:5m` and `:1h` were written `rx / (rx + missing)` with two selectors that carry different `kind` labels. Prometheus matches vectors on all labels, so the denominator was empty and **the delivery ratio never produced a sample**; `EhgDeliveryBelowObjective` could never fire, and the earlier real Prometheus run only showed rule health "ok", not data. Now `sum(rx) / sum(rx or missing)`. The same unit test also covers "no packets": the ratio is NaN, which is never a breach and never reads as 100 %.
+
 ## 2026-11-04: the WHOLE cloud compose file started for the first time (locally, 18 services), two defects fixed
 
 Run on this Mac with a throwaway PKI (`tools/pki.sh init --host localhost`), random secrets and `EHG_DOMAIN=localhost` (Caddy then issues from its internal CA); not a substitute for the VM (arm64 Linux, journald, 12 GB), but the services, images, mounts and configs are the real ones.

@@ -2,7 +2,7 @@
 # INPUT: the recording rules of slo.yml and raw metrics of the services, node-exporter's textfile (ehg_disk_*) and the backup script.
 # OUTPUT: alerts sent to Alertmanager (deploy/observability/alertmanager.yml). Severity "page" is for things that stop data being kept; "ticket" for things to look at within a day.
 # HOW: Every alert has a `for` period so a single bad scrape does not fire it. A source that stops reporting is an alert of its own (absent()), because silence must never read as "fine".
-# STATUS: UNVERIFIED with promtool or a running Prometheus (see slo.yml).
+# STATUS: every alert is exercised by promtool unit tests (deploy/observability/tests/rules_test.yml): fires after its `for`, stays quiet when healthy.
 # ROLE IN THESIS: Failure detection for the drills in docs/dr.md.
 # BEFORE -> AFTER: Before: nothing watched the VM. After: 12 alerts.
 groups:
