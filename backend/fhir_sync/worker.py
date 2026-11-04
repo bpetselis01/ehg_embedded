@@ -111,7 +111,7 @@ class Worker:
             if not frames:
                 out["skipped"] = "no data"
                 return out
-        lo0, hi = min(frames), max(frames)
+        hi = max(frames)
         chunks: dict[int, dict] = {}
         for i, counts in frames.items():
             chunks.setdefault(i // self._n, {})[i] = counts

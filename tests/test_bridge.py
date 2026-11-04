@@ -40,7 +40,7 @@ def deliver(bridge, topic, payload, acks):
 
 
 def test_ack_only_after_the_stream_has_it():
-    js, acks = FakeJetStream(), []
+    js = FakeJetStream()
     order = []
     orig = js.publish
 

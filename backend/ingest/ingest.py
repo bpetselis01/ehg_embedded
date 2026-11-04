@@ -135,8 +135,6 @@ async def run_jetstream() -> None:
 
     The subject, stream and consumer settings repeat backend/bus.py on purpose: this file runs alone in its own container image and cannot import it.
     """
-    import asyncio
-
     import nats
     from nats.js.api import AckPolicy, ConsumerConfig
 

@@ -1,5 +1,11 @@
 # Progress log
 
+## 2026-11-04: "other non-setup issues?": scanners run for the first time, key permissions, lint
+
+- **Scanners (shellcheck, hadolint, gitleaks, trivy) run by hand for the first time** (table in docs/supply-chain.md): 3 shell-quoting warnings fixed (one was a real nested-quote bug in `init-offline.sh` that worked only by accident; `build.sh` now builds its options as real arguments, and both firmware variants were rebuilt), `backend/ingest/Dockerfile` no longer runs as root, `pip` is removed from the platform image (its vendored copies carried 5 HIGH CVEs; imports still work), aiohttp/certifi/pillow upgraded in the lock (861 tests pass), and `.gitleaks.toml` allowlists exactly the two deliberate look-alikes.
+- **A real deployment bug found by thinking about Linux, not by running anything: file ownership.** On the VM a bind-mounted key keeps its host owner and mode. The containers run as fixed non-root users (Mosquitto 1883, the Python services 10001, step-ca 1000), so a 600 key owned by `ehg` is unreadable to all of them; it never showed on the Mac, where mounts look permissive. My own instruction `chown -R 1000:1000` on the step-ca bundle would also have taken the enrolment key away from the enrolment API (uid 10001). New `deploy/fix-key-permissions.sh` (sudo, one line per file, required keys checked, enrolment key set AFTER the recursive chown) with 5 tests using recorders; docs/deployment.md and the runbook checklist now point at it. Untested on a real VM.
+- **Lint:** `ruff --select F,E9` flagged 7 leftovers (unused variable and imports, one in my own earlier edit); all cleaned except one intended fixture re-import.
+
 ## 2026-11-04: second review of the sync worker: two more valid findings, fixed
 
 - **Key collision across subjects (MEDIUM):** the Observation key was `<node>/<record>/<chunk>`. A node handed to another subject (or the same record played again) produced the same key, and the conditional PUT would have REPLACED the first subject's window with the second's. The key is now `<node>/<subject>/<record>/<chunk>` (docs/interface-spec.md updated; the facade's per-node check is unchanged). Test: after a subject change the first subject's windows are byte-identical and the new ones have their own keys; the Device stays one.

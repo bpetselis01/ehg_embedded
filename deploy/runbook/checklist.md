@@ -29,7 +29,7 @@ Tick as you go. The explanation of each step is in [`docs/deployment.md`](../../
 - [ ] 9. `/opt/ehg/state/first-boot.status` has no `ERROR` line; `/srv/ehg-data` mounted; `docker --version`; `ufw` active; `ehg-block-imds` active
 - [ ] 10. Deploy key placed (mode 600, owner `ehg`); `known_hosts` built and the fingerprint compared with GitHub's documentation; repo cloned at the tag
 - [ ] 11. `sops` installed by hand, checksum verified; age private key at `/opt/ehg/secrets/age.key` (mode 600, owner `ehg`)
-- [ ] 12. `tools/pki.sh init` run on the Mac; `root.key` moved off this computer; ONLY the seven files of step 12 copied to `/opt/ehg/pki/` (`ca-chain.crt`, `broker.crt`, `broker.key`, `ca.crl` and the bridge's `ehg-bridge.crt` and `.key`, key made readable for UID 10001; both bridge files MUST exist or Docker creates directories in their place); no `intermediate/` or `root/` on the VM
+- [ ] 12. `tools/pki.sh init` run on the Mac; `root.key` moved off this computer; ONLY the seven files of step 12 copied to `/opt/ehg/pki/` (`ca-chain.crt`, `broker.crt`, `broker.key`, `ca.crl` and the bridge's `ehg-bridge.crt` and `.key`, then `sudo deploy/fix-key-permissions.sh` (broker key for gid 1883, bridge key for gid 10001, step-ca folder for uid 1000); both bridge files MUST exist or Docker creates directories in their place); no `intermediate/` or `root/` on the VM
 - [ ] 13. `update.sh --bootstrap --services "caddy mosquitto"` finished healthy; `docker stats --no-stream` copied into the log; `curl -sI https://NAME` answers 200 with a valid certificate
 
 ## The proof (Checkpoint 3)

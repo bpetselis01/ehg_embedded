@@ -2,7 +2,7 @@
 They enforce the rules that make the page safe under the front door's Content-Security-Policy, that no token is stored, that server text is never treated as HTML, and that no clinical wording appears."""
 
 import re
-from pathlib import Path
+
 
 import pytest
 from fastapi.testclient import TestClient

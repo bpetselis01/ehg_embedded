@@ -1,0 +1,16 @@
+# PURPOSE: Tells gitleaks about the two strings in this repository that look like secrets and are not.
+# 1. the documented DEV-MODE tokens (dev-viewer, dev-operator, dev-admin): fixed, passwordless, loopback-only, shown in docs on purpose (backend/jwtauth.py refuses them off loopback);
+# 2. the fake access key in tests/test_deploy_assets.py, which exists to prove that the repository's own secret scan catches that pattern.
+# Nothing else is allowed: a real key anywhere else still fails the scan.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "documented dev-mode bearer tokens"
+regexTarget = "match"
+regexes = ['''Bearer dev-(viewer|operator|admin)''']
+
+[[allowlists]]
+description = "fake key used as a test sample for the repository's own secret scanner"
+paths = ['''tests/test_deploy_assets\.py''']
+regexes = ['''AKIAABCDEFGHIJKLMNOP''']

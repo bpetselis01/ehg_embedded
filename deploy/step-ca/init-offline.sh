@@ -2,7 +2,7 @@
 # PURPOSE: Creates the private CA for gateway certificates on YOUR computer, so the ROOT key never goes to the cloud VM (decision 0013). Run it once, offline-ish, with Docker.
 # USAGE: deploy/step-ca/init-offline.sh OUTDIR        (OUTDIR must not exist; e.g. ~/ehg-ca)
 # OUTPUT (all under OUTDIR; nothing is written inside the repository):
-#   vm/        copy this folder to the VM as /opt/ehg/step-ca  (chown -R 1000:1000, the CA container's user). It holds the config, the root CERTIFICATE, the intermediate certificate and
+#   vm/        copy this folder to the VM as /opt/ehg/step-ca, then run `sudo deploy/fix-key-permissions.sh` on the VM (uid 1000 owns it, except the enrolment key). It holds the config, the root CERTIFICATE, the intermediate certificate and
 #              key (folder keys/), the password file of the intermediate key, and enroll/provisioner.pem (the key the enrolment API signs one-time tokens with, mode 640) and enroll/root_ca.crt.
 #   offline/   the ROOT KEY (root_ca_key, encrypted) and its password: keep OFFLINE (password manager / encrypted disk image). Not needed again until the intermediate must be replaced.
 #   env.txt    one line to add to /opt/ehg/etc/site.env on the VM: EHG_STEPCA_ROOT_FP=<root fingerprint>   (plus COMPOSE_PROFILES=enrol to start the CA and the enrolment API)
@@ -34,7 +34,7 @@ docker exec -e VMPW="$VMPW" "$NAME" sh -c 'cd /home/step && step crypto jwk crea
  && step ca provisioner add ehg-enroll --type JWK --public-key /tmp/pub.json --x509-template /home/step/ehg-gateway.tpl --x509-min-dur 1h --x509-max-dur 168h --x509-default-dur 168h --disable-renewal --ssh=false \
     --ca-config /home/step/config/ca.json >/dev/null 2>&1 \
  && step ca provisioner remove bootstrap-unused --ca-config /home/step/config/ca.json >/dev/null 2>&1 \
- && printf '%s' "$VMPW" > /tmp/vmpw \
+ && printf %s "$VMPW" > /tmp/vmpw \
  && step crypto change-pass /home/step/secrets/intermediate_ca_key --password-file /home/step/secrets/password --new-password-file /tmp/vmpw --force >/dev/null 2>&1 \
  && cp /tmp/vmpw /home/step/secrets/password \
  && sed -i "s|\"db\": {|\"crl\": {\"enabled\": true, \"generateOnRevoke\": true, \"cacheDuration\": \"24h\", \"idpURL\": \"https://step-ca:9000/1.0/crl\"},\n\t\"db\": {|" /home/step/config/ca.json'
@@ -52,4 +52,4 @@ printf '%s\n' "$PW" > "$OUT/offline/ca-password.txt"
 rm -f "$OUT"/vm/config/*.bak 2>/dev/null || true
 chmod 640 "$OUT/vm/enroll/provisioner.pem"
 printf 'EHG_STEPCA_ROOT_FP=%s\nCOMPOSE_PROFILES=enrol\n' "$FP" > "$OUT/env.txt"
-echo "CA written to $OUT: copy $OUT/vm to the VM as /opt/ehg/step-ca, keep $OUT/offline OFFLINE, add $OUT/env.txt to /opt/ehg/etc/site.env"
+echo "CA written to $OUT: copy $OUT/vm to the VM as /opt/ehg/step-ca, run sudo deploy/fix-key-permissions.sh there, keep $OUT/offline OFFLINE, add $OUT/env.txt to /opt/ehg/etc/site.env"

@@ -60,16 +60,17 @@ else
 fi
 # Always set explicitly: west remembers -D options, so a built-in build would otherwise stick.
 # The "ehg_node_" prefix sends it to the app image, not to sysbuild/MCUboot.
-BUILD="$APP/build"; EXTRA=""
+BUILD="$APP/build"
+set -- "-Dehg_node_CONFIG_EHG_BAKED_RECORD=$BAKED"   # the build options, as real arguments (a key path with spaces must stay one word)
 if [ -n "$SECURE" ]; then
 	# A separate build folder keeps the signing-key and pairing options out of the default build (west remembers -D options).
 	BUILD="$APP/build-secure"
 	[ -n "$EHG_MCUBOOT_KEY" ] && [ -f "$EHG_MCUBOOT_KEY" ] || { echo "--secure: set EHG_MCUBOOT_KEY to your signing key (make one with firmware/gen_signing_key.sh)"; exit 1; }
 	case "$(cd "$(dirname "$EHG_MCUBOOT_KEY")" && pwd -P)/" in "$REPO"/*) echo "--secure: the signing key must be OUTSIDE the repository"; exit 1 ;; esac
-	EXTRA="-Dehg_node_EXTRA_CONF_FILE=$APP/security.conf -DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE=\"$EHG_MCUBOOT_KEY\""
+	set -- "$@" "-Dehg_node_EXTRA_CONF_FILE=$APP/security.conf" "-DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE=\"$EHG_MCUBOOT_KEY\""
 	MODE="$MODE + SECURE (LESC pairing, own signing key)"
 fi
-$WEST build $P -b nrf52840dk/nrf52840 -d "$BUILD" "$APP" -- -Dehg_node_CONFIG_EHG_BAKED_RECORD=$BAKED $EXTRA
+$WEST build $P -b nrf52840dk/nrf52840 -d "$BUILD" "$APP" -- "$@"
 # only "file" lines: the "command" lines must keep space-free paths
 sed '/"file":/s#'"$LINK"'#'"$REPO"'#' "$BUILD/ehg_node/compile_commands.json" > "$BUILD/compile_commands.json"
 [ -n "$FLASH" ] && $WEST flash -d "$BUILD" --dev-id "$DEV_ID"

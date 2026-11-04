@@ -5,7 +5,7 @@ import copy
 import sys
 from pathlib import Path
 
-import pytest
+
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "eval"))
 from parity import compare, missing_ranges  # noqa: E402

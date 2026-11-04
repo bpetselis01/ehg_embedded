@@ -105,7 +105,7 @@ def create_app(*, registry, audit, auth, ca, crl_source=lambda: "", limit=(5, 36
         if not p.at_least("admin"):
             raise HTTPException(403, "needs the admin role")
         serials = registry.active_serials(gateway_id, datetime.fromtimestamp(clock(), tz=timezone.utc))  # every live certificate, not only the newest
-        g = registry.revoke_gateway(gateway_id, p.user, p.role)  # UnknownGateway -> 404 below
+        registry.revoke_gateway(gateway_id, p.user, p.role)  # UnknownGateway -> 404 below
         failed = []
         for serial in serials:
             try:
