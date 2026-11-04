@@ -1,4 +1,4 @@
-// PURPOSE: Packet-loss tracking and board-to-phone clock mapping for the iPhone gateway. A line-for-line port of gateway/tracking.py (GapTracker, ClockMap); change them together.
+// PURPOSE: Packet-loss tracking and board-to-phone clock mapping for the iPhone gateway. A line-for-line port of gateway/tracking.py (GapTracker, ClockMap, ResendScheduler); change them together.
 // INPUT: GapTracker.observe(seq): the sequence number of each arriving packet. ClockMap.update(ticks, tHost): the board's tick counter (32768 per second, 32 bits, wraps) and the phone's clock when the packet arrived.
 // OUTPUT: observe() returns the sequence numbers newly found missing (empty for none), in ascending order; ClockMap.toHost(ticks) returns phone time in Unix seconds, or nil before the first update.
 //   e.g. observe(0), observe(1), observe(2), observe(5), observe(3) return [], [], [], [3, 4], [].
@@ -72,5 +72,51 @@ public struct ClockMap {
     /// Board ticks to phone time in Unix seconds (nil until the first update).
     public func toHost(_ ticks: Int) -> Double? {
         offset.map { Double(unwrap(ticks)) / tickHz + $0 }
+    }
+}
+
+/// How long to wait before asking again for a packet that is still missing, and how many requests in all (gateway/tracking.py: RETRY_S, MAX_TRIES).
+public enum ResendPolicy {
+    public static let retrySeconds = 1.0
+    public static let maxTries = 5
+}
+
+/// Groups missing sequence numbers into (start, count) runs, one RESEND command each: [2,3,4,9] becomes [(2,3),(9,1)]. A run is at most 0xFFFF long (the command's count is 16 bits).
+public func resendRanges(_ seqs: [Int]) -> [(start: Int, count: Int)] {
+    var out: [(start: Int, count: Int)] = []
+    for s in seqs {
+        if let last = out.last, last.start + last.count == s, last.count < 0xFFFF {
+            out[out.count - 1].count += 1
+        } else {
+            out.append((s, 1))
+        }
+    }
+    return out
+}
+
+/// Decides WHEN to re-ask the board for missing packets: new gaps at once, still-missing ones again every `retrySeconds`, at most `maxTries` requests in all.
+/// The phone app owns the timer and the Bluetooth write; this only says what to ask for at a given time. Same behaviour as Python's ResendScheduler.
+public struct ResendScheduler {
+    private var asked: [Int: (time: Double, tries: Int)] = [:]
+    private var stream = 0
+
+    public init() {}
+
+    /// The (start, count) runs to request at time `t`. Call after `gaps.observe(...)` with its return value as `newGaps`.
+    public mutating func due(gaps: GapTracker, newGaps: [Int], at t: Double) -> [(start: Int, count: Int)] {
+        if gaps.streams != stream {  // the board restarted its numbering: old requests mean nothing
+            stream = gaps.streams
+            asked = [:]
+        }
+        var due = newGaps
+        for (s, a) in asked {
+            if !gaps.missing.contains(s) {
+                asked[s] = nil  // arrived
+            } else if t - a.time >= ResendPolicy.retrySeconds && a.tries < ResendPolicy.maxTries {
+                due.append(s)
+            }
+        }
+        for s in due { asked[s] = (t, (asked[s]?.tries ?? 0) + 1) }
+        return resendRanges(due.sorted())
     }
 }

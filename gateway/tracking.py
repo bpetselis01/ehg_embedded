@@ -22,6 +22,43 @@ from gateway.packet import TICK_HZ
 
 WRAP = 2**32
 NEW_STREAM_BACKSTEP = 1000  # seq this far backwards = node rebooted / restarted stream
+RETRY_S, MAX_TRIES = 1.0, 5  # re-ask for a still-missing packet after 1 s, at most 5 times in all
+
+
+def ranges(seqs: list[int]) -> list[tuple[int, int]]:
+    """Group missing seqs into (start, count) runs, one RESEND each: [2,3,4,9] -> [(2,3),(9,1)]. A run is at most 0xFFFF long (the command's count is 16 bits)."""
+    out: list[tuple[int, int]] = []
+    for s in seqs:
+        if out and out[-1][0] + out[-1][1] == s and out[-1][1] < 0xFFFF:
+            out[-1] = (out[-1][0], out[-1][1] + 1)
+        else:
+            out.append((s, 1))
+    return out
+
+
+class ResendScheduler:
+    """Decides WHEN to re-ask the board for missing packets: new gaps at once, still-missing ones again every RETRY_S, at most MAX_TRIES requests in all.
+
+    The re-sent copy can be lost on the air too, so one request is not enough. Pure (the caller passes the clock); the iPhone port in
+    ios/EHGWire/Sources/EHGWire/Tracking.swift must behave identically (golden cases in tests/fixtures/packet_vectors.json, "resend")."""
+
+    def __init__(self):
+        self._asked: dict[int, tuple[float, int]] = {}  # missing seq -> (time of the last request, requests so far)
+        self._stream = 0
+
+    def due(self, gaps: "GapTracker", new_gaps: list[int], t: float) -> list[tuple[int, int]]:
+        """(start, count) runs to request now. Call after gaps.observe(), with its return value as new_gaps."""
+        if gaps.streams != self._stream:  # board restarted numbering: old requests mean nothing
+            self._stream, self._asked = gaps.streams, {}
+        due = list(new_gaps)
+        for s in list(self._asked):
+            if s not in gaps.missing:
+                del self._asked[s]  # arrived
+            elif t - self._asked[s][0] >= RETRY_S and self._asked[s][1] < MAX_TRIES:
+                due.append(s)
+        for s in due:
+            self._asked[s] = (t, self._asked.get(s, (0, 0))[1] + 1)
+        return ranges(sorted(due))
 
 
 class GapTracker:

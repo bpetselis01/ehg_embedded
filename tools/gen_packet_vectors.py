@@ -9,7 +9,7 @@ INPUT: gateway/packet.py and gateway/tracking.py only. No hardware, no network.
 OUTPUT: tests/fixtures/packet_vectors.json: {"valid": [{"name", "hex", "packet": {version, n_ch, fs_hz, seq, frame_idx, t_inject, n_frames, flags, record_id, samples}}], "invalid": [{"name", "hex", "error": kind}]}
   with kind one of too_short, unknown_version, wrong_length, crc_mismatch (the order Python checks them in, which the other copies must follow).
   e.g. {"name": "default_3ch_10frames_16bit", "hex": "0203 1400 ...", "packet": {"version": 2, "n_ch": 3, "fs_hz": 20, ...}}
-  plus "tracking": {"gap": [{"name", "seqs", "returns" (what observe() returned for each), "final": {last, missing, received, duplicates, streams}}], "clock": [{"name", "updates": [[ticks, host_seconds]], "offset", "queries": [{"ticks", "host"}]}]}
+  plus "tracking": {"gap": [{"name", "seqs", "returns" (what observe() returned for each), "final": {last, missing, received, duplicates, streams}}], "resend": [{"name", "steps": [[time, seq or null]], "requests": [[[start, count]]] per step}], "clock": [{"name", "updates": [[ticks, host_seconds]], "offset", "queries": [{"ticks", "host"}]}]}
 HOW: Deterministic: fixed field values and a fixed pseudo-random sample sequence (a small linear generator, not random), so --check is stable. Extremes (-32768, 32767, 24-bit limits) and the flag bits are included on purpose.
 ROLE IN THESIS: Keeps H2/H4 (bit-exact samples, damaged packets rejected) true on the phone as well as on the Mac.
 BEFORE -> AFTER: Before: two copies guarded by tests/test_docs.py only for the C/Python constants. After: a third copy (Swift) guarded by shared vectors.
@@ -21,7 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))  # lets `python tools/gen_packet_vectors.py` find gateway/
 from gateway.packet import FLAG_24BIT, FLAG_RETRANS, HEADER, Packet, pack, parse  # noqa: E402
-from gateway.tracking import ClockMap, GapTracker  # noqa: E402
+from gateway.tracking import ClockMap, GapTracker, ResendScheduler  # noqa: E402
 
 OUT = Path(__file__).parent.parent / "tests/fixtures/packet_vectors.json"
 
@@ -93,6 +93,16 @@ GAP_CASES = {
     "near_uint32_limit": [4294967293, 4294967294, 4294967295, 0, 1],
     "two_gaps_and_partial_fill": [0, 4, 9, 2, 7, 3],
 }
+# (time in s, seq) arrivals; plus times at which only the clock is looked at (seq None) so a retry can fall due without a new packet
+RESEND_CASES = {
+    "no_gap_no_request": [(0.0, 0), (0.1, 1), (0.2, 2)],
+    "gap_requested_at_once_then_filled": [(0.0, 0), (0.1, 1), (0.2, 4), (0.3, 2), (0.4, 3), (2.0, 5)],
+    "gap_retried_each_second": [(0.0, 0), (0.1, 3), (0.5, None), (1.1, None), (1.2, 4), (2.2, 5), (3.3, 6)],
+    "gap_given_up_after_five_requests": [(0.0, 0), (0.1, 2)] + [(1.1 * k, None) for k in range(1, 9)],
+    "ranges_are_merged": [(0.0, 0), (0.1, 5), (0.2, 7)],
+    "new_stream_forgets_old_requests": [(0.0, 1500), (0.1, 1503), (0.5, 2), (1.6, 3)],
+    "retry_not_before_one_second": [(0.0, 0), (0.1, 2), (1.0, None), (1.1, None), (1.2, 4)],
+}
 CLOCK_CASES = {
     "single_update": ([(113049, 1791243068.468658)], [98304, 113049, 200000]),
     "keeps_the_smallest_offset": ([(32768, 101.0), (65536, 102.9), (98304, 103.5)], [0, 32768, 98304, 131072]),
@@ -114,7 +124,14 @@ def tracking() -> dict:
         for ticks, host in updates:
             c.update(ticks, host)
         clock.append({"name": name, "updates": [list(u) for u in updates], "offset": c.offset, "queries": [{"ticks": q, "host": c.to_host(q)} for q in queries]})
-    return {"gap": gap, "clock": clock}
+    resend = []
+    for name, steps in RESEND_CASES.items():
+        t, s, requests = GapTracker(), ResendScheduler(), []
+        for when, seq in steps:
+            new = t.observe(seq) if seq is not None else []
+            requests.append([list(r) for r in s.due(t, new, when)])
+        resend.append({"name": name, "steps": [[when, seq] for when, seq in steps], "requests": requests})
+    return {"gap": gap, "clock": clock, "resend": resend}
 
 
 def main(argv: list[str]) -> int:

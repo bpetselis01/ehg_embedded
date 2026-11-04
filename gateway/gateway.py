@@ -57,7 +57,7 @@ from pathlib import Path
 import numpy as np
 
 from gateway.packet import FLAG_24BIT, FLAG_RETRANS, TICK_HZ, VERSION, Packet, pack, parse
-from gateway.tracking import ClockMap, GapTracker
+from gateway.tracking import MAX_TRIES, RETRY_S, ClockMap, GapTracker, ResendScheduler, ranges  # noqa: F401  (RETRY_S, MAX_TRIES, ranges: re-exported)
 
 # Must match firmware/ehg_node/src/ehg_service.c
 SERVICE_UUID = "4e480001-a0e1-4c3b-8747-9a1b2c3d4e5f"
@@ -65,7 +65,6 @@ DATA_UUID = "4e480002-a0e1-4c3b-8747-9a1b2c3d4e5f"
 CTRL_UUID = "4e480003-a0e1-4c3b-8747-9a1b2c3d4e5f"
 OP_START, OP_STOP, OP_RESEND = 0x01, 0x02, 0x03
 NAME_PREFIX = "EHG-"
-RETRY_S, MAX_TRIES = 1.0, 5  # re-ask for a still-missing packet after 1 s, at most 5 times in all
 LOGS = Path("gateway/logs")
 
 
@@ -80,8 +79,7 @@ class Node:
         self.id = node_id
         self.gaps, self.clock = GapTracker(), ClockMap()
         self.bad = 0  # packets rejected by parse (wrong CRC, length or version)
-        self._asked: dict[int, tuple[float, int]] = {}  # missing seq -> (last request time, requests so far)
-        self._stream = 0
+        self._resend = ResendScheduler()
         self.publish, self.request_resend = publish, request_resend
         LOGS.mkdir(parents=True, exist_ok=True)
         self._log_file = open(LOGS / f"{node_id}.csv", "a", newline="")
@@ -110,19 +108,8 @@ class Node:
         self.publish(self.id, msg)
 
     def _request_missing(self, new_gaps: list[int], t: float):
-        """Ask the board for new gaps at once, and again (every RETRY_S, up to MAX_TRIES) for any
-        still missing: the re-sent copy can be lost on the air too, and one request is not enough."""
-        if self.gaps.streams != self._stream:  # board restarted numbering: old requests mean nothing
-            self._stream, self._asked = self.gaps.streams, {}
-        due = list(new_gaps)
-        for s in list(self._asked):
-            if s not in self.gaps.missing:
-                del self._asked[s]  # arrived
-            elif t - self._asked[s][0] >= RETRY_S and self._asked[s][1] < MAX_TRIES:
-                due.append(s)
-        for s in due:
-            self._asked[s] = (t, self._asked.get(s, (0, 0))[1] + 1)
-        for start, count in ranges(sorted(due)):
+        """Ask the board for new gaps at once and for still-missing ones again (ResendScheduler in gateway/tracking.py)."""
+        for start, count in self._resend.due(self.gaps, new_gaps, t):
             self.request_resend(start, count)
 
     def stats(self) -> str:
@@ -133,17 +120,6 @@ class Node:
 
     def close(self):
         self._log_file.close()
-
-
-def ranges(seqs: list[int]):
-    """Group missing seqs into (start, count) runs, one RESEND each: [2,3,4,9] -> [(2,3),(9,1)]"""
-    out = []
-    for s in seqs:
-        if out and out[-1][0] + out[-1][1] == s and out[-1][1] < 0xFFFF:
-            out[-1] = (out[-1][0], out[-1][1] + 1)
-        else:
-            out.append((s, 1))
-    return out
 
 
 def tls_context(ca: str, cert: str, key: str) -> ssl.SSLContext:

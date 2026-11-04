@@ -44,3 +44,33 @@ def test_clockmap_unwraps_u32_ticks():
     c.update(2**32 - 32768, 1000.0)
     c.update(0, 1001.0)  # wrapped: one second later
     assert abs(c.to_host(0) - 1001.0) < 1e-6
+
+
+# ---- ResendScheduler (moved here from gateway.Node so the iPhone port has one reference; golden cases: tests/fixtures/packet_vectors.json)
+
+def _run(steps):
+    from gateway.tracking import GapTracker, ResendScheduler
+    g, s, out = GapTracker(), ResendScheduler(), []
+    for when, seq in steps:
+        out.append(s.due(g, g.observe(seq) if seq is not None else [], when))
+    return out
+
+
+def test_new_gap_is_requested_at_once_and_runs_are_merged():
+    assert _run([(0.0, 0), (0.1, 5)]) == [[], [(1, 4)]]
+
+
+def test_retry_after_one_second_and_never_more_than_five_requests():
+    steps = [(0.0, 0), (0.1, 2)] + [(1.1 * k, None) for k in range(1, 9)]
+    asked = [r for r in _run(steps) if r]
+    assert len(asked) == 5 and all(r == [(1, 1)] for r in asked)  # 1 at once + 4 retries
+
+
+def test_no_retry_before_the_interval_and_none_once_filled():
+    out = _run([(0.0, 0), (0.1, 2), (1.0, None), (1.2, 1), (3.0, None)])
+    assert out[1] == [(1, 1)] and out[2] == [] and out[4] == []
+
+
+def test_constants_are_reexported_for_the_gateway_and_triage():
+    from gateway import gateway, tracking
+    assert (gateway.RETRY_S, gateway.MAX_TRIES) == (tracking.RETRY_S, tracking.MAX_TRIES) == (1.0, 5)

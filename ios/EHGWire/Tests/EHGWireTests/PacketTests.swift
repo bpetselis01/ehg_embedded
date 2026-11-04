@@ -21,7 +21,10 @@ private struct Vectors: Decodable {
             struct Query: Decodable { let ticks: Int, host: Double }
             let name: String, updates: [[Double]], offset: Double, queries: [Query]
         }
-        let gap: [Gap], clock: [Clock]
+        struct Resend: Decodable {
+            let name: String, steps: [[Double?]], requests: [[[Int]]]
+        }
+        let gap: [Gap], clock: [Clock], resend: [Resend]
     }
     let valid: [Valid], invalid: [Invalid], tracking: Tracking
 }
@@ -112,6 +115,19 @@ final class PacketTests: XCTestCase {
             XCTAssertEqual(t.received, c.final.received, c.name)
             XCTAssertEqual(t.duplicates, c.final.duplicates, c.name)
             XCTAssertEqual(t.streams, c.final.streams, c.name)
+        }
+    }
+
+    func testResendSchedulerAsksExactlyWhenPythonDid() throws {
+        let cases = try loadVectors().tracking.resend
+        XCTAssertGreaterThanOrEqual(cases.count, 7)
+        for c in cases {
+            var gaps = GapTracker(), scheduler = ResendScheduler()
+            for (i, step) in c.steps.enumerated() {
+                let new = step[1].map { gaps.observe(Int($0)) } ?? []
+                let asked = scheduler.due(gaps: gaps, newGaps: new, at: try XCTUnwrap(step[0]))
+                XCTAssertEqual(asked.map { [$0.start, $0.count] }, c.requests[i], "\(c.name) step \(i)")
+            }
         }
     }
 

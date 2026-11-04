@@ -116,3 +116,15 @@ def test_swift_tracking_constants_match_python():
     assert "1 << 32" in TRACKING_SWIFT and "ClockMap.wrap / 2" in TRACKING_SWIFT
     assert "seq >= previous - GapTracker.newStreamBackstep" in TRACKING_SWIFT, "the new-stream rule is the one in gateway/tracking.py"
 
+
+
+def test_swift_resend_policy_matches_python_and_vectors_replay():
+    from gateway.tracking import MAX_TRIES, RETRY_S, ResendScheduler
+    assert re.search(r"retrySeconds = ([\d.]+)", TRACKING_SWIFT).group(1) == str(RETRY_S)
+    assert re.search(r"maxTries = (\d+)", TRACKING_SWIFT).group(1) == str(MAX_TRIES)
+    assert "last.count < 0xFFFF" in TRACKING_SWIFT, "the run limit of the 16-bit RESEND count"
+    assert len(TRACKING["resend"]) >= 7
+    for c in TRACKING["resend"]:
+        g, s = GapTracker(), ResendScheduler()
+        got = [[list(r) for r in s.due(g, g.observe(seq) if seq is not None else [], when)] for when, seq in c["steps"]]
+        assert got == c["requests"], c["name"]
