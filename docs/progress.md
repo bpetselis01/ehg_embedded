@@ -1,5 +1,16 @@
 # Progress log
 
+## 2026-11-04: the WHOLE cloud compose file started for the first time (locally, 18 services), two defects fixed
+
+Run on this Mac with a throwaway PKI (`tools/pki.sh init --host localhost`), random secrets and `EHG_DOMAIN=localhost` (Caddy then issues from its internal CA); not a substitute for the VM (arm64 Linux, journald, 12 GB), but the services, images, mounts and configs are the real ones.
+
+- **All 18 services came up; 14 healthy by their own health checks, the rest by logs/targets.** Prometheus: 10 targets up (alertmanager, alloy, bridge, cadvisor, loki, node, postgres, prometheus, triage, ts-writer); both rule groups load with health `ok` (6 + 12 rules); Grafana (sub-path `/grafana`) has the provisioned dashboard "EHG pipeline overview" and both data sources report OK; Keycloak 26.8.1 imports the realm into PostgreSQL and serves `/auth/realms/ehg`; HAPI starts on PostgreSQL in 30 s; `ehg_consumer_pending` is exported for both consumers.
+- **Caddy routes behave as designed over HTTPS:** `/` and `/triage.js` 200, `/ui-config.json` 200, `/api/worklist` and `/fhir/metadata` 401 without a token, `/hapi/` and `/metrics` not routed, security headers present (CSP, HSTS, X-Frame-Options DENY, no-referrer).
+- **End to end over mTLS TLS 1.3:** `gateway --simulate 1 --mqtt-tls` with the `ehg-gw-01` certificate, through the cloud Mosquitto (ACL), the bridge, NATS JetStream and ts-writer: 59 packets in TimescaleDB, 59 published by the bridge.
+- **Defect 1 (HIGH; ts-writer, triage, and the influx writer's loop):** on an idle stream both crashed with `TimeoutError` and were restarted by Docker. nats-py's `fetch()` raises the BUILT-IN `TimeoutError`; the code caught `nats.errors.TimeoutError`, which is a SUBCLASS and so does not catch its parent. Tests raised the subclass themselves and could not see it; it only showed with no traffic. Fixed with `backend/bus.py:fetch_batch` (ts-writer, triage) and the built-in class in `ingest.py`, with `tests/test_bus_fetch.py` (including a guard that no consumer catches only the subclass).
+- **Defect 2: Alloy crash-looped** (`mkdir /var/lib/alloy/data: permission denied`): the image runs as root, its data directory belongs to uid 473 (mode 770), and with `cap_drop: ALL` root cannot enter it, nor read the journal files of the host group. Fixed with `cap_add: [DAC_OVERRIDE]` (nothing else is reachable from that container); journal reading itself could not be tested on this Mac (no journald), so it stays UNVERIFIED until the VM.
+- **Not run:** Alloy to Loki with a real journal; cAdvisor naming; restic; `update.sh` on a VM; Keycloak sign-in through the browser (only tokens were checked); step-ca/enrolment/FHIR-sync as services in this file (they are not in it).
+
 ## 2026-11-04: Docker is up: the first real runs of NATS, TimescaleDB, Keycloak, HAPI, Caddy and Prometheus
 
 Byron started Docker Desktop. `docker pull` first hung for over an hour (`error getting credentials`, the Desktop credential helper blocks); pulls of public images work with `DOCKER_CONFIG=/tmp/dockercfg-nocreds` (a config holding `{}`, with `cli-plugins` linked to `~/.docker/cli-plugins` so `docker compose` is found). Nothing of Byron's Docker configuration was changed. All images were pulled by the pinned digests.

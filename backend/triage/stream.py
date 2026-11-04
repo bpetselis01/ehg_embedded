@@ -267,10 +267,7 @@ async def run() -> None:
     async def consume():
         """Feed the monitors from the stream."""
         while True:
-            try:
-                msgs = await sub.fetch(100, timeout=1)
-            except nats.errors.TimeoutError:
-                continue
+            msgs = await bus.fetch_batch(sub, 100)
             for m in msgs:
                 t = time.time()
                 try:

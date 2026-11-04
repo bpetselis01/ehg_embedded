@@ -147,7 +147,7 @@ async def run_jetstream() -> None:
     while True:
         try:
             msgs = await sub.fetch(50, timeout=1)
-        except nats.errors.TimeoutError:
+        except TimeoutError:  # the BUILT-IN class: nats-py raises it on an idle stream, and nats.errors.TimeoutError (a subclass) does not catch it (see backend/bus.py:fetch_batch)
             continue
         await consume(msgs)
 

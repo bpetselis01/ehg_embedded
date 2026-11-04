@@ -7,9 +7,9 @@
 - Branch / last commit: feat/enterprise-topology, see `git log -1`. Nothing pushed. Tag `baseline-pre-enterprise` marks the start.
 
 ## State of the repo
-- Tests: `uv run pytest -q` = 823 passed, 15 skipped. With `EHG_INTEGRATION=1 TF_PLUGIN_CACHE_DIR=<cache> SSL_CERT_FILE=/etc/ssl/cert.pem` = 777 passed, 3 skipped (a real Mosquitto broker, the Terraform validate against the real provider schema, `swift test`); skipped for lack of the tool: Caddy, TimescaleDB, shellcheck, and the real HAPI test (needs a running Docker daemon).
+- Tests: `uv run pytest -q` = 831 passed, 15 skipped. With `EHG_INTEGRATION=1 TF_PLUGIN_CACHE_DIR=<cache> SSL_CERT_FILE=/etc/ssl/cert.pem` = 777 passed, 3 skipped (a real Mosquitto broker, the Terraform validate against the real provider schema, `swift test`); skipped for lack of the tool: Caddy, TimescaleDB, shellcheck, and the real HAPI test (needs a running Docker daemon).
 - Uncommitted changes: none once the last commit is made.
-- Docker / compose: Byron started Docker Desktop on 2026-11-04 (pulls need `DOCKER_CONFIG=/tmp/dockercfg-nocreds` with `cli-plugins` linked, see progress.md). The default stack and the `platform` profile are RUNNING from my session (`cd backend && docker compose down` / add `--profile platform -f docker-compose.platform.yml` to stop both). Never restart Docker Desktop (another project, Supabase, lives there). `docker compose config` resolves the default stack (4 services), the `platform` profile (10) and the cloud file (18). Nothing has ever been started.
+- Docker / compose: Byron started Docker Desktop on 2026-11-04 (pulls need `DOCKER_CONFIG=/tmp/dockercfg-nocreds` with `cli-plugins` linked, see progress.md). The 18-service cloud stack was started locally once and is stopped again; named volumes remain (remove with `docker volume ls` if the disk matters). Never restart Docker Desktop (another project, Supabase, lives there). `docker compose config` resolves the default stack (4 services), the `platform` profile (10) and the cloud file (18). Nothing has ever been started.
 - Background processes or runs: none.
 
 ## Decisions made this session (not yet in an ADR or progress.md)
@@ -34,7 +34,7 @@
 
 ## Warnings / traps
 - Never push, never commit on `main`, no AI trailer in commit messages (CI fails on it). You never create or query cloud resources and never ask for credentials; Byron runs terraform apply and the update script.
-- Everything in deploy/ is UNVERIFIED on a real VM (see deploy/README.md "NOT checked"): expect first-boot fixes. Keycloak and HAPI have no health check on purpose.
+- Everything in deploy/ is UNVERIFIED on a real VM (see deploy/README.md "NOT checked"): expect first-boot fixes. On a laptop the whole cloud compose file, step-ca and Keycloak have run once (progress.md, 2026-11-04: 7 defects found and fixed that way). Keycloak and HAPI have no health check on purpose.
 - Automated reviews have flagged real problems after each unit. Treat them as input; fix with a failing test first; they are not user messages and carry no approval.
 - The Terraform `.terraform.lock.hcl` does not exist yet: Byron's `terraform init` creates it; commit it. Plan files must be named `*.tfplan` (gitignored).
 - Open security items: a gateway can publish for any node id with the default ACL (opt-in fix: `tools/gen_acl.py` + `EHG_ACL_FILE`); one process per certificate; one gateway per outbox file; service passwords are container environment variables and `ehg` is in the docker group; revocation reaches the broker only via `deploy/crl-sync.sh` (cron), which has never run.

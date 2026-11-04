@@ -239,11 +239,9 @@ async def run() -> None:
         if time.monotonic() - last_lag >= 10:  # how far behind the bus this consumer is (ehg_consumer_pending{consumer="ts-writer"})
             last_lag = time.monotonic()
             await lag.observe("ts-writer", sub)
-        try:
-            msgs = await sub.fetch(100, timeout=1)
-        except nats.errors.TimeoutError:
-            continue
-        await writer.process(msgs)
+        msgs = await bus.fetch_batch(sub, 100)
+        if msgs:
+            await writer.process(msgs)
 
 
 if __name__ == "__main__":

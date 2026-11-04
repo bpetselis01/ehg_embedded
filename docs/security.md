@@ -44,7 +44,7 @@ Mapping of the HTTP APIs (triage, enrolment, FHIR facade) to the 2023 list, from
 | API9 Improper inventory management | OpenAPI documents are generated from the code and diffed in a test | `test_api_docs` |
 | API10 Unsafe consumption of APIs | Upstream answers are validated and failures become a 502 without details; the CA's answer is re-checked before a certificate is returned | `test_fhir_facade`, `test_enroll` |
 
-**Still not done, in one place:** none of this has run against Keycloak, step-ca, Caddy, HAPI, NATS or TimescaleDB; revocation reaches the broker only through the cron job that has never run; a gateway can publish for any node id; service passwords are container environment variables; the audit log is not write-once; no scanner has been run; no SBOM exists; the DEFAULT firmware build still uses Nordic's development signing key and an open link (the secure build, `build.sh --secure`, does not).
+**Still not done, in one place:** Keycloak, step-ca, Caddy, HAPI, NATS and TimescaleDB have each been started and exercised ONCE on a laptop (2026-11-04, docs/progress.md) but nothing has run on the VM, and no production-like traffic or browser sign-in has been tried; revocation reaches the broker only through the cron job that has never run; a gateway can publish for any node id with the default ACL (opt-in fix: tools/gen_acl.py); service passwords are container environment variables; the audit log is not write-once; no scanner has been run; no SBOM exists; the DEFAULT firmware build still uses Nordic's development signing key and an open link (the secure build, `build.sh --secure`, does not).
 
 ## Threat model: gateway to broker (MQTT QoS 1, JSON on `ehg/<node>/pkt`)
 

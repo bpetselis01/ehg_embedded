@@ -214,6 +214,10 @@ services:
       - /etc/machine-id:/etc/machine-id:ro
       - alloy-data:/var/lib/alloy/data
     cap_drop: [ALL]
+    # The image runs as root, but its data directory (and so a new named volume) is owned by uid 473 with mode 770, and the journal files belong to the host's
+    # systemd-journal group: root WITHOUT capabilities can touch neither ("mkdir /var/lib/alloy/data: permission denied", seen on the first start, 2026-11-04).
+    # DAC_OVERRIDE gives back exactly that and nothing else; the only things this container can reach are its config, the journal, machine-id and its own volume.
+    cap_add: [DAC_OVERRIDE]
     read_only: true
     mem_limit: 96m
     labels:

@@ -69,3 +69,16 @@ def consumer_config(durable: str, subject: str = f"{PKT_PREFIX}.>", max_deliver:
     the message to that consumer for good (it stays in the stream, unseen: found by an independent review). A message that can never be stored is term()-ed by the writer itself, so nothing loops forever."""
     return ConsumerConfig(durable_name=durable, filter_subject=subject, ack_policy=AckPolicy.EXPLICIT, deliver_policy=DeliverPolicy.ALL,
                           ack_wait=ACK_WAIT_S, max_deliver=max_deliver)
+
+
+async def fetch_batch(sub, batch: int, timeout: float = 1) -> list:
+    """One pull from a durable consumer; an EMPTY list when nothing arrived in `timeout` seconds.
+
+    nats-py's fetch() raises the BUILT-IN TimeoutError when the stream is idle, which is NOT caught by `except nats.errors.TimeoutError` (that class is a
+    subclass of it, so the relation points the wrong way). The three consumers did exactly that and crashed on an idle stream; first seen on the first start of the
+    cloud compose file (2026-11-04), invisible in tests that raised nats.errors.TimeoutError themselves. Catching the built-in class covers both."""
+    try:
+        return await sub.fetch(batch, timeout=timeout)
+    except TimeoutError:
+        return []
+
