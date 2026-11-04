@@ -1,5 +1,10 @@
 # Progress log
 
+## 2026-11-04: NATS exporter and two alerts; a flaky alert test fixed
+
+- **`nats-exporter`** (natsio/prometheus-nats-exporter 0.17.3, pinned by digest, arm64) in the cloud compose file and a Prometheus job `nats`; run on the local stack, target up. Two new alerts with promtool tests: `EhgNatsStorageHigh` (JetStream file storage above 80 % of `max_file_store`, ticket) and `EhgNatsSlowConsumers` (a client dropped as slow, ticket). `EhgTargetDown` now also covers NATS itself. 14 alerts, 17 promtool cases. A Mosquitto exporter was not added (its metrics come from `$SYS` topics over an authenticated TLS session: more moving parts than the value).
+- **Flaky test found and fixed by running promtool 12 times:** the backup-age case used one sample an hour; the alert reads a recording rule of another rule group and promtool evaluates groups concurrently, so it failed about 1 run in 12. It now uses a continuous series (20 of 20 runs pass). In production Prometheus the alert simply sees the previous evaluation; only the test needed the change.
+
 ## 2026-11-04: two review findings on the CA work (both valid, fixed) and the last hop to the broker proven
 
 - **Review: one password for the root and the intermediate key (MEDIUM, valid).** `deploy/step-ca/init-offline.sh` reused the CA's password, so the file on the VM (`vm/keys/password`) also unlocked the offline root key. Now the intermediate key is re-encrypted under a SECOND random password (`step crypto change-pass`), the only one on the VM; the root password stays in `offline/`. Checked: the two files differ and step-ca starts healthy from the bundle. Also fixed the quoted glob that never expanded (`rm -f "$OUT"/vm/config/*.bak`).

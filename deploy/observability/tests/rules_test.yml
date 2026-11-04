@@ -170,9 +170,11 @@ tests:
             exp_annotations: {summary: "A volume has less than 15 % free", detail: "See docs/dr.md"}
 
   - name: a backup older than 26 hours pages; a fresh one does not
-    interval: 1h
+    # a CONTINUOUS series (a sample every 30 s, like a scrape): the alert reads a recording rule of ANOTHER group, and promtool runs groups concurrently, so a series that
+    # exists only once an hour made this case pass or fail depending on which group ran first (seen 1 run in 12)
+    interval: 30s
     input_series:
-      - {series: 'ehg_backup_last_success_timestamp_seconds', values: '0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0'}
+      - {series: 'ehg_backup_last_success_timestamp_seconds', values: '0+0x3500'}
     alert_rule_test:
       - eval_time: 24h
         alertname: EhgBackupStale
@@ -226,3 +228,39 @@ tests:
         exp_alerts:
           - exp_labels: {severity: ticket, job: triage}
             exp_annotations: {summary: "Messages were kept under EHG.BAD.* (malformed input)", detail: "See docs/security.md"}
+
+  - name: JetStream storage above 80 percent of its cap for 10 minutes raises a ticket; plenty of room does not
+    interval: 15s
+    input_series:
+      - {series: 'gnatsd_varz_jetstream_stats_storage', values: '17+0x240'}
+      - {series: 'gnatsd_varz_jetstream_config_max_storage', values: '20+0x240'}
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: EhgNatsStorageHigh
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: EhgNatsStorageHigh
+        exp_alerts:
+          - exp_labels: {severity: ticket}
+            exp_annotations: {summary: "JetStream file storage is more than 80 % of its cap (max_file_store in deploy/nats/nats.conf)", detail: "See docs/dr.md"}
+
+  - name: JetStream with room to spare is quiet
+    interval: 15s
+    input_series:
+      - {series: 'gnatsd_varz_jetstream_stats_storage', values: '2+0x240'}
+      - {series: 'gnatsd_varz_jetstream_config_max_storage', values: '20+0x240'}
+      - {series: 'gnatsd_varz_slow_consumers', values: '0+0x240'}
+    alert_rule_test:
+      - {eval_time: 30m, alertname: EhgNatsStorageHigh, exp_alerts: []}
+      - {eval_time: 30m, alertname: EhgNatsSlowConsumers, exp_alerts: []}
+
+  - name: a slow client dropped by NATS raises a ticket
+    interval: 15s
+    input_series:
+      - {series: 'gnatsd_varz_slow_consumers', values: '0x20 1+0x100'}
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: EhgNatsSlowConsumers
+        exp_alerts:
+          - exp_labels: {severity: ticket}
+            exp_annotations: {summary: "NATS dropped a slow client in the last 15 minutes", detail: "See docs/dr.md"}

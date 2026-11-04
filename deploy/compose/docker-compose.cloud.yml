@@ -252,6 +252,20 @@ services:
     labels:
       ehg.healthcheck: "none: the cAdvisor image has no shell or wget; Prometheus scrapes cadvisor:8080 instead"
 
+  nats-exporter:
+    <<: *service
+    networks: [internal]
+    image: natsio/prometheus-nats-exporter:0.17.3@sha256:26c826662ac8424597cc9bdf89ea5b606eb66e3c11db9b1215c27d2076bbb01b
+    command: ["-varz", "-jsz=all", "-connz", "http://nats:8222"]
+    depends_on:
+      nats:
+        condition: service_healthy
+    cap_drop: [ALL]
+    read_only: true
+    mem_limit: 32m
+    labels:
+      ehg.healthcheck: "none: a single static binary with no shell or wget; Prometheus scrapes nats-exporter:7777 instead"
+
   postgres-exporter:
     <<: *service
     networks: [internal]

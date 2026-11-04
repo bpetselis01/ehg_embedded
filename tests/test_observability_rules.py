@@ -59,7 +59,7 @@ def test_alerts_are_named_unique_labelled_and_debounced():
     for a in alerts:
         assert a["labels"]["severity"] in {"page", "ticket"}, a["alert"]
         assert {"summary", "detail"} <= set(a["annotations"]), a["alert"]
-        assert "for" in a or a["alert"] in {"EhgDeadLetters", "EhgBadMessages", "EhgBackupStale"}, f"{a['alert']} fires on one bad evaluation"
+        assert "for" in a or a["alert"] in {"EhgDeadLetters", "EhgBadMessages", "EhgBackupStale", "EhgNatsSlowConsumers"}, f"{a['alert']} fires on one bad evaluation"
 
 
 def test_alert_text_carries_no_sensitive_content_or_templated_labels():

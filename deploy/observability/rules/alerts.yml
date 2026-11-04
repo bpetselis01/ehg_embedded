@@ -4,7 +4,7 @@
 # HOW: Every alert has a `for` period so a single bad scrape does not fire it. A source that stops reporting is an alert of its own (absent()), because silence must never read as "fine".
 # STATUS: every alert is exercised by promtool unit tests (deploy/observability/tests/rules_test.yml): fires after its `for`, stays quiet when healthy.
 # ROLE IN THESIS: Failure detection for the drills in docs/dr.md.
-# BEFORE -> AFTER: Before: nothing watched the VM. After: 12 alerts.
+# BEFORE -> AFTER: Before: nothing watched the VM. After: 14 alerts.
 groups:
   - name: ehg_alerts
     rules:
@@ -65,3 +65,12 @@ groups:
         for: 26h
         labels: {severity: page}
         annotations: {summary: "No backup has ever been reported", detail: "See docs/dr.md"}
+      - alert: EhgNatsStorageHigh
+        expr: gnatsd_varz_jetstream_stats_storage / gnatsd_varz_jetstream_config_max_storage > 0.8
+        for: 10m
+        labels: {severity: ticket}
+        annotations: {summary: "JetStream file storage is more than 80 % of its cap (max_file_store in deploy/nats/nats.conf)", detail: "See docs/dr.md"}
+      - alert: EhgNatsSlowConsumers
+        expr: increase(gnatsd_varz_slow_consumers[15m]) > 0
+        labels: {severity: ticket}
+        annotations: {summary: "NATS dropped a slow client in the last 15 minutes", detail: "See docs/dr.md"}
