@@ -626,3 +626,12 @@ def test_cloud_init_creates_the_runtime_directory_for_the_service_user_at_every_
     assert re.search(r"/etc/tmpfiles\.d/ehg\.conf", text) and re.search(r"^\s+d /run/ehg 0700 ehg ehg -$", text, re.M)
     assert text.index("systemd-tmpfiles --create /etc/tmpfiles.d/ehg.conf") < text.index("update.sh --bootstrap"), "before the first bootstrap run"
 
+
+
+def test_the_image_scanner_is_pinned_and_never_gets_the_docker_socket():
+    """A scanner that mounts docker.sock is root on the machine, and an unpinned one is a supply-chain hole (security review, 2026-11-04)."""
+    text = (DEPLOY / "scan-images.sh").read_text()
+    assert re.search(r"^TRIVY=aquasec/trivy:\d+\.\d+\.\d+@sha256:[0-9a-f]{64}$", text, re.M)
+    assert "docker.sock" not in text.replace("NOT mounted", "") .split("set -eu")[1], "the script body must not mount the socket"
+    assert ":latest" not in text.split("set -eu")[1]
+    assert '"$TMP:/in:ro"' in text and "docker save" in text

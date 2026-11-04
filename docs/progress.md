@@ -1,5 +1,9 @@
 # Progress log
 
+## 2026-11-04: review finding on the image scanner (valid, fixed)
+
+- `deploy/scan-images.sh` mounted `/var/run/docker.sock` into `aquasec/trivy:latest`: root-equivalent access for an unpinned image. Now trivy is pinned by version and digest (0.76.1), and each image is saved with `docker save` to a temporary tarball that trivy reads read-only (`--input`); no socket. Guard test added. The results are the same as with the socket.
+
 ## 2026-11-04: third-party images scanned; the edge rebuilt; Terraform modules declare their provider
 
 - **All 16 pinned images scanned** (`deploy/scan-images.sh`, table in docs/supply-chain.md). Every pinned release is already the newest, so for most images no fixed build exists: the findings are inside vendor-bundled libraries. Two things were possible and done: **Caddy** (the only service on the internet; 1 CRITICAL, 8 HIGH) is rebuilt from the same v2.11.7 with Go 1.27.3 and the two patched modules (`deploy/caddy/Dockerfile`, builds in under a minute on this Mac; 0/0 after; config validates; all routes and headers unchanged on the 22-service stack), and the **NATS exporter** moved 0.17.3 -> 0.20.3 (clean; the three metrics the alerts use are still exported). The rest are internal-only and recorded as accepted with their exposure; HAPI (28 CRITICAL, Java libraries) is not routed by Caddy.

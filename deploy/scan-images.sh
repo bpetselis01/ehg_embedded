@@ -1,17 +1,22 @@
 #!/bin/sh
 # PURPOSE: Scans every image the cloud stack runs for FIXABLE high and critical vulnerabilities (trivy), and fails if an INTERNET-FACING image has any.
-# USAGE: deploy/scan-images.sh          (needs Docker; pulls aquasec/trivy; ~10 minutes the first time, the vulnerability database is cached in the volume trivy-cache)
+# USAGE: deploy/scan-images.sh          (needs Docker; pulls trivy 0.76.1 by digest; ~10 minutes the first time, the vulnerability database is cached in the volume trivy-cache)
+# SAFETY: trivy is pinned by version AND digest, and the Docker socket is NOT mounted into it (that would hand a scanner root on the machine): each image is saved to a tarball in a temporary folder,
+#   and trivy reads that folder read-only (tests/test_deploy_assets.py checks both rules).
 #   The two images this repository builds (ehg-caddy:cloud, ehg-platform:cloud) must exist: `docker compose -f deploy/compose/docker-compose.cloud.yml build` first.
 # OUTPUT: one line per image: name, CRITICAL count, HIGH count, the affected packages. Exit 1 when ehg-caddy:cloud (80/443) or eclipse-mosquitto (8883) has any finding.
 # WHY ONLY THOSE TWO FAIL THE RUN: everything else sits on the internal Docker network. Third-party images (Keycloak, HAPI, Grafana, step-ca, TimescaleDB, cAdvisor, the exporters) were pinned at the NEWEST release on 2026-11-04 and still carried fixable
 #   findings inside their bundled libraries; only the vendor can fix those. They are listed so a newer release is noticed (docs/supply-chain.md has the baseline and the reasoning).
 set -eu
+TRIVY=aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 REPO="$(cd "$(dirname "$0")/.." && pwd -P)"
 docker volume create trivy-cache >/dev/null
 images="$(grep -hoE 'image: [^ ]+@sha256:[0-9a-f]{64}' "$REPO/deploy/compose/docker-compose.cloud.yml" | sed 's/image: //' | sort -u) ehg-caddy:cloud ehg-platform:cloud"
 bad=0
 for img in $images; do
-  json="$(docker run --rm -v trivy-cache:/root/.cache -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image "$img" --severity HIGH,CRITICAL --ignore-unfixed --exit-code 0 --quiet --format json 2>/dev/null || true)"
+  docker save "$img" -o "$TMP/image.tar"
+  json="$(docker run --rm -v trivy-cache:/root/.cache -v "$TMP:/in:ro" "$TRIVY" image --input /in/image.tar --severity HIGH,CRITICAL --ignore-unfixed --exit-code 0 --quiet --format json 2>/dev/null || true)"
   line="$(printf '%s' "$json" | python3 -c '
 import sys, json, collections
 try: r = json.load(sys.stdin)
