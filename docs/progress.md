@@ -1,5 +1,10 @@
 # Progress log
 
+## 2026-11-04: backup and restore drill run on the REAL TimescaleDB image
+
+- `deploy/backup/backup.sh` against the running `timescale/timescaledb-ha:pg16.15-ts2.31.0` container (`--pg-prefix "docker exec -i -u postgres <container>"`), then `deploy/backup/restore_drill.sh` into a SECOND, clean container of the same image (the `timescaledb_pre_restore()` / `post_restore()` branch had never run). Result: checksums verified, roles and the database restored, "RESTORE DRILL OK in 1 s" (a tiny database: the RTO of a real one is not measured). Checked by hand in the target afterwards: all 300 seeded `ehg_health` rows, the three hypertables (`ehg_raw`, `ehg_pkt`, `ehg_health`), both continuous aggregates, the registry row and the 10 Timescale background jobs. `pg_dump` prints a warning about a circular foreign key inside TimescaleDB's own catalog (`continuous_agg`); it did not matter here.
+- Not run: the restic copy (needs a repository), a restore on the VM, and the audit-chain verification on restored data (this database had no audit rows, so the drill printed `audit head: none`).
+
 ## 2026-11-04: review of the iPhone gateway: three findings, all valid, fixed
 
 - **Zero sampling rate (MEDIUM):** a packet with a valid CRC (the CRC proves integrity, not sanity) and fs_hz = 0 divided by zero in the clock rule: a hard TRAP in Swift (the app would crash on one packet from a buggy or hostile board), a ZeroDivisionError in Python. Both parsers now refuse it as a bad packet (a new golden invalid case `zero_sampling_rate_with_a_valid_crc`, kind `zero_rate`); tests in Python and Swift.
