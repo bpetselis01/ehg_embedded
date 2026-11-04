@@ -1,5 +1,9 @@
 # Progress log
 
+## 2026-11-04: review finding on the secret-scan allowlist (valid, fixed)
+
+- `.gitleaks.toml` listed `paths` and `regexes` in one allowlist, which gitleaks combines with OR: every finding in `tests/test_deploy_assets.py` and the fake key in any file were skipped (shown: with the old config a scan of a tree holding the fake key elsewhere reported nothing). Adding `condition = "AND"` was not enough in gitleaks 8.30.1: with `regexTarget` `secret` or `match` a DIFFERENT key in the allowed file was still skipped. The allowlist now uses `condition = "AND"`, `regexTarget = "line"`, one anchored line, and `targetRules = ["aws-access-token"]`. Proved on throwaway trees: the exact line is allowed; a different key in the file, the fake and a real key on one line, and the fake line in another file are all reported. Real repository (history and tests): no leaks. Guard: `tests/test_gitleaks_config.py`.
+
 ## 2026-11-04: "other non-setup issues?": scanners run for the first time, key permissions, lint
 
 - **Scanners (shellcheck, hadolint, gitleaks, trivy) run by hand for the first time** (table in docs/supply-chain.md): 3 shell-quoting warnings fixed (one was a real nested-quote bug in `init-offline.sh` that worked only by accident; `build.sh` now builds its options as real arguments, and both firmware variants were rebuilt), `backend/ingest/Dockerfile` no longer runs as root, `pip` is removed from the platform image (its vendored copies carried 5 HIGH CVEs; imports still work), aiohttp/certifi/pillow upgraded in the lock (861 tests pass), and `.gitleaks.toml` allowlists exactly the two deliberate look-alikes.

@@ -35,7 +35,7 @@ A finding from any scan, review or dependency update is recorded in `docs/progre
 |---|---|---|
 | shellcheck (`-S warning`) | all 12 shell scripts | 3 warnings, all real (an inner single quote in `init-offline.sh`; `build.sh` built its options as one string): fixed, clean |
 | hadolint | `backend/platform.Dockerfile` | clean |
-| gitleaks (working tree and all git history) | whole repository | 3 hits, all deliberate: the documented dev-mode tokens and a fake key that tests the repository's own scanner. Allowlisted by exact pattern in `.gitleaks.toml`; a real key anywhere else still fails |
+| gitleaks (working tree and all git history) | whole repository | 3 hits, all deliberate: the documented dev-mode tokens and a fake key that tests the repository's own scanner. Allowlisted in `.gitleaks.toml`: the dev tokens by pattern, the fake key by the EXACT LINE in the EXACT FILE (`condition = "AND"`, line-anchored; a review showed the first version skipped everything in that file, and a throwaway-tree experiment showed `secret`/`match` targets did not narrow it). A different key in that file, or the fake line anywhere else, is still reported (`tests/test_gitleaks_config.py` guards the shape) |
 | trivy config | Dockerfiles and Terraform | `backend/ingest/Dockerfile` ran as root (DS-0002): now `USER 10001` |
 | trivy image | `ehg-platform:cloud` | operating system 0; Python: msgpack, urllib3 and a setuptools copy VENDORED INSIDE pip carried HIGH CVEs: `pip` is now uninstalled from the final image (nothing needs it at run time): 0 fixable HIGH/CRITICAL |
 | trivy fs | `uv.lock` (development environment) | aiohttp, certifi and pillow had HIGH/CRITICAL fixes: upgraded (`uv lock --upgrade-package ...`), suite re-run |
