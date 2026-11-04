@@ -24,6 +24,11 @@ final class BleLink: NSObject, ObservableObject, CBCentralManagerDelegate, CBPer
     private var peripherals: [UUID: CBPeripheral] = [:]
     private var control: [UUID: CBCharacteristic] = [:]
     private var running = false
+    private var admission = NodeAdmission(allowed: [])
+    private var refused = Set<String>()   // log each refusal once
+
+    /// Node ids this gateway may serve (set before start). Empty = nothing is accepted.
+    func allow(_ nodes: Set<String>) { admission = NodeAdmission(allowed: nodes); refused.removeAll() }
 
     func start() {
         running = true
@@ -33,6 +38,7 @@ final class BleLink: NSObject, ObservableObject, CBCentralManagerDelegate, CBPer
 
     func stop() {
         running = false
+        admission = NodeAdmission(allowed: admission.allowed)   // forget the claims: a re-flashed board may come back with a new identifier
         central?.stopScan()
         peripherals.values.forEach { central.cancelPeripheralConnection($0) }
     }
@@ -48,12 +54,22 @@ final class BleLink: NSObject, ObservableObject, CBCentralManagerDelegate, CBPer
     func centralManagerDidUpdateState(_ c: CBCentralManager) { scanIfReady() }
 
     func centralManager(_ c: CBCentralManager, willRestoreState dict: [String: Any]) {
-        for p in (dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral]) ?? [] { adopt(p); onLog("restored \(p.name ?? "?")") }
+        for p in (dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral]) ?? [] where admit(p) { adopt(p); onLog("restored \(p.name ?? "?")") }
     }
 
     func centralManager(_ c: CBCentralManager, didDiscover p: CBPeripheral, advertisementData: [String: Any], rssi: NSNumber) {
-        guard let name = p.name, name.hasPrefix("EHG-"), peripherals[p.identifier] == nil else { return }
+        guard peripherals[p.identifier] == nil, admit(p) else { return }
         adopt(p); c.connect(p)
+    }
+
+    /// Name check, allowlist and one-claimant rule (NodeAdmission); every refusal is logged once.
+    private func admit(_ p: CBPeripheral) -> Bool {
+        switch admission.admit(name: p.name, peripheral: p.identifier) {
+        case .accept: return true
+        case .reject(let why):
+            if refused.insert("\(p.identifier)\(why)").inserted { onLog("ignored \(p.name ?? "unnamed device"): \(why)") }
+            return false
+        }
     }
 
     private func adopt(_ p: CBPeripheral) {

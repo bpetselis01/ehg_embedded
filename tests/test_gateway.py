@@ -133,3 +133,14 @@ def test_a_resend_as_the_very_first_packet_is_still_published_with_a_host_time(n
     assert len(node.published) == 1 and isinstance(node.published[0]["t_inject_host"], float)
     node.on_bytes(pkt(8), 1000.6)                  # the next first-time packet corrects the offset (it is a minimum)
     assert node.published[1]["t_inject_host"] <= node.published[0]["t_inject_host"] + 1.0
+
+
+def test_a_zero_sampling_rate_with_a_valid_crc_is_a_bad_packet_not_a_crash(node):
+    node.on_bytes(pack(Packet(VERSION, 3, 0, 1, 10, 0, 10, 0, 0, [[1, 0, 0]] * 10)), 1000.0)
+    assert node.bad == 1 and node.published == []
+
+
+def test_only_plain_node_names_are_scanned_for():
+    from gateway.gateway import NODE_ID_RE
+    assert all(NODE_ID_RE.fullmatch(n) for n in ("EHG-93C0", "EHG-0001", "EHG-lab_1"))
+    assert not any(NODE_ID_RE.fullmatch(n) for n in ("EHG-+", "EHG-#", "EHG-a/b", "EHG-a b", "EHG-", "XYZ-1", "EHG-" + "x" * 61))

@@ -68,13 +68,14 @@ def build() -> dict:
     cases = [("too_short_empty", b"", "too_short"), ("too_short_header_minus_one", good[:HEADER.size - 1], "too_short"),
              ("unknown_version", bytes(bad_version), "unknown_version"), ("wrong_length_one_byte_short", good[:-1], "wrong_length"),
              ("wrong_length_one_byte_long", good + b"\x00", "wrong_length"), ("crc_mismatch_sample_bit_flipped", bytes(flipped), "crc_mismatch"),
-             ("crc_mismatch_trailer_zeroed", good[:-2] + b"\x00\x00", "crc_mismatch")]
+             ("crc_mismatch_trailer_zeroed", good[:-2] + b"\x00\x00", "crc_mismatch"),
+             ("zero_sampling_rate_with_a_valid_crc", pack(Packet(**{**parse(good).__dict__, "fs_hz": 0})), "zero_rate")]
     invalid = []
     for name, raw, kind in cases:
         try:
             parse(raw)
         except ValueError as e:
-            got = ("too_short" if "too short" in str(e) else "unknown_version" if "unknown version" in str(e) else "wrong_length" if "expected" in str(e) else "crc_mismatch")
+            got = ("too_short" if "too short" in str(e) else "unknown_version" if "unknown version" in str(e) else "wrong_length" if "expected" in str(e) else "zero_rate" if "rate is zero" in str(e) else "crc_mismatch")
             assert got == kind, (name, str(e))
         else:
             raise AssertionError(f"{name} parsed")

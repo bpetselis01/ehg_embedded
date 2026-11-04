@@ -17,6 +17,7 @@ import SwiftUI
 final class GatewayModel: ObservableObject {
     @Published var host = UserDefaults.standard.string(forKey: "host") ?? ""
     @Published var gatewayId = UserDefaults.standard.string(forKey: "gatewayId") ?? ""
+    @Published var allowedNodes = UserDefaults.standard.string(forKey: "allowedNodes") ?? ""   // comma-separated node ids, e.g. EHG-93C0
     @Published var running = false
     @Published var mqtt = "not connected"
     @Published var lastPuback: Date?
@@ -73,9 +74,12 @@ final class GatewayModel: ObservableObject {
 
     func start() {
         guard !host.isEmpty, !gatewayId.isEmpty else { log("set the broker host and the gateway id first"); return }
+        let nodes = Set(allowedNodes.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { NodeAdmission.isValidNodeId($0) })
+        guard !nodes.isEmpty else { log("list the node ids this gateway may serve (EHG-XXXX): any other Bluetooth device is ignored"); return }
         guard let identity = loadIdentity() else { log("import the client certificate first"); return }
         guard let caURL = Bundle.main.url(forResource: "ca-chain", withExtension: "crt"), let pem = try? String(contentsOf: caURL, encoding: .utf8) else { log("ca-chain.crt is not bundled (copy backend/pki/ca-chain.crt into Sources and rebuild)"); return }
-        UserDefaults.standard.set(host, forKey: "host"); UserDefaults.standard.set(gatewayId, forKey: "gatewayId")
+        UserDefaults.standard.set(host, forKey: "host"); UserDefaults.standard.set(gatewayId, forKey: "gatewayId"); UserDefaults.standard.set(allowedNodes, forKey: "allowedNodes")
+        ble.allow(nodes)
         let anchors = pem.components(separatedBy: "-----END CERTIFICATE-----").compactMap { chunk -> SecCertificate? in
             guard let r = chunk.range(of: "-----BEGIN CERTIFICATE-----") else { return nil }
             return Data(base64Encoded: chunk[r.upperBound...].replacingOccurrences(of: "\n", with: "")).flatMap { SecCertificateCreateWithData(nil, $0 as CFData) }

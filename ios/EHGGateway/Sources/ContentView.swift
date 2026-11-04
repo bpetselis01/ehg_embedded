@@ -16,6 +16,7 @@ struct ContentView: View {
                 Section("Cloud") {
                     TextField("Broker host (e.g. ehg.duckdns.org)", text: $model.host).textInputAutocapitalization(.never).autocorrectionDisabled()
                     TextField("Gateway id (the certificate's CN)", text: $model.gatewayId).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    TextField("Allowed nodes (EHG-93C0, ...)", text: $model.allowedNodes).textInputAutocapitalization(.characters).autocorrectionDisabled()
                     SecureField("PKCS#12 password", text: $password)
                     Button("Import certificate (.p12)") { picking = true }
                     LabeledContent("MQTT", value: model.mqtt)

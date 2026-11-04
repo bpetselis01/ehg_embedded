@@ -32,7 +32,7 @@ def test_every_valid_vector_parses_to_the_recorded_values_and_repacks_to_the_sam
 
 
 def test_every_invalid_vector_is_refused_with_the_recorded_reason():
-    kinds = {"too short": "too_short", "unknown version": "unknown_version", "expected": "wrong_length", "crc mismatch": "crc_mismatch"}
+    kinds = {"too short": "too_short", "unknown version": "unknown_version", "expected": "wrong_length", "crc mismatch": "crc_mismatch", "rate is zero": "zero_rate"}
     for v in VECTORS["invalid"]:
         with pytest.raises(ValueError) as e:
             packet.parse(bytes.fromhex(v["hex"]))
@@ -166,3 +166,10 @@ def test_the_app_builds_for_the_ios_simulator(tmp_path):
     r = subprocess.run(["xcodebuild", "-project", "EHGGateway.xcodeproj", "-scheme", "EHGGateway", "-destination", "generic/platform=iOS Simulator", "CODE_SIGNING_ALLOWED=NO", "CODE_SIGNING_REQUIRED=NO",
                         "-derivedDataPath", str(tmp_path), "build"], cwd=APP, capture_output=True, text=True, timeout=900)
     assert "BUILD SUCCEEDED" in r.stdout, r.stdout[-1500:]
+
+
+def test_the_app_only_adopts_devices_through_the_admission_rules():
+    ble = (APP / "Sources/BleLink.swift").read_text()
+    assert "admission.admit(name: p.name" in ble and ble.count("where admit(p)") == 1 and "guard peripherals[p.identifier] == nil, admit(p)" in ble, "discovery and state restoration must both go through admit()"
+    assert "hasPrefix(\"EHG-\")" not in ble, "a bare name prefix is not an admission rule"
+    assert "guard !nodes.isEmpty" in (APP / "Sources/GatewayModel.swift").read_text(), "start needs an explicit allowlist"

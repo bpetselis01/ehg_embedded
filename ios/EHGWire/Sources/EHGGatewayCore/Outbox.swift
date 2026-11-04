@@ -17,7 +17,7 @@ public protocol OutboxTransport: AnyObject {
 }
 
 public final class Outbox {
-    public private(set) var dropped = 0, errors = 0, staleAcks = 0
+    public private(set) var dropped = 0, errors = 0, staleAcks = 0, rejected = 0
     private var db: OpaquePointer?
     private let transport: OutboxTransport
     private let maxBytes: Int, maxInflight: Int, clock: () -> Double, log: (String) -> Void
@@ -44,9 +44,13 @@ public final class Outbox {
 
     public enum OutboxError: Error { case open(String), sql(String) }
 
-    /// Write to disk, then send if the link is up. Never throws: a disk problem falls back to a plain send.
+    /// A topic the broker will accept in a PUBLISH: not empty, no wildcards (+ #), no NUL. A wildcard makes the broker DROP THE CONNECTION, and a stored row would be replayed after every reconnect: one bad message would block the whole queue.
+    public static func isPublishableTopic(_ t: String) -> Bool { !t.isEmpty && t.utf8.count <= 1024 && !t.utf8.contains { $0 == 0x2B || $0 == 0x23 || $0 == 0 } }
+
+    /// Write to disk, then send if the link is up. Never throws: a disk problem falls back to a plain send. A topic that could never be published is refused up front (counted in `rejected`), never stored.
     public func add(nodeId: String, seq: Int, tInject: Int, topic: String, payload: String) {
         lock.lock(); defer { lock.unlock() }
+        guard Self.isPublishableTopic(topic) else { rejected += 1; log("[outbox] REFUSED \(nodeId) seq \(seq): the topic is not publishable"); return }
         do {
             let id = try insert(nodeId, seq, tInject, topic, payload)
             enforceCap()

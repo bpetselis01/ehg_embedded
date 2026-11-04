@@ -210,3 +210,49 @@ mrWULvbSGeD8dhcx5QIgF3SnINPETiSNmfbjJb5nBYTkDUA5zE/kcqhoMJX6ZZ0=
         XCTAssertNil(certificateNotAfter(der: Data(repeating: 0xFF, count: 40)))
     }
 }
+
+final class AdmissionTests: XCTestCase {
+    private let a = UUID(), b = UUID()
+
+    func testOnlyPlainNodeNamesOnTheAllowlistAreAccepted() {
+        var adm = NodeAdmission(allowed: ["EHG-93C0"])
+        XCTAssertEqual(adm.admit(name: "EHG-93C0", peripheral: a), .accept)
+        for bad in ["EHG-+", "EHG-#", "EHG-93C0/x", "EHG-93 C0", "EHG-", "EHG-\u{0}", "XYZ-93C0", ""] {
+            XCTAssertNotEqual(adm.admit(name: bad, peripheral: UUID()), .accept, bad)
+        }
+        XCTAssertNotEqual(adm.admit(name: nil, peripheral: UUID()), .accept)
+        XCTAssertEqual(adm.admit(name: "EHG-1111", peripheral: UUID()), .reject("EHG-1111 is not on the allowlist"))
+    }
+
+    func testAnEmptyAllowlistAcceptsNothing() {
+        var adm = NodeAdmission(allowed: [])
+        XCTAssertEqual(adm.admit(name: "EHG-93C0", peripheral: a), .reject("no allowed nodes configured"))
+    }
+
+    func testASecondDeviceCannotTakeOverANodeThatIsAlreadyClaimed() {
+        var adm = NodeAdmission(allowed: ["EHG-93C0"])
+        XCTAssertEqual(adm.admit(name: "EHG-93C0", peripheral: a), .accept)
+        XCTAssertEqual(adm.admit(name: "EHG-93C0", peripheral: a), .accept, "the same device reconnecting is fine")
+        XCTAssertEqual(adm.admit(name: "EHG-93C0", peripheral: b), .reject("another device already claims EHG-93C0"))
+    }
+}
+
+final class HardeningTests: XCTestCase {
+    func testAWildcardTopicIsRefusedUpFrontAndNeverStoredOrReplayed() throws {
+        let t = RecordingTransport(); var logged: [String] = []
+        let box = try Outbox(path: NSTemporaryDirectory() + "h-\(UUID().uuidString).db", transport: t, clock: { 1 }, log: { logged.append($0) })
+        box.setConnected(true)
+        for topic in ["ehg/EHG-+/pkt", "ehg/#", "", "ehg/\u{0}/pkt"] { box.add(nodeId: "X", seq: 1, tInject: 1, topic: topic, payload: "{}") }
+        XCTAssertEqual(box.rejected, 4); XCTAssertEqual(box.pending(), 0); XCTAssertTrue(t.sent.isEmpty)
+        box.add(nodeId: "N", seq: 2, tInject: 2, topic: "ehg/N/pkt", payload: "{}")
+        XCTAssertEqual(t.sent.count, 1, "the queue is not blocked by the refused ones")
+    }
+
+    func testAZeroSamplingRateWithAValidCRCIsABadPacketNotACrash() throws {
+        let t = RecordingTransport()
+        let box = try Outbox(path: NSTemporaryDirectory() + "h-\(UUID().uuidString).db", transport: t, clock: { 1 }, log: { _ in })
+        let s = NodeSession(nodeId: "N", outbox: box)
+        s.onBytes(Packet(nCh: 1, fsHz: 0, seq: 0, frameIdx: 0, tInject: 0, nFrames: 2, flags: 0, recordId: 0, samples: [[1], [2]]).pack(), tRx: 1)
+        XCTAssertEqual(s.bad, 1); XCTAssertEqual(box.pending(), 0)
+    }
+}

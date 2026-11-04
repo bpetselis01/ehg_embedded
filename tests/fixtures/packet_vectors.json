@@ -472,6 +472,11 @@
    "name": "crc_mismatch_trailer_zeroed",
    "hex": "020314002800000090010000008001000a0007000080ff7fa6fee73094643d1b325f83f40036392e7e3cdf552cb2f5748aa2fb7018c5716b565dd721c41aad4de2f87304301fa9172ec1cf745cfe65850000",
    "error": "crc_mismatch"
+  },
+  {
+   "name": "zero_sampling_rate_with_a_valid_crc",
+   "hex": "020300002800000090010000008001000a0007000080ff7fa6fee73094643d1b325f83f40036392e7e3cdf552cb2f5748aa2fb7018c5716b565dd721c41aad4de2f87304301fa9172ec1cf745cfe6585ef15",
+   "error": "zero_rate"
   }
  ],
  "tracking": {

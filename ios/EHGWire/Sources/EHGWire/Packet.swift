@@ -24,6 +24,7 @@ public enum PacketError: Error, Equatable {
     case unknownVersion(Int)
     case wrongLength(expected: Int, got: Int)
     case crcMismatch
+    case zeroRate
 
     /// The reason as a short name, shared with tests/fixtures/packet_vectors.json.
     public var kind: String {
@@ -32,6 +33,7 @@ public enum PacketError: Error, Equatable {
         case .unknownVersion: return "unknown_version"
         case .wrongLength: return "wrong_length"
         case .crcMismatch: return "crc_mismatch"
+        case .zeroRate: return "zero_rate"
         }
     }
 }
@@ -82,6 +84,7 @@ public struct Packet: Equatable {
         let expected = WireFormat.headerSize + w * n + WireFormat.crcSize
         guard b.count == expected else { throw PacketError.wrongLength(expected: expected, got: b.count) }
         guard UInt16(le(b, b.count - 2, 2)) == crc16(Array(b[0..<(b.count - 2)])) else { throw PacketError.crcMismatch }
+        guard le(b, 2, 2) != 0 else { throw PacketError.zeroRate }   // a zero rate would divide by zero in the clock rule: refuse it as a bad packet (same rule as gateway/packet.py)
         var flat = [Int32]()
         flat.reserveCapacity(n)
         for i in 0..<n {

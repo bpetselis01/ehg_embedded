@@ -1,5 +1,11 @@
 # Progress log
 
+## 2026-11-04: review of the iPhone gateway: three findings, all valid, fixed
+
+- **Zero sampling rate (MEDIUM):** a packet with a valid CRC (the CRC proves integrity, not sanity) and fs_hz = 0 divided by zero in the clock rule: a hard TRAP in Swift (the app would crash on one packet from a buggy or hostile board), a ZeroDivisionError in Python. Both parsers now refuse it as a bad packet (a new golden invalid case `zero_sampling_rate_with_a_valid_crc`, kind `zero_rate`); tests in Python and Swift.
+- **Node name as a topic (MEDIUM):** the advertised name became `ehg/<name>/pkt`. A name with `+` or `#` makes the broker drop the connection on PUBLISH, and the stored row would be replayed after every reconnect, blocking the whole queue. Fixed in three places: names must be plain node ids (Python scan and Swift), the outbox refuses a non-publishable topic up front (`rejected` counter, never stored), tests for both.
+- **Impersonating a node (MEDIUM):** any device advertising `EHG-*` was adopted. The app now needs an explicit allowlist of node ids (it will not start without one), refuses a second device claiming a name that is already claimed, and logs each refusal once (`NodeAdmission`). Stated limit: identification, not authentication; the real protection is the secure board build with passkey pairing. The Python gateway got the name rule but no allowlist (it takes the first N boards it finds, on a trusted bench).
+
 ## 2026-11-04: the iPhone gateway built as far as a Mac can take it
 
 - **`EHGGatewayCore`** (Swift): the published JSON and clock rule (golden cases generated from the Python functions), the outbox (a port of `gateway/outbox.py` on SQLite: disk first, delete on PUBACK, replay marked, cap with loud loss), the per-node session (decode, clock, gaps, RESEND scheduling), a DER `notAfter` reader (iOS has no public call). 15 Swift tests.

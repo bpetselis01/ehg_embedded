@@ -65,6 +65,7 @@ DATA_UUID = "4e480002-a0e1-4c3b-8747-9a1b2c3d4e5f"
 CTRL_UUID = "4e480003-a0e1-4c3b-8747-9a1b2c3d4e5f"
 OP_START, OP_STOP, OP_RESEND = 0x01, 0x02, 0x03
 NAME_PREFIX = "EHG-"
+NODE_ID_RE = __import__("re").compile(r"EHG-[A-Za-z0-9_-]{1,60}")  # the name becomes an MQTT topic level: no "/", "+", "#" or spaces (a wildcard in a PUBLISH topic makes the broker drop the connection, and the outbox would replay it forever)
 LOGS = Path("gateway/logs")
 
 
@@ -309,7 +310,7 @@ async def ble_main(args, publish):
         deadline = time.time() + args.scan_s
         while time.time() < deadline and len(found) < args.nodes:
             for d, _ in scanner.discovered_devices_and_advertisement_data.values():
-                if d.name and d.name.startswith(NAME_PREFIX):
+                if d.name and NODE_ID_RE.fullmatch(d.name):
                     found.setdefault(d.name, d)
             await asyncio.sleep(0.5)
     if not found:
