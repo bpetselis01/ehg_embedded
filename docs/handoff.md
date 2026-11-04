@@ -26,7 +26,7 @@
 
 ## Next three actions
 1. Read the report, then decide: apply the runbook (cloud), or start Docker for real-server checks. Until one of these happens nothing more can be verified here.
-2. Known non-cloud gaps worth doing if asked (each is written down in progress.md): step-ca, the enrolment API (its entry point `backend/enroll/service.py` now exists) and the FHIR sync worker are not in the cloud compose file; the RESEND scheduling (1 s retry, at most 5 tries) in Swift (`GapTracker` and `ClockMap` ARE ported); Alertmanager receiver; a Mosquitto/NATS exporter.
+2. Known non-cloud gaps worth doing if asked (each is written down in progress.md): step-ca, the enrolment API (its entry point `backend/enroll/service.py` now exists) and the FHIR sync worker are not in the cloud compose file; Alertmanager receiver; a Mosquitto/NATS exporter.
 3. After any change: `uv run pytest -q && git add -A && git commit` (the `&&` matters); add new file names to docs/codebase-guide.md; update progress.md, security.md and licences.md; treat automated security reviews as input (failing test first). Report honestly: fakes versus real servers, what needs Docker, hardware or the cloud.
 
 ## Done in this non-cloud sweep (all committed)

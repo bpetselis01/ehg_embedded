@@ -1,5 +1,11 @@
 # Progress log
 
+## 2026-11-04: two more non-cloud items: per-gateway ACL generator, RESEND scheduling in Swift
+
+- **`tools/gen_acl.py`** (commit 15bd2c7): writes a Mosquitto ACL where each gateway may write `ehg/<node>/pkt` only for ITS nodes (`deploy/acl/gateways.json`, or the registry with `--dsn`), plus its own status topic; service identities are the same as the hand-written ACL (tested equal). Ids must be plain ids (no `+ # / space`), a gateway named like a service is refused, a gateway with no node can write only its status, the file is rewritten in place and only on change (bind mount follows the inode). **Proved on a real Mosquitto 2.1.2:** gateway 01 publishes for its node, its publishes for gateway 02's node and for an unassigned node are dropped. Opt-in: `EHG_ACL_FILE` in the cloud compose file; NOT the default because nothing assigns nodes to gateways yet (the JSON file must be edited when a node is added). 16 tests.
+- **RESEND scheduling** (commit cfa1763): the "ask again after 1 s, at most 5 requests" logic moved out of `gateway.Node` into `gateway/tracking.py` (`ResendScheduler`, `ranges`, `RETRY_S`, `MAX_TRIES`; `gateway.gateway` re-exports the names, so triage and the tests are unchanged) and was ported to `ios/EHGWire/Sources/EHGWire/Tracking.swift`. Seven golden cases (new gap at once, retry each second, give up after five, merged runs, new stream, no retry before the interval) are generated from the Python class into `tests/fixtures/packet_vectors.json` and replayed by the Swift test (`swift test`: 10 tests, 0 failures) and by Python. The app target, CoreBluetooth and the timer that calls it are still not written (needs the iPhone).
+- **Found while starting the local platform stack:** `docker pull` hung for over an hour with `error getting credentials - signal: terminated`: Docker Desktop's credential helper blocks (not our code). Workaround that touches nothing of Byron's: `DOCKER_CONFIG=/tmp/dockercfg-nocreds` (a config with `{}`) for pulls of public images.
+
 ## 2026-11-04: Unit 13 on the DK: LESC passkey pairing, own MCUboot key, and a latent bootloader defect found
 
 Byron attached the DK and chose "Full Unit 13" (build, new key, flash). All of it ran on the board EHG-93C0 with the Mac gateway.
