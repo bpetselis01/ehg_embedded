@@ -272,6 +272,33 @@ services:
     labels:
       ehg.healthcheck: "none: a single static binary with no shell or wget; Prometheus scrapes nats-exporter:7777 instead"
 
+  mosquitto-exporter:
+    <<: *python
+    command: ["python", "-m", "backend.mqtt_exporter"]
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "8883"
+      MQTT_TLS: "1"
+      MQTT_CA: /pki/ca-chain.crt
+      MQTT_CERT: /pki/ehg-exporter.crt
+      MQTT_KEY: /pki/ehg-exporter.key
+      EXPORTER_PORT: "9203"
+    volumes:
+      # single certificate files of this component only, never the PKI directory (its identity may read ONLY the exported $SYS topics: backend/mosquitto/acl)
+      - ${EHG_PKI_DIR:-/opt/ehg/pki}/ca-chain.crt:/pki/ca-chain.crt:ro
+      - ${EHG_PKI_DIR:-/opt/ehg/pki}/ehg-exporter.crt:/pki/ehg-exporter.crt:ro
+      - ${EHG_PKI_DIR:-/opt/ehg/pki}/ehg-exporter.key:/pki/ehg-exporter.key:ro
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    mem_limit: 64m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9203/metrics', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
   postgres-exporter:
     <<: *service
     networks: [internal]

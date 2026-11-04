@@ -26,7 +26,7 @@
 
 ## Next three actions
 1. Read the report, then decide: apply the runbook (cloud), or start Docker for real-server checks. Until one of these happens nothing more can be verified here.
-2. Known non-cloud gaps worth doing if asked (each is written down in progress.md): every planned service is now in the cloud compose file (step-ca and the enrolment API as the optional profile `enrol`; the FHIR sync worker as `fhir-sync`), all run end to end locally; Alertmanager receiver; a Mosquitto exporter (NATS has one now).
+2. Known non-cloud gaps worth doing if asked (each is written down in progress.md): every planned service is now in the cloud compose file (step-ca and the enrolment API as the optional profile `enrol`; the FHIR sync worker as `fhir-sync`), all run end to end locally; Alertmanager receiver.
 3. After any change: `uv run pytest -q && git add -A && git commit` (the `&&` matters); add new file names to docs/codebase-guide.md; update progress.md, security.md and licences.md; treat automated security reviews as input (failing test first). Report honestly: fakes versus real servers, what needs Docker, hardware or the cloud.
 
 ## Done in this non-cloud sweep (all committed)

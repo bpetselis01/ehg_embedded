@@ -264,3 +264,16 @@ tests:
         exp_alerts:
           - exp_labels: {severity: ticket}
             exp_annotations: {summary: "NATS dropped a slow client in the last 15 minutes", detail: "See docs/dr.md"}
+
+  - name: an exporter that cannot reach the broker pages after 5 minutes; a connected one does not
+    interval: 15s
+    input_series:
+      - {series: 'ehg_mosquitto_up{job="mosquitto"}', values: '1x8 0+0x120'}
+      - {series: 'ehg_mosquitto_up{job="mosquitto2"}', values: '1+0x128'}
+    alert_rule_test:
+      - {eval_time: 1m, alertname: EhgMosquittoDown, exp_alerts: []}
+      - eval_time: 10m
+        alertname: EhgMosquittoDown
+        exp_alerts:
+          - exp_labels: {severity: page, job: mosquitto}
+            exp_annotations: {summary: "The MQTT exporter cannot reach the broker for 5 minutes", detail: "See docs/dr.md"}

@@ -32,7 +32,7 @@ REPO="$(cd "$(dirname "$0")/.." && pwd -P)"
 OUT="$REPO/backend/pki"
 HOST=localhost
 DAYS=30
-SERVICES="ehg-gw-01 ehg-bridge ehg-viewer ehg-ingest"
+SERVICES="ehg-gw-01 ehg-bridge ehg-viewer ehg-ingest ehg-exporter"
 SUBJ_BASE="/C=AU/O=Thesis B EHG local PKI"
 
 die() { echo "pki.sh: $*" >&2; exit 1; }

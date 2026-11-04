@@ -21,3 +21,14 @@ topic read ehg/+/pkt
 
 user ehg-viewer
 topic read ehg/+/pkt
+
+user ehg-exporter
+topic read $SYS/broker/clients/connected
+topic read $SYS/broker/clients/total
+topic read $SYS/broker/messages/received
+topic read $SYS/broker/messages/sent
+topic read $SYS/broker/bytes/received
+topic read $SYS/broker/bytes/sent
+topic read $SYS/broker/publish/messages/dropped
+topic read $SYS/broker/store/messages/count
+topic read $SYS/broker/uptime

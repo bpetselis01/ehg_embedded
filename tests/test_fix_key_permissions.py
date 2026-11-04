@@ -11,7 +11,7 @@ SCRIPT = ROOT / "deploy/fix-key-permissions.sh"
 def run(tmp_path, with_stepca=True, drop=()):
     pki, step = tmp_path / "pki", tmp_path / "step-ca"
     pki.mkdir()
-    for f in ("broker.key", "ehg-bridge.key", "ca-chain.crt", "broker.crt", "ehg-bridge.crt", "ca.crl"):
+    for f in ("broker.key", "ehg-bridge.key", "ehg-exporter.key", "ca-chain.crt", "broker.crt", "ehg-bridge.crt", "ehg-exporter.crt", "ca.crl"):
         if f not in drop:
             (pki / f).write_text("x")
     if with_stepca:
@@ -45,7 +45,7 @@ def test_the_enrolment_key_is_set_after_the_recursive_chown(tmp_path):
 
 def test_certificates_stay_public_and_owned_by_the_deploy_user(tmp_path):
     _, log, pki, _ = run(tmp_path)
-    for f in ("ca-chain.crt", "broker.crt", "ehg-bridge.crt", "ca.crl"):
+    for f in ("ca-chain.crt", "broker.crt", "ehg-bridge.crt", "ehg-exporter.crt", "ca.crl"):
         assert f"chown ehg:ehg {pki}/{f}" in log and f"chmod 644 {pki}/{f}" in log
 
 

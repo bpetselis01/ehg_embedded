@@ -1,5 +1,9 @@
 # Progress log
 
+## 2026-11-04: a Mosquitto exporter (the last metric gap)
+
+- `backend/mqtt_exporter.py` (own small exporter: the off-the-shelf one cannot present a client certificate to an mTLS-only broker): reads nine allowlisted `$SYS` topics as `ehg_mosquitto_*` gauges plus `ehg_mosquitto_up`; own identity `ehg-exporter` (new in `tools/pki.sh`, the ACL and `tools/gen_acl.py`) that may READ exactly those nine topics, no wildcard (the repository's ACL test forbids `#`; a test keeps the topic list and the ACL equal). Service `mosquitto-exporter` in the cloud compose file, Prometheus job `mosquitto`, alert `EhgMosquittoDown` (page; promtool-tested fire and quiet). **Run against a real Mosquitto in a test** (`tests/test_mqtt_exporter.py`): it reads clients connected and goes up. Two more certificate files now travel to the VM (nine, not seven: deployment.md, checklist and `fix-key-permissions.sh` updated). Not run in the full stack yet.
+
 ## 2026-11-04: load and memory measurement, revocation end to end, CI scanners, SBOM
 
 - **Load (10 simulated nodes, 20 Hz, mTLS, six minutes, the full 21-service stack on this Mac):** every node delivered 660 packets with 0 missing; the sum of the PEAK memory of all containers was **3.7 GB** against the 9.5 GB budget (HAPI 1.7 GB of 2.3, Keycloak 0.57 GB, everything else small; Postgres 0.18 GB). Ten containers peaked within 2 to 24 % of their limit and risked out-of-memory kills (Alertmanager 98 %, node-exporter 96 %, Caddy 89 %, nats-exporter 87 %, step-ca 86 %, postgres-exporter 83 %, Alloy 81 %, cAdvisor 76 %, fhir-sync 71 %, Grafana 73 %): their limits were raised (+about 0.6 GB in total; the budget test still passes). This is a Mac with Docker's Linux VM, not the arm64 VM: re-measure there.

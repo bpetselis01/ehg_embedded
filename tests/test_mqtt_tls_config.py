@@ -30,7 +30,7 @@ TLS_CONF = ROOT / "backend/mosquitto/mosquitto.tls.conf"
 ACL = ROOT / "backend/mosquitto/acl"
 BASE_COMPOSE = ROOT / "backend/docker-compose.yml"
 CLOUD_COMPOSE = ROOT / "backend/docker-compose.cloud.yml"
-READERS = ("ehg-bridge", "ehg-ingest", "ehg-viewer")
+READERS = ("ehg-bridge", "ehg-ingest", "ehg-viewer", "ehg-exporter")
 UNBUFFERED = {**os.environ, "PYTHONUNBUFFERED": "1"}  # a piped, terminated gateway would otherwise lose its buffered output
 
 
@@ -442,7 +442,7 @@ def broker(tmp_path):
     port = free_port()
     conf = TLS_CONF.read_text()
     conf = conf.replace("/mosquitto/pki", str(p)).replace("/mosquitto/config/acl", str(ACL))
-    conf = conf.replace("/mosquitto/data/", str(tmp_path / "data") + "/").replace("listener 8883", f"listener {port}")
+    conf = conf.replace("/mosquitto/data/", str(tmp_path / "data") + "/").replace("listener 8883", f"listener {port}").replace("sys_interval 10", "sys_interval 1")
     (tmp_path / "data").mkdir()
     (tmp_path / "m.conf").write_text(conf)
     b = type("Broker", (), {"pki": p, "port": port, "conf": tmp_path / "m.conf"})
@@ -634,7 +634,7 @@ def pinned_broker(tmp_path):
     assert r.returncode == 0, r.stderr
     port = free_port()
     conf = TLS_CONF.read_text().replace("/mosquitto/pki", str(p)).replace("/mosquitto/config/acl", str(acl))
-    conf = conf.replace("/mosquitto/data/", str(tmp_path / "data") + "/").replace("listener 8883", f"listener {port}")
+    conf = conf.replace("/mosquitto/data/", str(tmp_path / "data") + "/").replace("listener 8883", f"listener {port}").replace("sys_interval 10", "sys_interval 1")
     (tmp_path / "data").mkdir()
     (tmp_path / "m.conf").write_text(conf)
     b = type("Broker", (), {"pki": p, "port": port, "conf": tmp_path / "m.conf"})

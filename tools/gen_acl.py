@@ -3,7 +3,7 @@
 PURPOSE: Closes the "a gateway can publish packets for ANY node id" gap of backend/mosquitto/acl (`topic write ehg/+/pkt`). Here each gateway may write only `ehg/<node>/pkt` for ITS nodes, plus its own status topic.
 INPUT: --gateways FILE, a JSON object {"ehg-gw-01": ["EHG-93C0"], "ehg-gw-02": []}, OR --dsn <libpq string> to read the registry (registry.node.assigned_gateway, revoked gateways left out).
   --out FILE (default backend/mosquitto/acl.generated). e.g. uv run python tools/gen_acl.py --gateways deploy/acl/gateways.json --out /opt/ehg/etc/acl
-OUTPUT: the ACL text (service identities ehg-bridge, ehg-ingest, ehg-viewer unchanged, then one stanza per gateway) and, on stdout, "changed" or "unchanged". Exit 1 and no file written on a bad id.
+OUTPUT: the ACL text (service identities ehg-bridge, ehg-ingest, ehg-viewer, ehg-exporter unchanged, then one stanza per gateway) and, on stdout, "changed" or "unchanged". Exit 1 and no file written on a bad id.
 HOW: Ids must be plain ids (backend.bus.valid_id: letters, digits, _ and -), so no `+`, `#`, `/` or space can widen a grant; a wildcard in the data would otherwise grant more than the registry says. A gateway with no nodes gets its status topic only (it cannot publish packets
   until a node is assigned to it). The file is rewritten IN PLACE and only when the content changed, because a single-file bind mount follows the inode (a replaced file would leave the broker reading the old one); then send Mosquitto SIGHUP (deploy/crl-sync.sh does the same for the CRL).
   Output is deterministic (sorted) so a diff shows exactly what changed.
@@ -34,8 +34,19 @@ topic read ehg/+/pkt
 
 user ehg-viewer
 topic read ehg/+/pkt
+
+user ehg-exporter
+topic read $SYS/broker/clients/connected
+topic read $SYS/broker/clients/total
+topic read $SYS/broker/messages/received
+topic read $SYS/broker/messages/sent
+topic read $SYS/broker/bytes/received
+topic read $SYS/broker/bytes/sent
+topic read $SYS/broker/publish/messages/dropped
+topic read $SYS/broker/store/messages/count
+topic read $SYS/broker/uptime
 """
-SERVICES = {"ehg-bridge", "ehg-ingest", "ehg-viewer"}
+SERVICES = {"ehg-bridge", "ehg-ingest", "ehg-viewer", "ehg-exporter"}
 
 
 def render(assignments: dict[str, list[str]]) -> str:

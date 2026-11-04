@@ -39,7 +39,7 @@ def test_each_gateway_gets_only_its_nodes_and_its_own_status():
 def test_service_identities_match_the_hand_written_acl():
     hand = stanzas((ROOT / "backend/mosquitto/acl").read_text())
     gen = stanzas(gen_acl.render({}))
-    for svc in ("ehg-bridge", "ehg-ingest", "ehg-viewer"):
+    for svc in ("ehg-bridge", "ehg-ingest", "ehg-viewer", "ehg-exporter"):
         assert gen[svc] == hand[svc]
 
 
