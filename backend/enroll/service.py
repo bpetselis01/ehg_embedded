@@ -56,7 +56,7 @@ def build(env=os.environ, http: httpx.Client | None = None) -> FastAPI:
     def crl_source() -> str:
         """The CA's current revocation list as PEM text; any failure is a 502 so an empty or stale answer is never installed as 'no revocations'."""
         try:
-            r = ca_http.get(env["STEPCA_URL"].rstrip("/") + "/crl", headers={"Accept": "application/x-pem-file"})
+            r = ca_http.get(env["STEPCA_URL"].rstrip("/") + "/crl?pem=true")  # without pem=true step-ca 0.30.2 answers DER (application/pkix-crl)
             r.raise_for_status()
         except httpx.HTTPError:
             raise HTTPException(502, "the CA did not return a revocation list") from None

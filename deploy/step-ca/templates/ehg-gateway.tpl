@@ -1,5 +1,5 @@
 {
-	"subject": {"commonName": {{ toJson .Insecure.User.commonName }}},
+	"subject": {{ toJson .Subject }},
 	"keyUsage": ["digitalSignature"],
 	"extKeyUsage": ["clientAuth"]
 }

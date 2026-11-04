@@ -251,6 +251,31 @@ def test_the_one_time_token_has_the_claims_step_ca_expects_and_is_single_use():
     assert c["jti"] != jwt.decode(t2, CA_PROV.public_key(), algorithms=["ES256"], audience="https://step-ca:9000/1.0/sign")["jti"]
 
 
+def test_the_token_names_the_provisioner_key_and_revocation_uses_the_serial_as_subject():
+    """Both learnt from a real step-ca 0.30.2: no `kid` header means 401 "provisioner not found"; a revoke token whose subject is not the serial means 403."""
+    from backend.enroll.stepca_client import jwk_thumbprint
+    pem = CA_PROV.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.TraditionalOpenSSL, serialization.NoEncryption())
+    assert jwt.get_unverified_header(client_with(lambda r: httpx.Response(200, json={})).one_time_token("x", "/1.0/sign"))["kid"] == jwk_thumbprint(pem)
+    seen = {}
+
+    def handler(request):
+        seen.update(__import__("json").loads(request.content))
+        return httpx.Response(200, json={})
+    client_with(handler).revoke("12345", "ios-phone-1")
+    claims = jwt.decode(seen["ott"], CA_PROV.public_key(), algorithms=["ES256"], audience="https://step-ca:9000/1.0/revoke")
+    assert claims["sub"] == "12345" and seen["serial"] == "12345"
+
+
+def test_thumbprint_matches_the_kid_step_ca_gave_a_key():
+    """Known answer: `step crypto jwk create` (step-ca 0.30.2, 2026-11-04) wrote this public key and the kid below; the RFC 7638 value must be identical."""
+    from backend.enroll.stepca_client import public_thumbprint
+
+    def n(b64):
+        return int.from_bytes(__import__("base64").urlsafe_b64decode(b64 + "=" * (-len(b64) % 4)), "big")
+    key = ec.EllipticCurvePublicNumbers(n("NIkHclt9iIdzzOmv66LbfdtVFEM0W-yuOkN6_KNRlp0"), n("87ugjp-YEjN6bzJL82Rwca_qTXMaTJCfaH_G-22JrdQ"), ec.SECP256R1()).public_key()
+    assert public_thumbprint(key) == "jxglkFdXRUGlNKBLWwMLo3rz-RwNSFW0R_J_Au07yPE"
+
+
 def test_sign_posts_the_csr_and_token_and_returns_the_chain():
     seen = {}
 

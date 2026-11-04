@@ -133,6 +133,7 @@ Step by step:
 | [`tools/demo.sh`](../tools/demo.sh) | starts the whole pipeline in 6 tiled windows, one per hop (demos) |
 | [`firmware/build.sh`](../firmware/build.sh) | build and flash the board (works around spaces in this folder's path). Overview of all firmware: [firmware.md](firmware.md) |
 | [`firmware/ehg_node/CMakeLists.txt`](../firmware/ehg_node/CMakeLists.txt) | which C files to compile |
+| [`deploy/step-ca/local-check.sh`](../deploy/step-ca/local-check.sh), [`local_check.py`](../deploy/step-ca/local_check.py) | proves sign, revoke and the CRL against a real step-ca in Docker (no cloud) |
 | [`tools/gen_acl.py`](../tools/gen_acl.py) | writes the Mosquitto ACL that pins each gateway to its own nodes (`deploy/acl/gateways.json` or the registry); tests in `tests/test_gen_acl.py` and, with a real broker, `tests/test_mqtt_tls_config.py` |
 | [`firmware/ehg_node/Kconfig`](../firmware/ehg_node/Kconfig) | our tunable settings (frames per packet, buffer sizes, `EHG_REQUIRE_PAIRING`) |
 | [`firmware/ehg_node/security.conf`](../firmware/ehg_node/security.conf) | overlay of the SECURE build (`build.sh --secure`): LESC passkey pairing, bonds in flash, protected OTA service |

@@ -83,7 +83,7 @@ def test_no_auth_mode_means_no_start(env):
 
 
 def test_crl_is_the_cas_list_and_a_ca_failure_is_a_502_not_an_empty_list(env):
-    app = build(env, http=fake_ca(lambda r: httpx.Response(200, text=CRL) if r.url.path == "/crl" else httpx.Response(404)))
+    app = build(env, http=fake_ca(lambda r: httpx.Response(200, text=CRL) if (r.url.path, r.url.query) == ("/crl", b"pem=true") else httpx.Response(404)))
     r = TestClient(app).get("/crl")
     assert r.status_code == 200 and "BEGIN X509 CRL" in r.text
     for broken in (httpx.Response(500), httpx.Response(200, text=""), httpx.Response(200, text="<html>login</html>")):
