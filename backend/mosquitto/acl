@@ -3,7 +3,8 @@
 # HOW: One stanza per identity; no "#" grants anywhere. Topics: ehg/<node>/pkt = packets, ehg/_gw/<gateway>/status = online/offline.
 #   A gateway can publish packets and its OWN status only. Readers cannot publish. To add a gateway: tools/pki.sh client ehg-gw-02,
 #   then copy the ehg-gw-01 stanza with the new name (both lines). Mosquitto re-reads this file on SIGHUP or restart.
-# KNOWN LIMIT: "ehg/+/pkt" lets a gateway publish packets for ANY node id; it cannot be pinned to the nodes it serves without a node list.
+# KNOWN LIMIT: "ehg/+/pkt" lets a gateway publish packets for ANY node id. The fix exists: tools/gen_acl.py writes an ACL with the node list per gateway
+#   (deploy/acl/gateways.json); the cloud compose file uses it when EHG_ACL_FILE points at the result. This file stays the simple default for the laptop.
 # ROLE IN THESIS: Access control on the gateway-to-broker boundary (docs/decisions/0008-mqtt-mtls-and-topic-acls.md).
 # BEFORE -> AFTER: Before: anyone could publish or read everything. After: see the stanzas.
 

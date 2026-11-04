@@ -52,7 +52,7 @@ Mapping of the HTTP APIs (triage, enrolment, FHIR facade) to the 2023 list, from
 |---|---|---|---|
 | **S**poofing | Someone publishes as a gateway, or reads the stream, without being one | TLS 1.3 with `require_certificate`; the certificate CN becomes the MQTT user name **and the client id** (`use_username_as_clientid`); no anonymous access in the cloud profile | A stolen client key works until the certificate expires or is revoked and the broker reloads its CRL |
 | **S**poofing | A fake broker captures gateway data | The client trusts only the private CA and checks the broker name against the certificate | A wrong `--host` at certificate creation fails closed (name mismatch) |
-| **T**ampering | A gateway publishes packets for nodes it does not serve | ACL limits what each identity can publish | `ehg/+/pkt` lets a gateway publish for **any** node id (documented limit in the ACL file) |
+| **T**ampering | A gateway publishes packets for nodes it does not serve | ACL limits what each identity can publish | the hand-written ACL's `ehg/+/pkt` lets a gateway publish for **any** node id; `tools/gen_acl.py` pins each gateway to its nodes (tested on a real broker) but is opt-in (`EHG_ACL_FILE`) |
 | **T**ampering | Data altered in transit | TLS integrity; the application CRC-16 detects corruption before the gateway | Samples are not signed end to end; a compromised gateway can publish altered data |
 | **R**epudiation | A publisher denies sending | One identity per component, visible in the broker log | The broker log is not tamper-evident (audit log planned, Unit 8) |
 | **I**nformation disclosure | Packets read in transit or by an unauthorised reader | TLS 1.3; readers are listed in the ACL; no `#` grants | Public de-identified data only; real patient data must not be used (see below) |
@@ -146,7 +146,9 @@ All four were real, all fixed with failing tests first (`tests/test_ts_writer.py
 - **Documented gap:** the worker holds its "already sent" memory in the process; after a restart it resends, and the conditional requests keep the server at one copy (tested). HAPI authentication on the private network is not configured (network isolation only).
 - **Not verified:** that a real HAPI R5 server accepts the transaction (tests/test_hapi_integration.py, needs Docker), HAPI's memory use on the 12 GB VM, and the HAPI configuration keys beyond having been read from the starter's own file.
 
-## Known limit: a gateway can publish for any node id
+## Known limit: a gateway can publish for any node id (fixable with tools/gen_acl.py, opt-in)
+
+**Update 2026-11-04:** `tools/gen_acl.py` now writes an ACL that grants each gateway `ehg/<node>/pkt` only for the nodes listed under it (file `deploy/acl/gateways.json` or the registry). A real Mosquitto drops a gateway's publish for another gateway's node and for an unassigned node (`tests/test_mqtt_tls_config.py`). It is NOT the default: nothing assigns nodes to gateways yet, so the JSON file has to be edited when a node is added, and the topic layout and the recorded runs are unchanged. The original discussion follows.
 
 `topic write ehg/+/pkt` lets an authenticated gateway publish packets labelled with another node's id. Pinning a gateway to its nodes needs either a gateway id in the topic or message (a change to the documented `ehg/<node>/pkt` interface that `eval/` and the recorded runs rely on) or a check against a registry of which gateway serves which node.
 It is **not fixed in Unit 2** and is accepted for now: the planned registry (`node.assigned_gateway`, Units 6 and 7) and the triage worker's checks (Unit 8) are where it gets closed, and the pin in `docs/handoff.md` carries it forward. Until then, a compromised gateway certificate can forge data for any node.

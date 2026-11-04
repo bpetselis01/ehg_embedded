@@ -617,3 +617,40 @@ def test_gateway_reports_a_refused_certificate_instead_of_staying_silent(broker,
     proc.terminate()
     out = proc.communicate(timeout=10)[0]
     assert "connection failed" in out or "refused" in out or "disconnected" in out, f"a refused TLS connection must be visible: {out!r}"
+
+
+# ---------------------------------------------------------------- (4) the generated, per-gateway ACL (tools/gen_acl.py)
+
+@pytest.fixture
+def pinned_broker(tmp_path):
+    """Mosquitto with the ACL that tools/gen_acl.py writes: gateway 01 serves EHG-1, gateway 02 serves EHG-2."""
+    p = tmp_path / "pki"
+    run_pki(p, "init", "--host", "localhost")
+    run_pki(p, "client", "ehg-gw-02")
+    acl = tmp_path / "acl.generated"
+    gateways = tmp_path / "gateways.json"
+    gateways.write_text(json.dumps({"ehg-gw-01": ["EHG-1"], "ehg-gw-02": ["EHG-2"]}))
+    r = subprocess.run([sys.executable, str(ROOT / "tools/gen_acl.py"), "--gateways", str(gateways), "--out", str(acl)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    port = free_port()
+    conf = TLS_CONF.read_text().replace("/mosquitto/pki", str(p)).replace("/mosquitto/config/acl", str(acl))
+    conf = conf.replace("/mosquitto/data/", str(tmp_path / "data") + "/").replace("listener 8883", f"listener {port}")
+    (tmp_path / "data").mkdir()
+    (tmp_path / "m.conf").write_text(conf)
+    b = type("Broker", (), {"pki": p, "port": port, "conf": tmp_path / "m.conf"})
+    b.proc = spawn_broker(b.conf, port)
+    yield b
+    b.proc.terminate()
+    b.proc.wait(10)
+
+
+@needs_openssl
+@needs_broker
+def test_gateway_can_publish_only_for_its_own_nodes(pinned_broker):
+    def attempts():
+        publish(pinned_broker, "ehg-gw-01", "ehg/EHG-1/pkt", b"own")        # its node
+        publish(pinned_broker, "ehg-gw-01", "ehg/EHG-2/pkt", b"stolen")     # gateway 02's node
+        publish(pinned_broker, "ehg-gw-01", "ehg/EHG-9/pkt", b"invented")   # a node nobody assigned
+        publish(pinned_broker, "ehg-gw-02", "ehg/EHG-2/pkt", b"own2")
+    got = collect(pinned_broker, "ehg-bridge", ["ehg/+/pkt"], 1, attempts)
+    assert sorted(got) == [("ehg/EHG-1/pkt", b"own"), ("ehg/EHG-2/pkt", b"own2")], got

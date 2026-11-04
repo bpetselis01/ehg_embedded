@@ -71,7 +71,8 @@ services:
       - "8883:8883"
     volumes:
       - ../../backend/mosquitto/mosquitto.tls.conf:/mosquitto/config/mosquitto.conf:ro
-      - ../../backend/mosquitto/acl:/mosquitto/config/acl:ro
+      # the hand-written ACL (a gateway may write any node id) unless EHG_ACL_FILE points at one made by tools/gen_acl.py (each gateway pinned to its nodes)
+      - ${EHG_ACL_FILE:-../../backend/mosquitto/acl}:/mosquitto/config/acl:ro
       # single certificate files, never the PKI directory (it can hold CA private keys)
       - ${EHG_PKI_DIR:-/opt/ehg/pki}/ca-chain.crt:/mosquitto/pki/ca-chain.crt:ro
       - ${EHG_PKI_DIR:-/opt/ehg/pki}/broker.crt:/mosquitto/pki/broker.crt:ro
