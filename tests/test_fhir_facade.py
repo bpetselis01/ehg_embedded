@@ -147,3 +147,19 @@ def test_the_service_configures_the_facade_from_the_environment():
     from backend.triage.fhir_api import upstream_from_env
     assert upstream_from_env({}) is None and upstream_from_env({"FHIR_BASE_URL": "  "}) is None, "no server configured: no /fhir routes"
     assert upstream_from_env({"FHIR_BASE_URL": "http://hapi:8080/fhir"}) is not None
+
+
+def test_observations_from_before_the_current_subject_was_assigned_are_hidden(env):
+    """A node moved to another subject must not show the earlier subject's windows under the new subject's consent (security review, 2026-11-04)."""
+    def window(k, start):
+        o = obs("EHG-1", k)
+        o["resource"]["effectivePeriod"] = {"start": start, "end": start}
+        return o
+    with psycopg.connect(env.dsn) as c:
+        c.execute("UPDATE registry.node SET subject_since = '2026-11-03T12:00:00+00:00' WHERE id = 'EHG-1'")
+    env.answer["entries"] = [window(0, "2026-11-03T11:59:30+00:00"), window(1, "2026-11-03T12:00:00+00:00"), window(2, "2026-11-03T12:00:30+00:00"), obs("EHG-1", 3)]
+    got = [e["resource"]["identifier"][0]["value"] for e in env.client.get("/fhir/Observation?node=EHG-1", headers=bearer("viewer")).json()["entry"]]
+    assert got == ["EHG-1/0/1", "EHG-1/0/2"], "window 0 is older, window 3 has no readable start (hidden, not guessed)"
+    with psycopg.connect(env.dsn) as c:
+        c.execute("UPDATE registry.node SET subject_since = NULL WHERE id = 'EHG-1'")
+    assert len(env.client.get("/fhir/Observation?node=EHG-1", headers=bearer("viewer")).json()["entry"]) == 4, "rows written by hand have no assignment time and hide nothing"

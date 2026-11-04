@@ -78,8 +78,10 @@ class Worker:
     """frames_for(node) -> (record_id, {frame: [counts]}, time of the first frame) or None; meta_for(record_id) -> the record's fs/gain/baseline/channels;
     consent_ok(node) -> True / False / None (registry semantics); client has .send(transaction)."""
 
-    def __init__(self, frames_for, meta_for, consent_ok, client, chunk_frames: int = CHUNK_FRAMES):
+    def __init__(self, frames_for, meta_for, consent_ok, client, chunk_frames: int = CHUNK_FRAMES, since_for=None):
         self._frames, self._meta, self._consent, self._client, self._n = frames_for, meta_for, consent_ok, client, chunk_frames
+        self._since_for = since_for or (lambda node: None)  # when the node's current subject was assigned: earlier frames belong to someone else and are never sent
+        self._since_seen: dict[str, object] = {}
         self._sent: dict[str, str] = {}  # observation key -> fingerprint of what the server has
 
     def sync_node(self, node: str) -> dict:
@@ -93,9 +95,19 @@ class Worker:
             out["skipped"] = "no data"
             return out
         record_id, frames, start = got
-        lo0, hi = min(frames), max(frames)
         src = self._meta(record_id)
         fs = float(src["fs"])
+        since = self._since_for(node)
+        if self._since_seen.get(node, since) != since:  # the node was given to another subject: forget what was sent for the old one
+            self._sent = {k: v for k, v in self._sent.items() if not k.startswith(node + "/")}
+        self._since_seen[node] = since
+        first = min(frames)  # `start` is the time of THIS frame
+        if since is not None:
+            frames = {i: c for i, c in frames.items() if start + timedelta(seconds=(i - first) / fs) >= since}
+            if not frames:
+                out["skipped"] = "no data"
+                return out
+        lo0, hi = min(frames), max(frames)
         chunks: dict[int, dict] = {}
         for i, counts in frames.items():
             chunks.setdefault(i // self._n, {})[i] = counts
@@ -109,7 +121,7 @@ class Worker:
             if self._sent.get(key) == print_:
                 out["unchanged"] += 1
                 continue
-            t0 = start + timedelta(seconds=(min(part) - lo0) / fs)
+            t0 = start + timedelta(seconds=(min(part) - first) / fs)
             try:
                 self._client.send(transaction(bundle(part, src, node, f"record {record_id}", record_id, t0), node, key))
             except FhirError as e:
@@ -157,7 +169,7 @@ def main() -> None:
 
     def nodes():
         with psycopg.connect(dsn) as c:
-            return [(r[0], r[1]) for r in c.execute("SELECT n.id, s.consent_status = 'active' FROM registry.node n LEFT JOIN registry.subject s ON s.id = n.subject_id ORDER BY n.id")]
+            return [(r[0], r[1], r[2]) for r in c.execute("SELECT n.id, s.consent_status = 'active', n.subject_since FROM registry.node n LEFT JOIN registry.subject s ON s.id = n.subject_id ORDER BY n.id")]
 
     def meta_from_npz(record_id):
         d = Path(a.converted_dir)
@@ -166,13 +178,15 @@ def main() -> None:
 
     meta_for = load_records(a.records_file) if a.records_file else meta_from_npz
 
-    consent = {}
-    w = Worker(frames_for, meta_for, lambda n: consent.get(n), client)
+    consent, since = {}, {}
+    w = Worker(frames_for, meta_for, lambda n: consent.get(n), client, since_for=lambda n: since.get(n))
     logging.basicConfig(level=logging.INFO)
     while True:
         try:
             consent.clear()
-            consent.update({n: ok for n, ok in nodes()})  # a node with no subject has ok None and is not exported
+            since.clear()
+            for n, ok, s in nodes():
+                consent[n], since[n] = ok, s  # a node with no subject has ok None and is not exported
             for n in consent:
                 try:
                     log.info("%s: %s", n, w.sync_node(n))

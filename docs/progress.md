@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-11-04: review finding on node reassignment (valid): a node moved to another subject must not carry the first subject's data
+
+- **Finding (MEDIUM):** `assign_node` could point a node at a different subject at any time. The FHIR worker then exports the node's last 24 hours (and the facade shows what HAPI holds for the node) under the NEW subject's consent, although those frames were recorded for the old one: a consent bypass by misattribution.
+- **Fix, four parts:** (1) `assign_node` refuses a node that already has a DIFFERENT subject (`SubjectChange`) unless `reassign=True` (CLI: `--reassign`), and the audit row records `previous_subject`; the same subject again changes nothing. (2) New column `registry.node.subject_since` (migration 0002; set whenever the subject changes; NULL for rows written by hand = no limit). (3) The worker drops frames recorded before `subject_since` (chunk times keep the right base) and forgets what it had sent for the node when `subject_since` changes. (4) The facade hides Observations whose start is before `subject_since` (an unreadable start is hidden, not guessed).
+- **Tests:** refusal, idempotence, reassignment with the audit trail (real PostgreSQL); only post-assignment frames sent, correct chunk times, nothing sent when all frames are older, state reset (worker); old windows hidden, NULL hides nothing (facade).
+- **Limit, stated:** what HAPI already holds from the first period stays there and stays readable under the FIRST subject's record only through direct HAPI access (HAPI is not exposed); no deletion is done. A database created before this change needs the column (`ALTER TABLE registry.node ADD COLUMN subject_since timestamptz`); no database anywhere is older than this.
+
 ## 2026-11-04: registry command line for subjects, consent and node assignment
 
 - `backend/triage/registry_cli.py` (`subject add`, `consent <subject> <none|active|withdrawn>`, `node <id> --subject/--gateway`, `list`) over new audited `Registry` methods (`add_subject`, `set_consent`, `assign_node`). Every change appends to the hash-chained audit log with actor `cli:<user>`, role `admin`, and (for consent) the old and new value. Ids must be plain ids; unknown subject or gateway, a duplicate id and a non-state like "maybe" are refused with nothing changed. 5 tests on a real PostgreSQL, plus the real run: inside the triage container of the 19-service stack the three commands changed the registry and left three audit rows. This closes the "SQL is the only way" gap noted for `fhir-sync`.

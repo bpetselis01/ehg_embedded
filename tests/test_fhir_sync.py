@@ -215,3 +215,48 @@ def test_the_committed_metadata_is_well_formed_and_holds_no_samples():
     for rid, r in table.items():
         assert rid.isdigit() and set(r) == {"record", "fs", "gain", "baseline", "channels"}, rid
         assert len(r["gain"]) == len(r["baseline"]) == len(r["channels"]) >= 1 and r["fs"] > 0
+
+
+# ---- a node handed to another subject: the earlier subject's frames are never sent under the new one (security review, 2026-11-04)
+
+def make_since(since_value, frames=None, chunk=10):
+    server, since = FakeFhir(), {"v": since_value}
+    data = {"frames": frames if frames is not None else {i: [i, -i] for i in range(35)}}
+    w = Worker(lambda n: (0, data["frames"], T0), lambda rid: SRC, lambda n: True, FhirClient("http://fhir/fhir", http=httpx.Client(transport=httpx.MockTransport(server.handle))),
+               chunk_frames=chunk, since_for=lambda n: since["v"])
+    return w, server, since
+
+
+def test_only_frames_from_the_assignment_time_on_are_sent():
+    from datetime import timedelta
+    w, server, _ = make_since(T0 + timedelta(seconds=0.5))   # 20 Hz: frame 10 is the first at or after 0.5 s; chunk 0 (frames 0..9) belongs to the previous subject
+    r = w.sync_node("EHG-1")
+    assert r["skipped"] is None
+    assert sorted(o["identifier"][0]["value"] for o in server.of("Observation")) == ["EHG-1/0/1", "EHG-1/0/2"], "chunk 0 is never sent; chunk 3 is still filling"
+    values = [int(v) for o in server.of("Observation") for c in o["component"][:1] for v in c["valueSampledData"]["data"].split() if v != "E"]
+    assert min(values) == 10 and max(values) == 29
+
+
+def test_a_node_whose_every_frame_is_older_than_the_assignment_sends_nothing():
+    from datetime import timedelta
+    w, server, _ = make_since(T0 + timedelta(hours=1))
+    assert w.sync_node("EHG-1")["skipped"] == "no data" and server.posts == 0
+
+
+def test_chunk_times_are_still_right_after_the_early_frames_are_dropped():
+    from datetime import timedelta
+    w, server, _ = make_since(T0 + timedelta(seconds=0.5))
+    w.sync_node("EHG-1")
+    starts = sorted(datetime.fromisoformat(o["effectivePeriod"]["start"]) for o in server.of("Observation"))
+    assert starts[0] == T0 + timedelta(seconds=0.5), "frame 10 is at exactly 0.5 s"
+    assert starts[1] == T0 + timedelta(seconds=1.0)
+
+
+def test_reassignment_forgets_what_was_sent_for_the_old_subject():
+    from datetime import timedelta
+    w, server, since = make_since(None)
+    w.sync_node("EHG-1")
+    assert any(k.startswith("EHG-1/") for k in w._sent)
+    since["v"] = T0 + timedelta(seconds=0.5)
+    w.sync_node("EHG-1")
+    assert all(not k.startswith("EHG-1/0/0") for k in w._sent), "chunk 0 (frames 0..9) is entirely before the assignment and is no longer remembered as sent"

@@ -36,7 +36,8 @@ def upgrade() -> None:
         consent_status text NOT NULL DEFAULT 'none' CHECK (consent_status IN ('none', 'active', 'withdrawn')))""")
     op.execute("""CREATE TABLE registry.node (
         id text PRIMARY KEY, fw_version text, record text, fs_hz integer, channels integer,
-        assigned_gateway text REFERENCES registry.gateway (id), subject_id text REFERENCES registry.subject (id), last_seen timestamptz)""")
+        assigned_gateway text REFERENCES registry.gateway (id), subject_id text REFERENCES registry.subject (id), last_seen timestamptz,
+        subject_since timestamptz)""")
     op.execute("CREATE SCHEMA triage")
     op.execute("""CREATE TABLE triage.alerts (
         id bigserial PRIMARY KEY, node text NOT NULL, rule text NOT NULL, severity text NOT NULL CHECK (severity IN ('warning', 'critical')),

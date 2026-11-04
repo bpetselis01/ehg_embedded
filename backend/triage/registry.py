@@ -18,13 +18,17 @@ from backend.bus import valid_id
 
 RANGES = {"24h": (timedelta(hours=24), None, "minute"), "7d": (timedelta(days=7), "hour", "hour"), "30d": (timedelta(days=30), "day", "day"), "90d": (timedelta(days=90), "day", "day")}
 G_COLS = "id, kind, cert_serial, enrolled_at, revoked_at, last_seen, app_version"
-N_COLS = "id, fw_version, record, fs_hz, channels, assigned_gateway, subject_id, last_seen"
+N_COLS = "id, fw_version, record, fs_hz, channels, assigned_gateway, subject_id, last_seen, subject_since"
 S_COLS = "id, pseudonym, source_dataset, consent_status"
 CONSENT_STATES = ("none", "active", "withdrawn")
 
 
 class UnknownGateway(Exception):
     """No such gateway in the registry."""
+
+
+class SubjectChange(ValueError):
+    """The node already belongs to another subject: moving it needs an explicit reassignment, because frames recorded for the first subject must never be exported or shown under the second one's consent."""
 
 
 class UnknownSubject(Exception):
@@ -143,21 +147,36 @@ class Registry:
             self._audit.append(actor, role, "registry.consent_set", f"subject:{subject_id}", {"from": r[0], "to": status}, conn=c, now=now)
         return self._subject(subject_id)
 
-    def assign_node(self, node_id: str, actor: str, role: str, subject_id: str | None = None, gateway_id: str | None = None, now: datetime | None = None) -> dict:
-        """Create the node row if needed and set its subject and/or gateway (None leaves the existing value). Both must already exist."""
+    def assign_node(self, node_id: str, actor: str, role: str, subject_id: str | None = None, gateway_id: str | None = None, now: datetime | None = None, reassign: bool = False) -> dict:
+        """Create the node row if needed and set its subject and/or gateway (None leaves the existing value). Both must already exist.
+
+        A node that already has a DIFFERENT subject is refused (SubjectChange) unless reassign=True. Whenever the subject changes, `subject_since` is set to now: the FHIR worker exports and the
+        facade shows only data from that moment on, so the earlier subject's frames never appear under the new subject's consent (review finding, 2026-11-04)."""
         self._check(node_id, "node id")
+        now = now or datetime.now(timezone.utc)
         with self._connect() as c:
             c.execute("INSERT INTO registry.node (id) VALUES (%s) ON CONFLICT (id) DO NOTHING", (node_id,))
+            previous = None
             if subject_id is not None:
                 if c.execute("SELECT 1 FROM registry.subject WHERE id = %s", (subject_id,)).fetchone() is None:
                     raise UnknownSubject(subject_id)
-                c.execute("UPDATE registry.node SET subject_id = %s WHERE id = %s", (subject_id, node_id))
+                previous = c.execute("SELECT subject_id FROM registry.node WHERE id = %s FOR UPDATE", (node_id,)).fetchone()[0]
+                if previous is not None and previous != subject_id and not reassign:
+                    raise SubjectChange(f"node {node_id} belongs to subject {previous}; pass reassign to move it (earlier data stays with {previous})")
+                if previous != subject_id:
+                    c.execute("UPDATE registry.node SET subject_id = %s, subject_since = %s WHERE id = %s", (subject_id, now, node_id))
             if gateway_id is not None:
                 if c.execute("SELECT 1 FROM registry.gateway WHERE id = %s", (gateway_id,)).fetchone() is None:
                     raise UnknownGateway(gateway_id)
                 c.execute("UPDATE registry.node SET assigned_gateway = %s WHERE id = %s", (gateway_id, node_id))
-            self._audit.append(actor, role, "registry.node_assign", f"node:{node_id}", {"subject": subject_id, "gateway": gateway_id}, conn=c, now=now)
+            self._audit.append(actor, role, "registry.node_assign", f"node:{node_id}", {"subject": subject_id, "gateway": gateway_id, "previous_subject": previous if previous != subject_id else None}, conn=c, now=now)
         return self.node(node_id)
+
+    def subject_since(self, node_id: str) -> datetime | None:
+        """When the node's current subject was assigned (None: unknown, as for rows written by hand, or no subject): data older than this does not belong to that subject."""
+        with self._connect() as c:
+            r = c.execute("SELECT subject_since FROM registry.node WHERE id = %s", (node_id,)).fetchone()
+        return None if r is None else r[0]
 
     def _subject(self, subject_id: str) -> dict:
         with self._connect() as c:

@@ -72,3 +72,18 @@ def test_list_shows_the_registry(reg, capsys):
     run(reg, capsys, "subject", "add", "s1", "--pseudonym", "P-1", "--source-dataset", "d")
     code, out, _ = run(reg, capsys, "list")
     assert code == 0 and json.loads(out)["subjects"][0]["id"] == "s1"
+
+
+def test_a_node_cannot_silently_change_subject_and_a_reassignment_starts_a_new_period(reg, capsys):
+    for s in ("a", "b"):
+        run(reg, capsys, "subject", "add", s, "--pseudonym", f"P-{s}", "--source-dataset", "d")
+    run(reg, capsys, "node", "EHG-1", "--subject", "a")
+    first = reg.subject_since("EHG-1")
+    assert first is not None
+    code, _, err = run(reg, capsys, "node", "EHG-1", "--subject", "b")
+    assert code == 1 and "SubjectChange" in err and reg.node("EHG-1")["subject_id"] == "a" and reg.subject_since("EHG-1") == first
+    assert run(reg, capsys, "node", "EHG-1", "--subject", "a")[0] == 0 and reg.subject_since("EHG-1") == first, "the same subject again changes nothing"
+    assert run(reg, capsys, "node", "EHG-1", "--subject", "b", "--reassign")[0] == 0
+    assert reg.node("EHG-1")["subject_id"] == "b" and reg.subject_since("EHG-1") > first
+    last = reg.audit.tail(1)[0]
+    assert last["action"] == "registry.node_assign" and last["detail"]["previous_subject"] == "a"

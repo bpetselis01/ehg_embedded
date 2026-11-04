@@ -18,7 +18,7 @@ import json
 import os
 import sys
 
-from backend.triage.registry import CONSENT_STATES, Registry, UnknownGateway, UnknownSubject
+from backend.triage.registry import CONSENT_STATES, Registry, SubjectChange, UnknownGateway, UnknownSubject
 
 
 def main(argv=None, registry: Registry | None = None) -> int:
@@ -37,6 +37,7 @@ def main(argv=None, registry: Registry | None = None) -> int:
     n.add_argument("id")
     n.add_argument("--subject")
     n.add_argument("--gateway")
+    n.add_argument("--reassign", action="store_true", help="allow moving a node that already has ANOTHER subject (earlier data stays with the first subject)")
     sub.add_parser("list")
     a = ap.parse_args(argv)
     if registry is None:
@@ -58,10 +59,10 @@ def main(argv=None, registry: Registry | None = None) -> int:
             if a.subject is None and a.gateway is None:
                 print("give --subject and/or --gateway", file=sys.stderr)
                 return 1
-            out = registry.assign_node(a.id, a.actor, "admin", a.subject, a.gateway)
+            out = registry.assign_node(a.id, a.actor, "admin", a.subject, a.gateway, reassign=a.reassign)
         else:
             out = {"subjects": registry.subjects(), "nodes": registry.nodes(), "gateways": registry.gateways()}
-    except (ValueError, UnknownSubject, UnknownGateway) as e:
+    except (ValueError, SubjectChange, UnknownSubject, UnknownGateway) as e:
         print(f"refused: {type(e).__name__}: {e}", file=sys.stderr)
         return 1
     except Exception as e:  # a duplicate subject id, an unreachable database: say so without a traceback or the connection string

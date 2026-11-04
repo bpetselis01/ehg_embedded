@@ -72,7 +72,8 @@ def router(upstream, who, audit, registry) -> APIRouter:
         if not 1 <= _count <= 20:
             raise HTTPException(422, "_count must be 1..20")
         found = upstream.search("Observation", {"device.identifier": f"{NODE_SYSTEM}|{node}", "_sort": "-date", "_count": _count})
-        entries = [e for e in found.get("entry", []) if _belongs(e.get("resource", {}), node)]
+        since = registry.subject_since(node)
+        entries = [e for e in found.get("entry", []) if _belongs(e.get("resource", {}), node) and _not_before(e.get("resource", {}), since)]
         audit.append(p.user, p.role, "fhir.read", f"node:{node}", {"resource": "Observation", "returned": len(entries)})
         return {"resourceType": "Bundle", "type": "searchset", "total": len(entries), "entry": entries}
 
@@ -86,6 +87,17 @@ def router(upstream, who, audit, registry) -> APIRouter:
         return {"resourceType": "Bundle", "type": "searchset", "total": len(entries), "entry": entries}
 
     return r
+
+
+def _not_before(resource: dict, since) -> bool:
+    """False for an Observation that starts before the node's current subject was assigned: it belongs to an earlier subject. No `since` (hand-written rows) hides nothing; an unreadable start hides the entry."""
+    if since is None:
+        return True
+    from datetime import datetime
+    try:
+        return datetime.fromisoformat(resource["effectivePeriod"]["start"]) >= since
+    except (KeyError, TypeError, ValueError):
+        return False
 
 
 def _belongs(resource: dict, node: str) -> bool:
