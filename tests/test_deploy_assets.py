@@ -29,7 +29,7 @@ BUDGET_MIB = int(9.5 * 1024)  # the whole-stack ceiling: ~9.5 GB of the 12 GB, l
 EXPECTED_SERVICES = {"caddy", "mosquitto", "nats", "postgres", "prometheus", "alertmanager", "loki", "grafana", "alloy", "node-exporter", "cadvisor", "postgres-exporter",
                      "migrate", "bridge", "ts-writer", "triage", "keycloak", "hapi"}
 SECRET_ENV = {"EHG_DOMAIN": "x.example", "POSTGRES_PASSWORD": "x", "EHG_DB_PASSWORD": "x", "HAPI_DB_PASSWORD": "x", "KEYCLOAK_DB_PASSWORD": "x",
-              "EXPORTER_DB_PASSWORD": "x", "TRIAGE_DB_PASSWORD": "x", "GRAFANA_ADMIN_PASSWORD": "x", "KEYCLOAK_ADMIN_PASSWORD": "x",
+              "EXPORTER_DB_PASSWORD": "x", "TRIAGE_DB_PASSWORD": "x", "ENROLL_DB_PASSWORD": "x", "GRAFANA_ADMIN_PASSWORD": "x", "KEYCLOAK_ADMIN_PASSWORD": "x",
               "TRIAGE_API_CLIENT_SECRET": "x", "ENROLL_API_CLIENT_SECRET": "x", "FHIR_SYNC_CLIENT_SECRET": "x"}
 
 

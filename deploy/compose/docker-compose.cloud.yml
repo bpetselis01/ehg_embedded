@@ -4,7 +4,7 @@
 # PURPOSE: The cloud stack as one file: edge (Caddy), MQTT broker with mTLS, NATS JetStream bus, PostgreSQL + TimescaleDB, and the observability stack.
 #   The private CA and the enrolment API are in the optional profile "enrol" (make the CA first with deploy/step-ca/init-offline.sh). The FHIR sync worker is NOT in it: it needs the converted recordings'
 #   gain and baseline, which are not on the VM (64 MiB are reserved for it in tests/test_deploy_assets.py).
-# INPUT: /run/ehg/runtime.env (decrypted secrets: POSTGRES_PASSWORD, EHG_DB_PASSWORD, HAPI_DB_PASSWORD, KEYCLOAK_DB_PASSWORD, EXPORTER_DB_PASSWORD, TRIAGE_DB_PASSWORD,
+# INPUT: /run/ehg/runtime.env (decrypted secrets: POSTGRES_PASSWORD, EHG_DB_PASSWORD, HAPI_DB_PASSWORD, KEYCLOAK_DB_PASSWORD, EXPORTER_DB_PASSWORD, TRIAGE_DB_PASSWORD, ENROLL_DB_PASSWORD,
 #   KEYCLOAK_ADMIN_PASSWORD, TRIAGE_API_CLIENT_SECRET, ENROLL_API_CLIENT_SECRET, FHIR_SYNC_CLIENT_SECRET, GRAFANA_ADMIN_PASSWORD; generate with openssl rand -hex 24, because passwords go into URLs and connection strings), /opt/ehg/etc/site.env (EHG_DOMAIN), certificates in EHG_PKI_DIR (default /opt/ehg/pki: ca-chain.crt, broker.crt, broker.key, ca.crl).
 #   A missing secret stops `up` with a message naming it (the "?" in the variable).
 # OUTPUT: the host publishes ONLY 80, 443 (Caddy) and 8883 (Mosquitto). Postgres, NATS, Grafana, Prometheus, Loki are on the private Docker network only.
@@ -118,6 +118,7 @@ services:
       KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?KEYCLOAK_DB_PASSWORD is not set}
       EXPORTER_DB_PASSWORD: ${EXPORTER_DB_PASSWORD:?EXPORTER_DB_PASSWORD is not set}
       TRIAGE_DB_PASSWORD: ${TRIAGE_DB_PASSWORD:?TRIAGE_DB_PASSWORD is not set}
+      ENROLL_DB_PASSWORD: ${ENROLL_DB_PASSWORD:?ENROLL_DB_PASSWORD is not set}
     volumes:
       - ../postgres/10-init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro
       - pg-data:/home/postgres/pgdata
@@ -445,7 +446,7 @@ services:
       OIDC_ISSUER: https://${EHG_DOMAIN:?EHG_DOMAIN is not set (site.env)}/auth/realms/ehg
       OIDC_AUDIENCE: enroll-api
       OIDC_JWKS_URL: http://keycloak:8080/auth/realms/ehg/protocol/openid-connect/certs
-      EHG_ENROLL_DSN: host=postgres port=5432 dbname=ehg user=ehg_triage password=${TRIAGE_DB_PASSWORD:?TRIAGE_DB_PASSWORD is not set}
+      EHG_ENROLL_DSN: host=postgres port=5432 dbname=ehg user=ehg_enroll password=${ENROLL_DB_PASSWORD:?ENROLL_DB_PASSWORD is not set}
       STEPCA_URL: https://step-ca:9000
       STEPCA_PROVISIONER: ehg-enroll
       STEPCA_KEY_FILE: /stepca/provisioner.pem

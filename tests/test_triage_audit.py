@@ -136,6 +136,23 @@ def test_the_application_role_can_append_and_read_but_nothing_else(db):
                 c.execute(sql)
 
 
+def test_the_enrolment_role_can_touch_gateways_and_the_audit_log_and_nothing_else(db):
+    """A security review asked for the enrolment API to have its own database login instead of sharing the triage service's: ehg_enroll may write gateways, certificates
+    and the audit log, and may NOT touch alerts, telemetry, or the audit log's history."""
+    fill(db, 1)
+    app = db.dsn.replace("user=postgres", "user=ehg_enroll") if "user=" in db.dsn else db.dsn.replace("postgresql://postgres@", "postgresql://ehg_enroll@")
+    with psycopg.connect(app, autocommit=True) as c:
+        c.execute("INSERT INTO registry.gateway (id, kind) VALUES ('ios-1', 'ios')")
+        c.execute("UPDATE registry.gateway SET revoked_at = now() WHERE id = 'ios-1'")
+        c.execute("INSERT INTO registry.gateway_cert (serial, gateway_id, issued_at, not_after) VALUES ('1', 'ios-1', now(), now())")
+        AuditLog(lambda: psycopg.connect(app)).append("enroll-api", "system", "registry.gateway_enrol", "gateway:ios-1", {})
+        for sql in ("SELECT count(*) FROM triage.alerts", "INSERT INTO triage.alerts (node, rule, severity, opened_at) VALUES ('n', 'r', 'warning', now())",
+                    "SELECT count(*) FROM ehg_pkt", "UPDATE registry.node SET fw_version = 'x'", "INSERT INTO registry.subject (id, pseudonym, source_dataset) VALUES ('s', 'p', 'd')",
+                    "UPDATE triage.audit_log SET actor = 'x'", "DELETE FROM triage.audit_log", "DROP TABLE registry.gateway"):
+            with pytest.raises(psycopg.Error):
+                c.execute(sql)
+
+
 def test_each_append_prints_one_json_line_for_loki_and_calls_the_sinks(db):
     seen = []
     db.add_sink(seen.append)

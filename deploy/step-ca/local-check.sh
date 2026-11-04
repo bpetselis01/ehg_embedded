@@ -18,7 +18,7 @@ docker cp "$REPO/deploy/step-ca/templates/ehg-gateway.tpl" stepca-local-check:/h
 docker exec stepca-local-check sh -c 'cd /home/step && step crypto jwk create /tmp/pub.json /tmp/priv.json --use sig --kty EC --crv P-256 --no-password --insecure --force >/dev/null 2>&1 \
  && step ca provisioner add ehg-enroll --type JWK --public-key /tmp/pub.json --x509-template /home/step/ehg-gateway.tpl --x509-min-dur 1h --x509-max-dur 168h --x509-default-dur 168h \
     --admin-subject step --admin-provisioner admin --admin-password-file /home/step/secrets/password --ca-url https://localhost:9000 --root /home/step/certs/root_ca.crt >/dev/null 2>&1 \
- && sed -i "s/\"db\": {/\"crl\": {\"enabled\": true, \"generateOnRevoke\": true, \"cacheDuration\": \"24h\"},\n\t\"db\": {/" /home/step/config/ca.json'
+ && sed -i "s|\"db\": {|\"crl\": {\"enabled\": true, \"generateOnRevoke\": true, \"cacheDuration\": \"24h\", \"idpURL\": \"https://step-ca:9000/1.0/crl\"},\n\t\"db\": {|" /home/step/config/ca.json'
 docker restart stepca-local-check >/dev/null
 i=0; until docker exec stepca-local-check step ca health --ca-url https://localhost:9000 --root /home/step/certs/root_ca.crt >/dev/null 2>&1; do i=$((i+1)); [ $i -lt 40 ] || { echo "step-ca did not restart"; exit 1; }; sleep 1; done
 docker exec stepca-local-check step crypto key format --pem --no-password --insecure /tmp/priv.json > "$WORK/prov.pem"

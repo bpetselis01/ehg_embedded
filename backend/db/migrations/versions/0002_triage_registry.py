@@ -2,7 +2,8 @@
 
 PURPOSE: The relational half of the enterprise store (decisions 0011, 0013): operator alerts with a lifecycle, a tamper-EVIDENT audit trail, and who/what is enrolled. Plain PostgreSQL only,
   so it is tested on any PostgreSQL 14+ (the TimescaleDB features are revision 0003).
-INPUT: a database at revision 0001, and a login role named ehg_triage (created by deploy/postgres/10-init-databases.sh; the migration FAILS if it does not exist, rather than skipping the grants).
+INPUT: a database at revision 0001, and the login roles ehg_triage and ehg_enroll (created by deploy/postgres/10-init-databases.sh; the migration FAILS if either does not exist, rather than skipping the grants).
+  ehg_enroll is the enrolment API's own login: gateways and certificates (registry) and the audit log, and NOTHING else (no alerts, no telemetry).
 OUTPUT: schema triage: alerts (one ACTIVE alert per node+rule, enforced by a partial unique index), alert_events, audit_log. Schema registry: gateway, gateway_cert (EVERY certificate issued, so a revocation can reach them all), node, subject (a pseudonymous research label, no personal data).
   audit_log: id, ts, actor, role, action, target, detail_json, prev_hash, hash; triggers raise an error on UPDATE, DELETE and TRUNCATE. ehg_triage may INSERT and SELECT audit_log, and nothing else on it.
 HOW: This is tamper-EVIDENT, not write-once: a database superuser can still rewrite the table, so the chain head hash is shipped off the VM with the backups (decision 0017) and `python -m backend.triage.audit --verify` recomputes the chain.
@@ -21,6 +22,7 @@ depends_on = None
 def upgrade() -> None:
     """Create the schemas, tables, triggers and grants."""
     op.execute("DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'ehg_triage') THEN RAISE EXCEPTION 'role ehg_triage does not exist: create it first (deploy/postgres/10-init-databases.sh)'; END IF; END $$")
+    op.execute("DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'ehg_enroll') THEN RAISE EXCEPTION 'role ehg_enroll does not exist: create it first (deploy/postgres/10-init-databases.sh), or on an existing server: CREATE ROLE ehg_enroll LOGIN PASSWORD ...'; END IF; END $$")
     op.execute("CREATE SCHEMA registry")
     op.execute("""CREATE TABLE registry.gateway (
         id text PRIMARY KEY CHECK (id ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'), kind text NOT NULL CHECK (kind IN ('python', 'ios')),
@@ -55,6 +57,11 @@ def upgrade() -> None:
     op.execute("GRANT SELECT, INSERT ON triage.alert_events, triage.audit_log TO ehg_triage")
     op.execute("GRANT USAGE ON SEQUENCE triage.alerts_id_seq, triage.alert_events_id_seq, triage.audit_log_id_seq TO ehg_triage")
     op.execute("GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA registry TO ehg_triage")
+    op.execute("GRANT USAGE ON SCHEMA triage, registry TO ehg_enroll")
+    op.execute("GRANT SELECT, INSERT, UPDATE ON registry.gateway, registry.gateway_cert TO ehg_enroll")
+    op.execute("GRANT SELECT ON registry.node, registry.subject TO ehg_enroll")
+    op.execute("GRANT SELECT, INSERT ON triage.audit_log TO ehg_enroll")
+    op.execute("GRANT USAGE ON SEQUENCE triage.audit_log_id_seq TO ehg_enroll")
     op.execute("GRANT SELECT ON ehg_pkt, ehg_raw TO ehg_triage")
     op.execute("GRANT SELECT, INSERT ON ehg_health TO ehg_triage")
 

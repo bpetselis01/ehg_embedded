@@ -55,5 +55,6 @@ def pg_url(pg_server):
     name = "t_" + uuid.uuid4().hex[:12]
     with psycopg.connect(f"host={host} port={port} user=postgres dbname=postgres", autocommit=True) as c:
         c.execute(f'CREATE DATABASE "{name}"')
-        c.execute("DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'ehg_triage') THEN CREATE ROLE ehg_triage LOGIN; END IF; END $$")  # cluster-wide, like the init script
+        for role in ("ehg_triage", "ehg_enroll"):
+            c.execute(f"DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{role}') THEN CREATE ROLE {role} LOGIN; END IF; END $$")  # cluster-wide, like the init script
     return f"postgresql+psycopg://postgres@{host}:{port}/{name}"
