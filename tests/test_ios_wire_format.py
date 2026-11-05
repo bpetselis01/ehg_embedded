@@ -170,6 +170,6 @@ def test_the_app_builds_for_the_ios_simulator(tmp_path):
 
 def test_the_app_only_adopts_devices_through_the_admission_rules():
     ble = (APP / "Sources/BleLink.swift").read_text()
-    assert "admission.admit(name: p.name" in ble and ble.count("where admit(p)") == 1 and "guard peripherals[p.identifier] == nil, admit(p)" in ble, "discovery and state restoration must both go through admit()"
+    assert "admission.admit(name: name(of: p)" in ble and "advertised[p.identifier] = n" in ble and ble.count("where admit(p)") == 1 and "guard peripherals[p.identifier] == nil, admit(p)" in ble, "discovery and state restoration must both go through admit()"
     assert "hasPrefix(\"EHG-\")" not in ble, "a bare name prefix is not an admission rule"
     assert "guard !nodes.isEmpty" in (APP / "Sources/GatewayModel.swift").read_text(), "start needs an explicit allowlist"

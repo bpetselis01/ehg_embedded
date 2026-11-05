@@ -161,12 +161,18 @@ static ssize_t ctrl_write(struct bt_conn *c, const struct bt_gatt_attr *attr, co
 /* Open by default; with CONFIG_EHG_REQUIRE_PAIRING the CCC (the subscribe switch) and the command slot need an
  * authenticated (passkey) link. _AUTHEN, not _ENCRYPT: _ENCRYPT alone can be met by Just Works pairing. The service and
  * characteristic declarations stay readable, so discovery works and the central only meets pairing on the first protected access. */
+/* Button-pairing build: encrypted is the level (Just Works); who may pair is decided in main.c by the Button 2 window. */
+#ifdef CONFIG_EHG_PAIRING_BUTTON
+#define EHG_PERM_CCC (BT_GATT_PERM_READ_ENCRYPT | BT_GATT_PERM_WRITE_ENCRYPT)
+#define EHG_PERM_CTRL BT_GATT_PERM_WRITE_ENCRYPT
+#else
 #ifdef CONFIG_EHG_REQUIRE_PAIRING
 #define EHG_PERM_CCC (BT_GATT_PERM_READ_AUTHEN | BT_GATT_PERM_WRITE_AUTHEN)
 #define EHG_PERM_CTRL BT_GATT_PERM_WRITE_AUTHEN
 #else
 #define EHG_PERM_CCC (BT_GATT_PERM_READ | BT_GATT_PERM_WRITE)
 #define EHG_PERM_CTRL BT_GATT_PERM_WRITE
+#endif
 #endif
 
 /* The service: data slot (board pushes) + its on/off switch the laptop sets (CCC) + command slot. */

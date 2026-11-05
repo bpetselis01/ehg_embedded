@@ -149,6 +149,7 @@ Step by step:
 | [`tools/gen_acl.py`](../tools/gen_acl.py) | writes the Mosquitto ACL that pins each gateway to its own nodes (`deploy/acl/gateways.json` or the registry); tests in `tests/test_gen_acl.py` and, with a real broker, `tests/test_mqtt_tls_config.py` |
 | [`firmware/ehg_node/Kconfig`](../firmware/ehg_node/Kconfig) | our tunable settings (frames per packet, buffer sizes, `EHG_REQUIRE_PAIRING`) |
 | [`firmware/ehg_node/security.conf`](../firmware/ehg_node/security.conf) | overlay of the SECURE build (`build.sh --secure`): LESC passkey pairing, bonds in flash, protected OTA service |
+| [`firmware/ehg_node/security-button.conf`](../firmware/ehg_node/security-button.conf) | overlay of the BUTTON-PAIRING build (`build.sh --pairing-button`): encrypted link, new pairings only for 60 s after Button 2 (Just Works, no passkey) |
 | [`firmware/gen_signing_key.sh`](../firmware/gen_signing_key.sh) | makes the ECDSA P-256 MCUboot signing key OUTSIDE the repository (`$EHG_MCUBOOT_KEY`) |
 | [`tests/test_firmware_security.py`](../tests/test_firmware_security.py) | static guard: default build stays open, the secure overlay keeps its protections, no key in git |
 | [`firmware/ehg_node/prj.conf`](../firmware/ehg_node/prj.conf) | Bluetooth and logging settings |

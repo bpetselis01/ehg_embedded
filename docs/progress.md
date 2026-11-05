@@ -523,3 +523,6 @@ These are **not H1/H2 results**, because the BLE hop is missing. They only show 
 2. Run a 10 min run, then the 6 h TPEHG soak (H2 MVP): [`eval/integrity.py`](../eval/integrity.py) + [`eval/latency.py`](../eval/latency.py).
 3. Agree the interface spec with Zicheng; wire the classifier hook (H4).
 4. Cloud deployment decision (3a).
+
+### 2026-11-06 - first iPhone run (Mac side prepared, phone run supervised)
+Prepared (certificates for `Byrons-Burger.local`, LAN broker, `.p12` copied into the app, command-line signing and install), then ran the phone against the board. Found and fixed three app bugs and one firmware design error, added the Button 2 pairing build, and measured 100 % delivery and H1 p95 549 ms through the phone (details and what is still untested: docs/ios-gateway.md, docs/security.md). The passkey build's UART-only code is not usable by real users; the button build is the practical alternative (weaker against an active attacker, documented).
