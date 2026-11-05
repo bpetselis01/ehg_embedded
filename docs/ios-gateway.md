@@ -40,3 +40,8 @@ Run these, write the answers into this file, and stop and decide if 1 or 2 fails
 5. Is port 8883 reachable on your carrier? If not, the fallback is WSS on 443 (not built).
 6. Cellular H1: run the same 7-minute scenario over cellular and compare with run 3.
 If 2 fails, the honest options are screen-on operation or a different transport; record it as a security/availability deviation, do not hack around iOS.
+
+## Phone test setup as prepared on 2026-11-05 (Mac side)
+- PKI made with `tools/pki.sh init --host Byrons-Burger.local` (broker SAN = that name; the app sets it as the TLS server name, so connect by NAME, not by IP). Phone certificate `ehg-ios-01` (7 days), `.p12` and its password file are in `backend/pki/` (gitignored).
+- Broker: `cd backend && MQTT_BIND=0.0.0.0 docker compose -f docker-compose.yml -f docker-compose.cloud.yml up -d`. Checked: TLS 1.3 handshake on the LAN address with the phone certificate and hostname verification; 490/490 simulated samples through TLS to InfluxDB (`eval/integrity.py`). The ACL gives `ehg-ios-01` write access to `ehg/EHG-93C0/pkt` and its own status topic only.
+- App built and installed from the command line with `xcodebuild ... DEVELOPMENT_TEAM=<team> PRODUCT_BUNDLE_IDENTIFIER=net.thesisb.ehggateway.byron -allowProvisioningUpdates`, then `xcrun devicectl device install app`. Test builds set `UIFileSharingEnabled` so the `.p12` can be copied into the app (`devicectl device copy to ... --domain-type appDataContainer`) and picked in Files > On My iPhone > EHG Gateway. `NSLocalNetworkUsageDescription` is set because the broker is on the local network (iOS asks permission on first connect).

@@ -28,6 +28,9 @@ targets:
           UIApplicationSupportsMultipleScenes: false
         UIBackgroundModes: [bluetooth-central]
         NSBluetoothAlwaysUsageDescription: "Receives the EHG node's measurements over Bluetooth and forwards them to the cloud. Research prototype, not for clinical use."
+        UIFileSharingEnabled: true              # test builds: lets the Mac copy the client .p12 into Files > On My iPhone > EHG Gateway
+        LSSupportsOpeningDocumentsInPlace: true
+        NSLocalNetworkUsageDescription: "Connects to the EHG broker on your local network during testing."
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
     settings:
       base:
