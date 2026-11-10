@@ -71,6 +71,10 @@ Never describe a stand-in or design-only hop as if it were done.
 **Design-only (written up, never built):** multi-zone or multi-region availability and broker clustering; restoring onto an Azure free VM; a real LTE-M or NB-IoT modem;
 App Store or TestFlight distribution; fleet-wide staged firmware rollout; write-once audit storage; AU Core conformance.
 
+**Interoperability future work (not built):** the node uses a custom GATT service. The standards route is the Bluetooth Generic Health Sensor profile (GHS, IEEE 11073-10206), which would let a standard health gateway read the node without this repository's gateway.
+
+**Build versus reuse:** the *Written* rows are a design artefact and future work, not results. Where an existing tool could replace custom code, the [reuse ledger](licences.md#reuse-ledger) names it.
+
 ## Prototype versus enterprise reference, mapped to this repository
 
 | Dimension | Prototype today | Enterprise reference | After this work | Status |
@@ -93,7 +97,7 @@ App Store or TestFlight distribution; fleet-wide staged firmware rollout; write-
 |---|---|---|---|
 | Device registry and provisioning | Postgres `registry` schema, enrolment API, step-ca | **Written**, tested with a local PostgreSQL and a fake CA; step-ca never run | 6, 7 |
 | Gateway identity and revocation | 7-day client certificates, CRL | **Written**; CRL reload tested on a local Mosquitto 2.1.2; the host job that delivers the CRL to the broker (`deploy/crl-sync.sh`, cron every 5 minutes) is written and tested with real OpenSSL lists, never run on the VM | 2, 7 |
-| Over-the-air update | MCUboot and MCUmgr exist; own signing key; app-based update | Partly Existing; key Planned; app update Tier C; fleet rollout Design-only | 13, 15d |
+| Over-the-air update | MCUboot and MCUmgr exist; own signing key; app-based update | Configured, not validated: the bootloader and update service are built in, but no over-the-air upload has been performed; key Planned; app update Tier C; fleet rollout Design-only | 13, 15d |
 | Multi-subject data model | Pseudonymous `subject` per PhysioNet record | **Written** (registry tables), tested | 6, 7 |
 | Consent | Registry consent status, enforced in the API, the facade and the sync worker (no FHIR `Consent` resource is written) | **Written**, tested (a data-model demonstration, not a legal consent platform) | 8, 9 |
 | Audit | Hash-chained log, Loki (no FHIR `AuditEvent` is written) | **Written**, tested on a real PostgreSQL (tamper-evident, **not** write-once) | 8 |

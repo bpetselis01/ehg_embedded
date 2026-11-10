@@ -130,7 +130,9 @@ Step by step:
 | [`tools/make_replay.py`](../tools/make_replay.py) | one `.npz` → `replay_data.h`, compiled in by `firmware/build.sh --record` (built-in mode, stand-alone runs) |
 | [`tools/fhir_export.py`](../tools/fhir_export.py) | stored window → HL7 FHIR R5 Bundle (clinical hand-off) |
 | [`tools/watch_db.py`](../tools/watch_db.py) | live list of packets as InfluxDB stores them, with end-to-end time (demos) |
-| [`tools/demo.sh`](../tools/demo.sh) | starts the whole pipeline in 6 tiled windows, one per hop (demos) |
+| [`tools/run.sh`](../tools/run.sh) | menu of runs: the Thesis A default and every optional run, with status labels; asks before flashing |
+| [`tools/demo.sh`](../tools/demo.sh) | starts the whole pipeline in 7 tiled windows, one per hop plus signal metrics (demos) |
+| [`backend/signal_metrics/worker.py`](../backend/signal_metrics/worker.py) | RMS, median frequency, flatline and saturation per channel into `ehg_metric`, for Grafana (not clinical information) |
 | [`firmware/build.sh`](../firmware/build.sh) | build and flash the board (works around spaces in this folder's path). Overview of all firmware: [firmware.md](firmware.md) |
 | [`firmware/ehg_node/CMakeLists.txt`](../firmware/ehg_node/CMakeLists.txt) | which C files to compile |
 | [`deploy/step-ca/init-offline.sh`](../deploy/step-ca/init-offline.sh) | makes the private CA on YOUR computer (root key stays offline) and the folder to copy to the VM for the compose profile `enrol` |

@@ -37,6 +37,41 @@ Status, run results and open items: [`docs/progress.md`](docs/progress.md).
 | [`docs/production-topology.md`](docs/production-topology.md) | the planned enterprise-style chain (sensor, BLE, mobile gateway, cellular, cloud, EHR), with each hop marked built, planned or design-only; [`docs/licences.md`](docs/licences.md) lists every component's licence |
 | [`docs/research/`](docs/research) | nRF / BLE / macOS environment notes with sources |
 
+### What was measured and what was not
+
+| Status | Parts | Meaning |
+|---|---|---|
+| **Measured** | [`firmware/ehg_node/`](firmware/ehg_node), the wire format, [`gateway/`](gateway), [`backend/ingest/`](backend/ingest), Mosquitto, InfluxDB, [`eval/`](eval) | The thesis results (H1 to H4) were taken on these |
+| **Run** | gateway outbox, [`backend/signal_metrics/`](backend/signal_metrics), Grafana dashboard and alert rules, raw viewer, [`tools/fhir_export.py`](tools/fhir_export.py) | Started locally and seen working; no thesis result depends on them |
+| **Configured, not validated** | MCUboot and the over-the-air update service in the firmware | Built into every image; no over-the-air upload has been performed |
+| **Written** | [`backend/triage/`](backend/triage), [`backend/enroll/`](backend/enroll), [`backend/bridge/`](backend/bridge), [`backend/ts_writer/`](backend/ts_writer), [`backend/fhir_sync/`](backend/fhir_sync), `backend/bus.py`, `backend/jwtauth.py`, `backend/mqtt_exporter.py`, [`ios/`](ios), [`deploy/`](deploy) | Code and unit tests only; never run against real servers; a design artefact and future work, not a result |
+
+Each part's existing off-the-shelf alternative is in the [reuse ledger](docs/licences.md#reuse-ledger).
+
+## Choosing a run
+
+`tools/run.sh` shows a menu, and Enter starts the default run. `tools/run.sh <name>` skips the menu, `--list` prints this table and `--dry-run <name>` prints the commands without running them. It asks before flashing the board, and you open Docker Desktop yourself.
+
+| Run | Status | What it is |
+|---|---|---|
+| `default` | Thesis A default | Thesis A MVP deployed locally: nRF52840, Mac gateway, Mosquitto, InfluxDB, Grafana and the live viewer, with the outbox, alerts and signal metrics |
+| `measured` | Tested on hardware | The run 3 configuration: seeded faults, no outbox |
+| `faults` | Tested on hardware | Default plus seeded faults, to see re-request working. This mix with the outbox has not been run |
+| `built-in` | In development | Recording compiled into the board |
+| `simulate` | In development | Software node, no board |
+| `status` | In development | Gateway online/offline messages |
+| `fhir` | In development | FHIR R5 export of the last 10 minutes |
+| `passkey` | In development | LESC passkey pairing |
+| `button` | In development | Button 2 pairing, only exercised with the iPhone |
+| `tls` | In development | MQTT over TLS 1.3 with client certificates |
+| `iphone` | In development | iPhone app replaces the Mac gateway |
+| `platform` | In development | NATS and TimescaleDB beside InfluxDB |
+| `triage` | In development | Pipeline-health page |
+| `cloud` | Planned | Hosted InfluxDB and Grafana, not built yet |
+| `keycloak`, `hapi-fhir`, `observability`, `oracle` | Not runnable locally yet | Exist only in `deploy/` |
+
+Only `measured` and `faults` claim hardware testing. Signal metrics are descriptive statistics, not clinical information. Contraction identification is not included.
+
 ## Quickstart
 
 ```sh
@@ -56,11 +91,13 @@ uv run python tools/feed.py data/converted/tpehgdb/tpehg1007.npz   # leave runni
 #    (recording compiled in; optional clock pings: tools/feed.py --sync-only --node EHG-93C0) — docs/firmware.md
 #    optional: --faults drop=0.05,burst=3,corrupt=0.01,disc=120 (docs/fault-injection.md)
 #    sampling starts when the gateway connects (START) or with DK Button 1; firmware updates over
-#    Bluetooth: build/dfu_application.zip via the nRF Device Manager app (docs/firmware.md Stage F)
+#    Bluetooth: build/dfu_application.zip via the nRF Device Manager app (docs/firmware.md Stage F);
+#    configured, not validated: no over-the-air upload has been performed
 
 # 2. backend
-cp backend/.env.example backend/.env && (cd backend && docker compose up -d)
-#    Grafana http://localhost:3300 (admin/admin) → EHG overview. Influx http://localhost:8086
+[ -f backend/.env ] || cp backend/.env.example backend/.env   # never overwrite an existing .env: InfluxDB keeps the token it first started with
+(cd backend && docker compose up -d)
+#    Grafana http://localhost:3300 (user admin, GRAFANA_ADMIN_PASSWORD in backend/.env) → EHG overview. Influx http://localhost:8086
 
 # 3. gateway (the macOS terminal app needs Bluetooth permission, see docs/progress.md)
 uv run python -m gateway.gateway              # or: --simulate 3 --sim-loss 0.01 (no hardware)

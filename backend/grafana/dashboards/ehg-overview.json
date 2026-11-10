@@ -131,6 +131,144 @@
     "defaults": {},
     "overrides": []
    }
+  },
+  {
+   "id": 5,
+   "type": "alertlist",
+   "title": "Pipeline-health alerts",
+   "gridPos": {
+    "x": 12,
+    "y": 18,
+    "w": 12,
+    "h": 8
+   },
+   "options": {
+    "alertName": "",
+    "dashboardAlerts": false,
+    "groupBy": [],
+    "maxItems": 20,
+    "sortOrder": 1,
+    "viewMode": "list",
+    "stateFilter": {
+     "firing": true,
+     "pending": true,
+     "noData": false,
+     "normal": false,
+     "error": true
+    }
+   }
+  },
+  {
+   "id": 6,
+   "type": "timeseries",
+   "title": "RMS, 0.08 to 4 Hz (ADC units)",
+   "description": "Signal descriptors, not clinical information. Band 0.08 to 4 Hz, 60 s windows with 30 s overlap. First values about 70 s after the data starts.",
+   "datasource": {
+    "type": "influxdb",
+    "uid": "influx"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 26,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "query": "from(bucket: v.defaultBucket) |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n |> filter(fn: (r) => r._measurement == \"ehg_metric\" and r.node_id =~ /^${node:regex}$/ and r._field == \"rms\")",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   }
+  },
+  {
+   "id": 7,
+   "type": "timeseries",
+   "title": "Median frequency, 0.08 to 4 Hz",
+   "description": "Signal descriptors, not clinical information. Band 0.08 to 4 Hz, 60 s windows with 30 s overlap. First values about 70 s after the data starts.",
+   "datasource": {
+    "type": "influxdb",
+    "uid": "influx"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 26,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "query": "from(bucket: v.defaultBucket) |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n |> filter(fn: (r) => r._measurement == \"ehg_metric\" and r.node_id =~ /^${node:regex}$/ and r._field == \"median_freq_hz\")",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "hertz"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 8,
+   "type": "timeseries",
+   "title": "Signal quality: saturated samples and window completeness",
+   "description": "Signal descriptors, not clinical information. Band 0.08 to 4 Hz, 60 s windows with 30 s overlap. First values about 70 s after the data starts.",
+   "datasource": {
+    "type": "influxdb",
+    "uid": "influx"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 34,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "query": "from(bucket: v.defaultBucket) |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n |> filter(fn: (r) => r._measurement == \"ehg_metric\" and r.node_id =~ /^${node:regex}$/ and r._field == \"saturated_pct\")",
+     "refId": "A"
+    },
+    {
+     "query": "from(bucket: v.defaultBucket) |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n |> filter(fn: (r) => r._measurement == \"ehg_metric\" and r.node_id =~ /^${node:regex}$/ and r._field == \"frames_present\")\n |> map(fn: (r) => ({r with _value: 100.0 * float(v: r._value) / 1200.0}))",
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 9,
+   "type": "timeseries",
+   "title": "Flat channels (1 = no change for 10 s)",
+   "description": "Signal descriptors, not clinical information. Band 0.08 to 4 Hz, 60 s windows with 30 s overlap. First values about 70 s after the data starts.",
+   "datasource": {
+    "type": "influxdb",
+    "uid": "influx"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 34,
+    "w": 12,
+    "h": 8
+   },
+   "targets": [
+    {
+     "query": "from(bucket: v.defaultBucket) |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n |> filter(fn: (r) => r._measurement == \"ehg_metric\" and r.node_id =~ /^${node:regex}$/ and r._field == \"flatline\")\n |> map(fn: (r) => ({r with _value: if r._value then 1 else 0}))",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   }
   }
  ]
 }

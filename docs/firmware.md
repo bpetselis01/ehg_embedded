@@ -191,6 +191,8 @@ again from C2, and `feed.py` notices (no `@LVL` for 3 s) and sends CONFIG again.
 
 ### Stage F: update the firmware over Bluetooth (no cable)
 
+**Configured, not validated.** MCUboot and the update service are built into every image, but no over-the-air upload has been performed on this board. The steps below are the intended procedure, not a tested one.
+
 | # | Who | What happens | You see |
 |---|---|---|---|
 | F1 | 💻 `firmware/build.sh` | builds as usual; the signed app is `build/dfu_application.zip` | |

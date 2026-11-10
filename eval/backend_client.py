@@ -57,24 +57,37 @@ def _env() -> dict:
     return _env_cache
 
 
+def influx_bucket() -> str:
+    """Name of the local InfluxDB bucket."""
+    return _env()["INFLUX_BUCKET"]
+
+
 def client():
     """Connection to the local InfluxDB (long timeout: soak queries can be large)."""
     from influxdb_client import InfluxDBClient
     return InfluxDBClient(url="http://localhost:8086", token=_env()["INFLUX_TOKEN"], org=_env()["INFLUX_ORG"], timeout=120_000)
 
 
-def _influx_frames(node: str, since: str) -> tuple[int, dict[int, list[int]], datetime]:
-    """Frames of the node in the window, from InfluxDB."""
+def _influx_frames(node: str, since: str, latest_run: bool = False) -> tuple[int, dict[int, list[int]], datetime]:
+    """Frames of the node in the window, from InfluxDB. latest_run keeps only the frames after the last restart of frame numbering."""
     q = f'''from(bucket:"{_env()["INFLUX_BUCKET"]}") |> range(start:-{since})
       |> filter(fn:(r) => r._measurement == "ehg_raw" and r.node_id == "{node}")
       |> pivot(rowKey:["_time"], columnKey:["_field"], valueColumn:"_value")'''
-    frames, record_id, times = {}, None, {}
+    if latest_run:
+        q += '\n      |> group() |> sort(columns:["_time"])'
+    frames, record_id, times, previous = {}, None, {}, -1
     for rec in client().query_api().query_stream(q):
         v = rec.values
         record_id = int(v["record_id"])
         chans = sorted((k for k in v if k[0] == "c" and k[1:].isdigit()), key=lambda k: int(k[1:]))
-        frames[int(v["frame_idx"])] = [int(v[k]) for k in chans]
-        times[int(v["frame_idx"])] = v["_time"]
+        if latest_run and (v["frame_idx"] is None or any(v[k] is None for k in chans)):
+            continue  # a live query can see a row whose fields are still being written
+        idx = int(v["frame_idx"])
+        if latest_run and idx < previous:  # sorted by time, so a lower number means a new run started
+            frames, times = {}, {}
+        previous = idx
+        frames[idx] = [int(v[k]) for k in chans]
+        times[idx] = v["_time"]
     if not frames:
         raise SystemExit(f"no ehg_raw data for {node} in last {since}")
     return record_id, frames, times[min(times)]
@@ -125,9 +138,12 @@ def _ts_pkts(node: str, since: str) -> list[dict]:
 
 # ---------------------------------------------------------------- public API
 
-def query_frames(node: str, since: str, backend: str | None = None) -> tuple[int, dict[int, list[int]], datetime]:
-    """Returns (record_id, {frame_idx: [c0..cN]}, time of the first frame) for the node's frames in the window, from the chosen store."""
-    return (_ts_frames if (backend or get_backend()) == "timescale" else _influx_frames)(node, since)
+def query_frames(node: str, since: str, backend: str | None = None, latest_run: bool = False) -> tuple[int, dict[int, list[int]], datetime]:
+    """Returns (record_id, {frame_idx: [c0..cN]}, time of the first frame) for the node's frames in the window, from the chosen store.
+    latest_run is honoured on InfluxDB only; it is for the live signal metrics, and the H2/H4 tools keep reading whole windows."""
+    if (backend or get_backend()) == "timescale":
+        return _ts_frames(node, since)
+    return _influx_frames(node, since, latest_run)
 
 
 def query_pkts(node: str, since: str, backend: str | None = None) -> list[dict]:

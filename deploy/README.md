@@ -1,5 +1,7 @@
 # deploy/: the cloud core as code (Unit 4)
 
+**Status: Written, never applied.** Not part of the measured results (H1 to H4). It uses standard tools throughout; see the [reuse ledger](../docs/licences.md#reuse-ledger).
+
 Everything needed to build the Oracle Always Free VM and put the stack on it. **I wrote this; you run it.** Nothing here has been applied: no Oracle account exists yet,
 Docker was not running when it was written, and the cloud steps are yours (`terraform apply`, copying the age key). Decisions: [0010](../docs/decisions/0010-oracle-always-free-cloud-target.md),
 [0012](../docs/decisions/0012-timescaledb-nats-data-platform.md), [0016](../docs/decisions/0016-observability-and-slos.md), [0017](../docs/decisions/0017-backup-dr-and-design-only-ha.md).

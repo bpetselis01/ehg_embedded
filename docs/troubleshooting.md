@@ -31,7 +31,7 @@ Known failures, each as **symptom → cause → fix**. Found something new? Add 
 | Symptom | Cause | Fix |
 |---|---|---|
 | `docker compose up -d` seems stuck | Docker Desktop on this Mac takes 5–15 min to start containers | Wait. Do not restart Docker Desktop: another project (Supabase) runs in it. Once up, the stack stays up (`restart: unless-stopped`) |
-| Grafana not at `localhost:3000` | It is on port **3300** (VS Code holds 3000–3003) | http://localhost:3300 (admin/admin) |
+| Grafana not at `localhost:3000` | It is on port **3300** (VS Code holds 3000–3003) | http://localhost:3300 (user admin, `GRAFANA_ADMIN_PASSWORD` in `backend/.env`) |
 | `eval/*.py` finds no rows | `--since` does not cover the run, or the node name is wrong | `--since 1h`; node names are `EHG-XXXX` (board) or `SIM-0000` (simulated) |
 | H1 reads a few ms low, `offset method: BLE lower envelope` | No serial clock pings for this run (`eval/results/sync_<node>.csv` missing) | Run `feed.py` (or `feed.py --sync-only` for a built-in board) during the run ([decision 0005](decisions/0005-h1-clock-offset-from-serial-sync.md)) |
 | H1 values shifted by a constant | Ingest stamps `t_db_ack` with the Docker VM clock | Check the VM-to-macOS clock offset before final H1 runs, or run ingest on the host ([progress.md](progress.md)) |
