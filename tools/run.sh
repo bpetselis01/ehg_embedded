@@ -57,7 +57,7 @@ spec() {
 		          NOTE="press Button 2 to pair; only exercised with the iPhone" ;;
 		tls)      BACK=tls; GW="$TLS_GW"; VIEW="$TLS_VIEW"; SUB="$TLS_SUB"
 		          NOTE="MQTT over TLS 1.3 with client certificates; no Mac hardware run yet" ;;
-		iphone)   FW="--pairing-button flash"; BACK=tls-lan; LAUNCH=iphone
+		iphone)   FW="--pairing-button flash"; BACK="tls-lan"; LAUNCH=iphone
 		          NOTE="iPhone app replaces the Mac gateway; foreground, Wi-Fi" ;;
 		platform) BACK=platform
 		          NOTE="NATS + TimescaleDB beside InfluxDB; parity not proven" ;;
