@@ -4,6 +4,10 @@
   uv run python -m gateway.gateway --nodes 2       # up to 2 nodes
   uv run python -m gateway.gateway --no-mqtt       # print instead of publishing
   uv run python -m gateway.gateway --simulate 3    # 3 software nodes, no BLE (backend tests, H3 load)
+  uv run python -m gateway.gateway --simulate 1 --mqtt-tls --ca backend/pki/ca-chain.crt \\
+      --cert backend/pki/clients/ehg-gw-01.crt --key backend/pki/clients/ehg-gw-01.key   # cloud profile: TLS 1.3 + client cert, port 8883
+  uv run python -m gateway.gateway --gateway-id ehg-gw-01   # + retained online/offline status. The outbox (gateway/outbox.db) is on by default:
+  uv run python -m gateway.gateway --no-outbox     # old behaviour, in-memory queue only. One gateway process per outbox file (--outbox PATH)
 
 PURPOSE: Laptop-side bridge. Packets from the board (Bluetooth) -> database side (MQTT).
 INPUT: 1 BLE notification per packet = bytes in the wire format (header + int16 samples + CRC;
@@ -45,6 +49,7 @@ import asyncio
 import csv
 import json
 import random
+import ssl
 import struct
 import time
 from pathlib import Path
@@ -52,7 +57,7 @@ from pathlib import Path
 import numpy as np
 
 from gateway.packet import FLAG_24BIT, FLAG_RETRANS, TICK_HZ, VERSION, Packet, pack, parse
-from gateway.tracking import ClockMap, GapTracker
+from gateway.tracking import MAX_TRIES, RETRY_S, ClockMap, GapTracker, ResendScheduler, ranges  # noqa: F401  (RETRY_S, MAX_TRIES, ranges: re-exported)
 
 # Must match firmware/ehg_node/src/ehg_service.c
 SERVICE_UUID = "4e480001-a0e1-4c3b-8747-9a1b2c3d4e5f"
@@ -60,8 +65,22 @@ DATA_UUID = "4e480002-a0e1-4c3b-8747-9a1b2c3d4e5f"
 CTRL_UUID = "4e480003-a0e1-4c3b-8747-9a1b2c3d4e5f"
 OP_START, OP_STOP, OP_RESEND = 0x01, 0x02, 0x03
 NAME_PREFIX = "EHG-"
-RETRY_S, MAX_TRIES = 1.0, 5  # re-ask for a still-missing packet after 1 s, at most 5 times in all
+NODE_ID_RE = __import__("re").compile(r"EHG-[A-Za-z0-9_-]{1,60}")  # the name becomes an MQTT topic level: no "/", "+", "#" or spaces (a wildcard in a PUBLISH topic makes the broker drop the connection, and the outbox would replay it forever)
 LOGS = Path("gateway/logs")
+
+
+def update_clock(clock: ClockMap, p: Packet, t_rx: float) -> None:
+    """Teach the clock map from one first-time packet (resends are late by design and are left out). Sendable once the LAST frame is injected: align that instant with t_rx,
+    otherwise the batching delay is folded into the clock offset and latency reads ~0. The iPhone port (ios/EHGWire/Sources/EHGGatewayCore) must do exactly this."""
+    if not p.flags & FLAG_RETRANS or clock.offset is None:  # a resend as the FIRST packet seen still has to give the clock an offset: without one to_host() fails and the packet would be lost;
+        t_last = p.t_inject + (p.n_frames - 1) * TICK_HZ // p.fs_hz  # the offset is then too large by the resend delay, and the next first-time packet corrects it (the offset is a minimum)
+        clock.update(t_last & 0xFFFFFFFF, t_rx)
+
+
+def packet_message(node_id: str, p: Packet, clock: ClockMap, t_rx: float) -> dict:
+    """The JSON object published to ehg/<node>/pkt, exactly (golden cases for the Swift port: tests/fixtures/packet_vectors.json, \"messages\")."""
+    return {"node_id": node_id, "seq": p.seq, "frame_idx": p.frame_idx, "t_inject": p.t_inject, "t_inject_host": clock.to_host(p.t_inject), "n_ch": p.n_ch,
+            "fs_hz": p.fs_hz, "record_id": p.record_id, "flags": p.flags, "samples": p.samples, "t_gw_rx": t_rx}
 
 
 class Node:
@@ -75,8 +94,7 @@ class Node:
         self.id = node_id
         self.gaps, self.clock = GapTracker(), ClockMap()
         self.bad = 0  # packets rejected by parse (wrong CRC, length or version)
-        self._asked: dict[int, tuple[float, int]] = {}  # missing seq -> (last request time, requests so far)
-        self._stream = 0
+        self._resend = ResendScheduler()
         self.publish, self.request_resend = publish, request_resend
         LOGS.mkdir(parents=True, exist_ok=True)
         self._log_file = open(LOGS / f"{node_id}.csv", "a", newline="")
@@ -93,31 +111,13 @@ class Node:
             print(f"[{self.id}] bad packet: {e}")
             return
         self._log.writerow([p.seq, p.frame_idx, p.flags, f"{t_rx:.6f}", len(b)])
-        if not p.flags & FLAG_RETRANS:  # resends are late by design; keep them out of the offset estimate
-            # Sendable once the LAST frame is injected: align that instant with t_rx, otherwise
-            # the batching delay is folded into the clock offset and latency reads ~0.
-            t_last = p.t_inject + (p.n_frames - 1) * TICK_HZ // p.fs_hz
-            self.clock.update(t_last & 0xFFFFFFFF, t_rx)
+        update_clock(self.clock, p, t_rx)
         self._request_missing(self.gaps.observe(p.seq), t_rx)
-        msg = {"node_id": self.id, "seq": p.seq, "frame_idx": p.frame_idx, "t_inject": p.t_inject,
-               "t_inject_host": self.clock.to_host(p.t_inject), "n_ch": p.n_ch, "fs_hz": p.fs_hz,
-               "record_id": p.record_id, "flags": p.flags, "samples": p.samples, "t_gw_rx": t_rx}
-        self.publish(self.id, msg)
+        self.publish(self.id, packet_message(self.id, p, self.clock, t_rx))
 
     def _request_missing(self, new_gaps: list[int], t: float):
-        """Ask the board for new gaps at once, and again (every RETRY_S, up to MAX_TRIES) for any
-        still missing: the re-sent copy can be lost on the air too, and one request is not enough."""
-        if self.gaps.streams != self._stream:  # board restarted numbering: old requests mean nothing
-            self._stream, self._asked = self.gaps.streams, {}
-        due = list(new_gaps)
-        for s in list(self._asked):
-            if s not in self.gaps.missing:
-                del self._asked[s]  # arrived
-            elif t - self._asked[s][0] >= RETRY_S and self._asked[s][1] < MAX_TRIES:
-                due.append(s)
-        for s in due:
-            self._asked[s] = (t, self._asked.get(s, (0, 0))[1] + 1)
-        for start, count in ranges(sorted(due)):
+        """Ask the board for new gaps at once and for still-missing ones again (ResendScheduler in gateway/tracking.py)."""
+        for start, count in self._resend.due(self.gaps, new_gaps, t):
             self.request_resend(start, count)
 
     def stats(self) -> str:
@@ -130,19 +130,29 @@ class Node:
         self._log_file.close()
 
 
-def ranges(seqs: list[int]):
-    """Group missing seqs into (start, count) runs, one RESEND each: [2,3,4,9] -> [(2,3),(9,1)]"""
-    out = []
-    for s in seqs:
-        if out and out[-1][0] + out[-1][1] == s and out[-1][1] < 0xFFFF:
-            out[-1] = (out[-1][0], out[-1][1] + 1)
-        else:
-            out.append((s, 1))
-    return out
+def tls_context(ca: str, cert: str, key: str) -> ssl.SSLContext:
+    """Client TLS 1.3 context: trusts only `ca`, checks the broker's name, presents the client certificate."""
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)  # verifies the certificate chain and the host name by default
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_3  # paho's tls_set() has no "1.3 only" switch, so build the context here
+    ctx.load_verify_locations(cafile=ca)
+    ctx.load_cert_chain(certfile=cert, keyfile=key)
+    return ctx
+
+
+class PahoTransport:
+    """The outbox's view of paho: send() hands one QoS 1 message over and returns its message id (the PUBACK token), or None if paho refused."""
+
+    def __init__(self, client):
+        self.client = client
+
+    def send(self, topic, payload):
+        """Publish at QoS 1; the id comes back to the outbox in on_publish when the broker acknowledges."""
+        info = self.client.publish(topic, payload, qos=1)
+        return info.mid if info.rc == 0 else None
 
 
 def make_publisher(args):
-    """Return (publish, close). Publishes to MQTT, or just prints when --no-mqtt."""
+    """Return (publish, close). Publishes to MQTT, or just prints when --no-mqtt. With --outbox every message goes through a disk queue first."""
     if args.no_mqtt:
         def show(node_id, msg):
             print(f"{node_id} seq={msg['seq']} frame={msg['frame_idx']} first={msg['samples'][0]}")
@@ -150,17 +160,111 @@ def make_publisher(args):
     import paho.mqtt.client as mqtt
     c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"ehg-gateway-{int(time.time())}")
     c.max_queued_messages_set(0)  # unbounded: never drop at the gateway
-    c.connect(args.mqtt, 1883)
+    status_topic = f"ehg/_gw/{args.gateway_id}/status" if args.gateway_id else None
+    if status_topic:
+        c.will_set(status_topic, "offline", qos=1, retain=True)  # the broker publishes this if we vanish without saying goodbye
+    ob = None
+    if args.outbox:
+        from gateway.outbox import Outbox, OutboxLockedError
+        try:
+            ob = Outbox(args.outbox, PahoTransport(c), max_bytes=int(args.outbox_max_mb * 2**20))
+        except OutboxLockedError as e:
+            raise SystemExit(f"gateway: {e}") from None
+        c.reconnect_delay_set(1, 60)  # paho doubles the wait from 1 s up to 60 s (it offers no jitter option)
+        c.on_publish = lambda cl, u, mid, rc, p: ob.acked(mid)
+    if args.mqtt_tls:
+        c.tls_set_context(tls_context(args.ca, args.cert, args.key))
+        # paho runs the TLS handshake inside its network thread, so a refused certificate raises nowhere: say so out loud
+        c.on_connect_fail = lambda cl, u: print("[mqtt] connection failed (TLS handshake or network); retrying. Check --ca/--cert/--key, the broker name and the CRL")
+    elif ob:  # connect_async never raises, so without this a broker that is not there would be retried in silence
+        c.on_connect_fail = lambda cl, u: print(f"[mqtt] cannot reach the broker at {args.mqtt}:{args.mqtt_port}; retrying. Packets wait in the outbox")
+    if args.mqtt_tls or ob or status_topic:
+        def on_connect(cl, u, f, rc, p):
+            if args.mqtt_tls:
+                print(f"[mqtt] connected over TLS ({rc})" if not rc.is_failure else f"[mqtt] broker refused the connection: {rc}")
+            if rc.is_failure:
+                return
+            if status_topic:
+                cl.publish(status_topic, "online", qos=1, retain=True)
+            if ob:
+                print(f"[outbox] connected; {ob.pending()} waiting on disk")
+                ob.set_connected(True)
+
+        def on_disconnect(cl, u, f, rc, p):
+            if args.mqtt_tls:
+                print(f"[mqtt] disconnected ({rc})")
+            if ob:
+                ob.set_connected(False)
+                print(f"[outbox] link down; {ob.pending()} on disk, kept until the broker confirms them")
+        c.on_connect, c.on_disconnect = on_connect, on_disconnect
+    if ob:
+        c.connect_async(args.mqtt, args.mqtt_port)  # a broker that is down at start-up must not stop the gateway: paho keeps retrying
+    else:
+        c.connect(args.mqtt, args.mqtt_port)
     c.loop_start()
 
     def publish(node_id, msg):
+        topic = f"ehg/{node_id}/pkt"
+        if ob:
+            ob.add(node_id, msg["seq"], msg["t_inject"], topic, json.dumps(msg))  # t_mqtt_pub is stamped when it is actually sent
+            return
         msg["t_mqtt_pub"] = time.time()
-        c.publish(f"ehg/{node_id}/pkt", json.dumps(msg), qos=1)
+        c.publish(topic, json.dumps(msg), qos=1)
 
-    return publish, c.loop_stop
+    def close():
+        if status_topic or ob:
+            if status_topic:
+                try:
+                    c.publish(status_topic, "offline", qos=1, retain=True).wait_for_publish(2)  # a clean exit does not trigger the last will
+                except (RuntimeError, ValueError):
+                    pass
+            c.loop_stop()
+            if ob:
+                print(f"[outbox] closing: {ob.stats()}")
+                ob.close()
+        else:
+            c.loop_stop()
+
+    return publish, close
 
 
 # ---------------------------------------------------------------- BLE source
+
+PAIRING_TIMEOUT_S = 60  # a secure board (firmware/build.sh --secure) holds the first protected access until the person types the passkey
+
+PASSKEY_HINT = "[{n}] if the board needs pairing, macOS shows a dialog now: enter the passkey shown on the board's UART log (the line 'PASSKEY ...')"
+BOND_HINT = ("[{n}] pairing information does not match ('encryption insufficient' or 'peer removed pairing information'): this Mac and the board disagree about a bond (the board was reflashed, its bonds erased, or the build changed). "
+             "Open System Settings > Bluetooth, choose Forget This Device for {n}, then run again")
+
+
+def stale_bond(exc: BaseException) -> bool:
+    """True for the macOS errors a stale bond causes: 'Encryption is insufficient' (CBATTErrorDomain 15, the Mac has a bond the board lost)
+    and 'Peer removed pairing information' (CBErrorDomain 14, the board has no bond the Mac still holds; seen when moving between the secure and default builds)."""
+    s = str(exc).lower()
+    return "insufficient" in s and ("encryption" in s or "authentication" in s) or "code=15" in s or "peer removed pairing" in s
+
+
+async def protected(node_id: str, call, timeout_s: float = PAIRING_TIMEOUT_S):
+    """First access to a protected characteristic: wait up to timeout_s for pairing, retry once, explain a stale bond.
+
+    Bleak cannot pair on macOS, so it never calls pair(): the system starts pairing itself when the board refuses an access, and
+    the call returns only after the person has typed the passkey. On an open board the call returns at once and the hint never prints."""
+    hint = asyncio.get_running_loop().call_later(3, print, PASSKEY_HINT.format(n=node_id))
+    try:
+        for attempt in (1, 2):
+            try:
+                return await asyncio.wait_for(call(), timeout_s)
+            except asyncio.TimeoutError:
+                if attempt == 2:
+                    raise
+                print(f"[{node_id}] no answer after {timeout_s:.0f} s (pairing not finished?); trying once more")
+            except Exception as e:
+                if stale_bond(e):
+                    print(BOND_HINT.format(n=node_id))
+                raise
+    finally:
+        hint.cancel()
+
 
 async def run_ble_node(device, publish, stop: asyncio.Event):
     """Connect to one board, stream until stopped, reconnect automatically if the link drops."""
@@ -170,6 +274,7 @@ async def run_ble_node(device, publish, stop: asyncio.Event):
     # One Node for the whole run: after a reconnect its gap tracker still knows the last seq, so the
     # packets the board made while disconnected (it keeps sampling) are requested from its history.
     node = Node(node_id, publish, lambda start, count: None)
+    hinted = False
     while not stop.is_set():
         try:
             async with BleakClient(device) as client:
@@ -179,7 +284,7 @@ async def run_ble_node(device, publish, stop: asyncio.Event):
 
                 node.request_resend = resend
                 print(f"[{node_id}] connected, mtu={client.mtu_size}")
-                await client.start_notify(DATA_UUID, lambda _, data: node.on_bytes(bytes(data), time.time()))
+                await protected(node_id, lambda: client.start_notify(DATA_UUID, lambda _, data: node.on_bytes(bytes(data), time.time())))
                 await client.write_gatt_char(CTRL_UUID, bytes([OP_START]), response=True)  # no-op if already running
                 while client.is_connected and not stop.is_set():
                     await asyncio.sleep(10)
@@ -188,6 +293,9 @@ async def run_ble_node(device, publish, stop: asyncio.Event):
                     await client.write_gatt_char(CTRL_UUID, bytes([OP_STOP]), response=True)
         except Exception as e:  # BLE drops are expected; log and reconnect
             print(f"[{node_id}] {type(e).__name__}: {e}; reconnecting in 2 s")
+            if stale_bond(e) and not hinted:  # the connect itself can fail this way, outside protected()
+                print(BOND_HINT.format(n=node_id))
+                hinted = True
             await asyncio.sleep(2)
     node.close()
 
@@ -202,7 +310,7 @@ async def ble_main(args, publish):
         deadline = time.time() + args.scan_s
         while time.time() < deadline and len(found) < args.nodes:
             for d, _ in scanner.discovered_devices_and_advertisement_data.values():
-                if d.name and d.name.startswith(NAME_PREFIX):
+                if d.name and NODE_ID_RE.fullmatch(d.name):
                     found.setdefault(d.name, d)
             await asyncio.sleep(0.5)
     if not found:
@@ -248,18 +356,44 @@ async def sim_main(args, publish):
     await asyncio.gather(*(sim_node(i, args, publish) for i in range(args.simulate)))
 
 
-def main():
-    """Parse command-line options, then run either the BLE or the simulated source."""
+def parse_args(argv=None):
+    """Command-line options. The TLS flags are all-or-nothing, so a half-set TLS setup fails loudly instead of publishing in plain text."""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--nodes", type=int, default=1)
     ap.add_argument("--scan-s", type=float, default=10)
     ap.add_argument("--mqtt", default="localhost")
+    ap.add_argument("--mqtt-port", type=int, default=None, help="default 1883, or 8883 with --mqtt-tls")
+    ap.add_argument("--mqtt-tls", action="store_true", help="TLS 1.3 with a client certificate (needs --ca, --cert, --key)")
+    ap.add_argument("--ca", help="CA chain that signed the broker certificate (backend/pki/ca-chain.crt)")
+    ap.add_argument("--cert", help="this gateway's client certificate (backend/pki/clients/ehg-gw-01.crt)")
+    ap.add_argument("--key", help="the private key of --cert")
+    box = ap.add_mutually_exclusive_group()
+    box.add_argument("--outbox", metavar="PATH", default="gateway/outbox.db",
+                     help="keep every message in this SQLite file until the broker confirms it (ON by default; one gateway process per file)")
+    box.add_argument("--no-outbox", action="store_true", help="old behaviour: hand messages straight to the MQTT client's in-memory queue")
+    ap.add_argument("--outbox-max-mb", type=float, default=512, help="size cap of the outbox; over it the OLDEST unsent packets are dropped, loudly")
+    ap.add_argument("--gateway-id", help="publish retained online/offline status on ehg/_gw/<id>/status (with a last will); must equal the certificate CN under TLS")
     ap.add_argument("--no-mqtt", action="store_true")
     ap.add_argument("--simulate", type=int, default=0, help="N software nodes instead of BLE")
     ap.add_argument("--sim-record", default="data/converted/tpehgdb/tpehg1007.npz")
     ap.add_argument("--sim-loss", type=float, default=0.0, help="drop probability per packet (sim only)")
     ap.add_argument("--frames", type=int, default=10, help="frames per packet (sim only; firmware uses Kconfig)")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
+    tls_files = (args.ca, args.cert, args.key)
+    if args.mqtt_tls and not all(tls_files):
+        ap.error("--mqtt-tls needs --ca, --cert and --key")
+    if any(tls_files) and not args.mqtt_tls:
+        ap.error("--ca/--cert/--key given without --mqtt-tls: refusing to fall back to plain MQTT")
+    if args.mqtt_port is None:
+        args.mqtt_port = 8883 if args.mqtt_tls else 1883
+    if args.no_outbox:
+        args.outbox = None
+    return args
+
+
+def main():
+    """Parse command-line options, then run either the BLE or the simulated source."""
+    args = parse_args()
     publish, close = make_publisher(args)
     try:
         asyncio.run(sim_main(args, publish) if args.simulate else ble_main(args, publish))

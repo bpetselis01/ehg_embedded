@@ -1,0 +1,80 @@
+# PURPOSE: The front door of the cloud core: automatic HTTPS, security headers, size limits, and exactly the routes the design allows. Nothing else behind it is reachable from the internet.
+# INPUT: the environment variable EHG_DOMAIN (the DNS name pointing at the VM). Caddy gets and renews its Let's Encrypt certificate by itself (HTTP-01 on port 80) and redirects HTTP to HTTPS.
+# OUTPUT: https://EHG_DOMAIN/ -> the triage page and API (backend/triage, port 8780); /api/* and /fhir/* -> the triage service (the FHIR read-only facade is part of it); /auth/realms/ehg/* and /auth/resources/* -> Keycloak (8080, started with
+#   the relative path /auth and proxy headers); every other /auth path (admin console, master realm) answers 404; /grafana/* -> Grafana (3000, served from the /grafana sub-path; it signs in with ITS OWN admin account, Keycloak single sign-on is NOT configured for it); /enroll-api/* -> the enrolment API (8790, prefix stripped, 16 KB body limit).
+#   NOT routed, on purpose: Prometheus, Alertmanager, Loki, PostgreSQL, NATS, HAPI FHIR itself, Mosquitto, node/cAdvisor exporters, and /metrics on any service (answered 404 here, and refused by the services when a proxy header is present).
+# HOW: Every response gets HSTS (one year), nosniff, frame denial, no referrer and no Server header. The STRICT Content-Security-Policy (no inline script or style, no external hosts) is added only to what the triage service serves (the page, /api, /fhir):
+#   Keycloak's sign-in pages and Grafana need inline scripts and styles of their own and send their own policy, and a blanket header here would replace it and very probably break both (found by reading; never tried). Request bodies are capped at 1 MB (16 KB for enrolment).
+#   LIMIT, said plainly: stock Caddy has NO rate-limit directive (that needs a third-party plugin, which is unverified here and not used). Rate limiting is done in the services (the enrolment API allows 5 requests per hour per
+#   login; Keycloak has brute-force protection). TLS certificates are only obtained when the name really points at the VM and ports 80/443 are reachable.
+# STATUS: UNVERIFIED: never run (Caddy was not installed; the upstream services do not all exist in the compose file yet, so those routes return 502 until Units 7 to 9 are deployed). tests/test_caddy_config.py checks the structure and runs `caddy validate` when the binary exists.
+# ROLE IN THESIS: The only web entry of the cloud core (docs/production-topology.md, docs/security.md).
+# BEFORE -> AFTER: Before: a one-line placeholder. After: the real route list, headers and limits.
+(csp) {
+	header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+}
+
+{$EHG_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()"
+		-Server
+	}
+
+	request_body {
+		max_size 1MB
+	}
+
+	# ORDER MATTERS, so everything below is inside ONE route block: a route runs its directives exactly as written, whereas Caddy sorts separate handle blocks by how specific their
+	# matchers are, so a deny rule could end up behind a broader route. The deny rule is first; the catch-all is last.
+	route {
+		# FIRST in the route. (A bare respond outside it would run AFTER the handle blocks and never be reached.)
+		# The patterns also cover the same paths under a prefix (/grafana/metrics, /enroll-api/healthz).
+		@internal path /metrics /metrics/* /healthz /healthz/* /readyz /readyz/* */metrics */metrics/* */healthz */healthz/* */readyz */readyz/*
+		handle @internal {
+			respond 404
+		}
+
+		handle /api/* {
+			import csp
+			reverse_proxy triage:8780
+		}
+
+		handle /fhir/* {
+			import csp
+			reverse_proxy triage:8780
+		}
+
+		# Keycloak: ONLY the ehg realm's public endpoints and its static files. The admin console (/auth/admin), the master realm, health and metrics are not on the internet;
+		# reach the admin console through an SSH tunnel to the container instead (deploy/keycloak/README.md).
+		@keycloak path /auth/realms/ehg /auth/realms/ehg/* /auth/resources/*
+		handle @keycloak {
+			reverse_proxy keycloak:8080
+		}
+
+		handle /auth/* {
+			respond 404
+		}
+
+		handle /grafana/* {
+			reverse_proxy grafana:3000
+		}
+
+		handle_path /enroll-api/* {
+			request_body {
+				max_size 16KB
+			}
+			reverse_proxy enroll:8790
+		}
+
+		handle {
+			import csp
+			reverse_proxy triage:8780
+		}
+	}
+}

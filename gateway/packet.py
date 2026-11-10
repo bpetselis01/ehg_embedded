@@ -59,7 +59,7 @@ def sample_bytes(flags: int) -> int:
 
 
 def parse(b: bytes) -> Packet:
-    """Bytes -> Packet. Raises ValueError if too short, wrong version, wrong length or bad CRC."""
+    """Bytes -> Packet. Raises ValueError if too short, wrong version, wrong length, bad CRC or a zero sampling rate."""
     if len(b) < HEADER.size:
         raise ValueError(f"packet too short: {len(b)} bytes")
     h = HEADER.unpack_from(b)
@@ -71,6 +71,8 @@ def parse(b: bytes) -> Packet:
         raise ValueError(f"expected {HEADER.size + w * n + CRC.size} bytes, got {len(b)}")
     if CRC.unpack_from(b, len(b) - CRC.size)[0] != crc16(b[:-CRC.size]):
         raise ValueError("crc mismatch")
+    if h[2] == 0:  # the CRC proves the bytes arrived intact, not that they are sane: a zero rate would divide by zero in the clock rule (and trap the Swift port); refuse it as a bad packet
+        raise ValueError("sampling rate is zero")
     if w == 2:
         flat = struct.unpack_from(f"<{n}h", b, HEADER.size)
     else:

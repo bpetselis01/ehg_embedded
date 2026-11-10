@@ -69,3 +69,78 @@ def test_gives_up_after_max_tries(node):
     for k in range(2, 20):
         node.on_bytes(pkt(k), float(k))  # packet 1 never comes back
     assert asked.count(1) == MAX_TRIES
+
+
+# ---- pairing helpers (secure board, firmware/build.sh --secure)
+
+import asyncio  # noqa: E402
+
+
+def test_stale_bond_is_recognised_from_the_macos_error():
+    from gateway.gateway import stale_bond
+    assert stale_bond(Exception("Error Domain=CBATTErrorDomain Code=15 \"Encryption is insufficient.\""))
+    assert stale_bond(Exception("Authentication is insufficient"))
+    assert stale_bond(Exception('failed to connect: Error Domain=CBErrorDomain Code=14 "Peer removed pairing information"'))  # seen on the DK, 2026-11-04
+    assert not stale_bond(Exception("device disconnected"))
+
+
+def test_protected_returns_at_once_on_an_open_board(capsys):
+    from gateway.gateway import protected
+
+    async def ok():
+        return 7
+    assert asyncio.run(protected("EHG-T", ok)) == 7
+    assert "passkey" not in capsys.readouterr().out  # the hint appears only if the call is slow
+
+
+def test_protected_retries_once_after_a_timeout_then_gives_up():
+    from gateway.gateway import protected
+    calls = []
+
+    async def hang():
+        calls.append(1)
+        await asyncio.sleep(5)
+    with pytest.raises(asyncio.TimeoutError):
+        asyncio.run(protected("EHG-T", hang, timeout_s=0.05))
+    assert len(calls) == 2
+
+
+def test_protected_succeeds_on_the_retry():
+    from gateway.gateway import protected
+    state = {"n": 0}
+
+    async def slow_first():
+        state["n"] += 1
+        if state["n"] == 1:
+            await asyncio.sleep(5)
+        return "paired"
+    assert asyncio.run(protected("EHG-T", slow_first, timeout_s=0.05)) == "paired"
+
+
+def test_protected_explains_a_stale_bond_and_reraises(capsys):
+    from gateway.gateway import protected
+
+    async def refused():
+        raise RuntimeError("CBATTErrorDomain Code=15 Encryption is insufficient")
+    with pytest.raises(RuntimeError):
+        asyncio.run(protected("EHG-T", refused))
+    assert "Forget This Device" in capsys.readouterr().out
+
+
+def test_a_resend_as_the_very_first_packet_is_still_published_with_a_host_time(node):
+    """Found while generating the Swift golden cases: a gateway restarted mid-session can see a RETRANS packet first; the clock map had no offset and to_host() raised, losing the packet."""
+    node.on_bytes(pkt(7, FLAG_RETRANS), 1000.0)
+    assert len(node.published) == 1 and isinstance(node.published[0]["t_inject_host"], float)
+    node.on_bytes(pkt(8), 1000.6)                  # the next first-time packet corrects the offset (it is a minimum)
+    assert node.published[1]["t_inject_host"] <= node.published[0]["t_inject_host"] + 1.0
+
+
+def test_a_zero_sampling_rate_with_a_valid_crc_is_a_bad_packet_not_a_crash(node):
+    node.on_bytes(pack(Packet(VERSION, 3, 0, 1, 10, 0, 10, 0, 0, [[1, 0, 0]] * 10)), 1000.0)
+    assert node.bad == 1 and node.published == []
+
+
+def test_only_plain_node_names_are_scanned_for():
+    from gateway.gateway import NODE_ID_RE
+    assert all(NODE_ID_RE.fullmatch(n) for n in ("EHG-93C0", "EHG-0001", "EHG-lab_1"))
+    assert not any(NODE_ID_RE.fullmatch(n) for n in ("EHG-+", "EHG-#", "EHG-a/b", "EHG-a b", "EHG-", "XYZ-1", "EHG-" + "x" * 61))

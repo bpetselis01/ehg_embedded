@@ -1,0 +1,25 @@
+# PURPOSE: Example of keeping Terraform state in OCI Object Storage through its S3-compatible API. Copy to backend.tf and fill in; do NOT commit the copy.
+# INPUT: your Object Storage namespace and region, plus a Customer Secret Key (S3 access key pair) exported as AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY.
+# HOW: Terraform's S3 backend with the Oracle endpoint. The skip_* flags turn off AWS-only checks. The bucket must exist first (create it by hand once:
+#   it cannot be created by the configuration whose state it stores). Alternative: OCI Resource Manager (managed Terraform, also Always Free).
+# STATUS: UNVERIFIED. Written from the documented S3-compatibility settings; nobody has run it against a real tenancy yet.
+# ROLE IN THESIS: Keeps state off git (state can contain secrets) and off a single laptop.
+# BEFORE -> AFTER: Before: local terraform.tfstate (gitignored). After: remote state in the bucket.
+terraform {
+  backend "s3" {
+    bucket = "ehg-terraform-state"
+    key    = "ehg/terraform.tfstate"
+    region = "ap-sydney-1"
+
+    endpoints = {
+      s3 = "https://REPLACE_NAMESPACE.compat.objectstorage.ap-sydney-1.oraclecloud.com"
+    }
+
+    skip_region_validation      = true
+    skip_credentials_validation = true
+    skip_requesting_account_id  = true
+    skip_metadata_api_check     = true
+    skip_s3_checksum            = true
+    use_path_style              = true
+  }
+}

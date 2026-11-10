@@ -6,16 +6,30 @@ first for the big picture, then open any file.
 
 ## Other docs
 
-| Doc | Read it for |
-|---|---|
-| [README.md](../README.md) | setup + the commands to run everything |
-| [data/tpehgdb.md](data/tpehgdb.md), [tpehgt](data/tpehgt.md), [ehgdb](data/ehgdb.md), [icehg](data/icehg.md) | what is inside the data folders (`.hea`, `.dat`, `.npz`, `manifest.json`), with example records |
-| [firmware.md](firmware.md) | the board's code: role of each file, threads, settings, serial log, `build/` output, glossary |
-| [interface-spec.md](interface-spec.md) | exact formats: `.npz`, packet bytes, MQTT message, database schema, FHIR export |
-| [research/nrf-ble-environment.md](research/nrf-ble-environment.md) | nRF / Bluetooth / macOS setup notes with sources |
-| [progress.md](progress.md) | status log, blockers, next steps |
-| [design/codebase-design.md](design/codebase-design.md) | design notes behind this layout |
-| [../papers/INDEX.md](../papers/INDEX.md) | the papers cited in the report |
+Current reference docs describe the code as it is now and are kept in step with it (`tests/test_docs.py` checks links,
+the file index and the duplicated facts). Historical records are dated and describe what was planned or found at the time.
+
+| Doc | Read it for | Status |
+|---|---|---|
+| [README.md](../README.md) | setup, the commands to run everything, reproducing the results | current |
+| [data/tpehgdb.md](data/tpehgdb.md), [tpehgt](data/tpehgt.md), [ehgdb](data/ehgdb.md), [icehg](data/icehg.md) | what is inside the data folders (`.hea`, `.dat`, `.npz`, `manifest.json`), with example records | current |
+| [firmware.md](firmware.md) | the board's code: role of each file, threads, settings, serial log, `build/` output, glossary | current |
+| [interface-spec.md](interface-spec.md) | exact formats: `.npz`, packet bytes, MQTT message, database schema, FHIR export | current |
+| [fault-injection.md](fault-injection.md) | the `--faults` options and what each one simulates | current |
+| [troubleshooting.md](troubleshooting.md) | known failures: symptom, cause, fix | current |
+| [decisions/](decisions/) | why the main design choices were made (one short record each; 0007 to 0017 accepted at Checkpoint 1, 2026-11-03; most are not built yet) | current |
+| [security.md](security.md) | threat model and controls table (status per control); what was tested for the TLS cloud profile and what was not | current (grows per unit) |
+| [deployment.md](deployment.md) | click-by-click runbook for the Oracle VM (you run it), the recorded decisions, and a log of what you actually saw | plan; log empty until you run it |
+| [supply-chain.md](supply-chain.md) | what guards the code and images (in place vs planned), local scanner commands, vulnerability handling | current |
+| [production-topology.md](production-topology.md) | the planned enterprise-style chain, hop by hop, with what is built, planned or design-only | plan (2026-11-03) |
+| [licences.md](licences.md) | licence, edition and status (confirmed or UNVERIFIED) of every component used or considered | current |
+| [claude-code-prompt-thesis-b-hardening.md](claude-code-prompt-thesis-b-hardening.md) | the full specification for the enterprise-style evolution (units, checkpoints, rules) | plan (2026-11-03) |
+| [handoff.md](handoff.md) | the resume pin between working sessions (one file, always overwritten) | working note |
+| [progress.md](progress.md) | status log, results per run, blockers, next steps | dated log |
+| [research/nrf-ble-environment.md](research/nrf-ble-environment.md) | nRF / Bluetooth / macOS setup notes with sources | historical (2026-09/10) |
+| [design/codebase-design.md](design/codebase-design.md) | the original design behind this layout | historical (2026-09-29) |
+| [plans/](plans/), [sessions/](sessions/) | the plan and the Q&A record for each piece of work | historical |
+| [../papers/INDEX.md](../papers/INDEX.md) | the papers cited in the report | current |
 
 ## The one-sentence version
 
@@ -69,7 +83,9 @@ Step by step:
 1. **Prepare the data** ([`tools/convert.py`](../tools/convert.py)). Turns downloaded recordings into simple `.npz` files of untouched
    whole numbers, plus a `manifest.json` that gives each recording a number (`record_id`).
 2. **Stream one recording into the board** ([`tools/feed.py`](../tools/feed.py)). Sends the samples over the serial port a
-   couple of seconds ahead; the firmware is built once ([`firmware/build.sh`](../firmware/build.sh)) and never contains a recording.
+   couple of seconds ahead; the firmware is built once ([`firmware/build.sh`](../firmware/build.sh)) and holds no recording.
+   Alternative for stand-alone runs: `firmware/build.sh flash --record <npz>` compiles one recording in
+   ([`tools/make_replay.py`](../tools/make_replay.py)), so no laptop feed is needed ([decision 0003](decisions/0003-built-in-recording-build-time-option.md)).
 3. **Play it like a sensor** ([`firmware/ehg_node/src/replay.c`](../firmware/ehg_node/src/replay.c)). Releases one frame at a time at the original rate
    (for example 20 per second) and stamps each frame with the board's clock. A *frame* is one sample from every channel at one instant.
 4. **Pack and send** ([`firmware/ehg_node/src/ehg_service.c`](../firmware/ehg_node/src/ehg_service.c)). Groups 10 frames into one numbered packet,
@@ -110,11 +126,31 @@ Step by step:
 | File | One-line role |
 |---|---|
 | [`tools/convert.py`](../tools/convert.py) | downloaded recordings → `.npz` + `manifest.json` (the answer key) |
-| [`tools/feed.py`](../tools/feed.py) | streams one `.npz` into the board over the serial port (digital injection) |
+| [`tools/feed.py`](../tools/feed.py) | streams one `.npz` into the board over the serial port (digital injection); `--sync-only` = clock pings for a built-in board |
+| [`tools/make_replay.py`](../tools/make_replay.py) | one `.npz` → `replay_data.h`, compiled in by `firmware/build.sh --record` (built-in mode, stand-alone runs) |
 | [`tools/fhir_export.py`](../tools/fhir_export.py) | stored window → HL7 FHIR R5 Bundle (clinical hand-off) |
+| [`tools/watch_db.py`](../tools/watch_db.py) | live list of packets as InfluxDB stores them, with end-to-end time (demos) |
+| [`tools/demo.sh`](../tools/demo.sh) | starts the whole pipeline in 6 tiled windows, one per hop (demos) |
 | [`firmware/build.sh`](../firmware/build.sh) | build and flash the board (works around spaces in this folder's path). Overview of all firmware: [firmware.md](firmware.md) |
 | [`firmware/ehg_node/CMakeLists.txt`](../firmware/ehg_node/CMakeLists.txt) | which C files to compile |
-| [`firmware/ehg_node/Kconfig`](../firmware/ehg_node/Kconfig) | our tunable settings (frames per packet, buffer sizes) |
+| [`deploy/step-ca/init-offline.sh`](../deploy/step-ca/init-offline.sh) | makes the private CA on YOUR computer (root key stays offline) and the folder to copy to the VM for the compose profile `enrol` |
+| [`deploy/step-ca/local-check.sh`](../deploy/step-ca/local-check.sh), [`local_check.py`](../deploy/step-ca/local_check.py) | proves sign, revoke and the CRL against a real step-ca in Docker (no cloud) |
+| [`backend/triage/registry_cli.py`](../backend/triage/registry_cli.py) | command line to add subjects, set consent and assign nodes (audited); run with `docker exec -i ehg-triage-1 python -m backend.triage.registry_cli ...` |
+| [`tools/export_record_meta.py`](../tools/export_record_meta.py) | writes `deploy/fhir/records.json`, the per-record gain/baseline the FHIR sync worker needs on the VM |
+| [`ios/EHGGateway/`](../ios/EHGGateway/project.yml) | the iPhone app (SwiftUI, CoreBluetooth link, Keychain identity); the Xcode project is generated by XcodeGen. Guide and checklist: [ios-gateway.md](ios-gateway.md) |
+| [`ios/EHGWire/Sources/EHGGatewayCore/`](../ios/EHGWire/Sources/EHGGatewayCore) | gateway logic without Bluetooth or UI: message builder, outbox, node session, MQTT client, certificate expiry reader |
+| [`backend/mqtt_exporter.py`](../backend/mqtt_exporter.py) | Prometheus exporter for the Mosquitto broker (nine allowlisted `$SYS` topics, own `ehg-exporter` identity); tests in `tests/test_mqtt_exporter.py` |
+| [`tests/test_ios_csr.py`](../tests/test_ios_csr.py) | the certificate request built in Swift passes the enrolment API's Python validator |
+| [`tests/test_ios_mqtt.py`](../tests/test_ios_mqtt.py) | the Swift MQTT client against a real Mosquitto (TLS 1.3, client certificate, replay, ACL, last will) |
+| [`deploy/make-sbom.sh`](../deploy/make-sbom.sh), [`docs/sbom/`](sbom) | CycloneDX software inventories of the images this repository builds and of the Python lock |
+| [`deploy/step-ca/crl_e2e.py`](../deploy/step-ca/crl_e2e.py) | revocation end to end on a laptop: enrol, connect, revoke, crl-sync, refused |
+| [`deploy/caddy/Dockerfile`](../deploy/caddy/Dockerfile), [`deploy/scan-images.sh`](../deploy/scan-images.sh) | the rebuilt (patched) Caddy for the edge; trivy scan of every image the stack runs |
+| [`deploy/fix-key-permissions.sh`](../deploy/fix-key-permissions.sh) | sets owner and mode of each private key for the one container user that reads it (run with sudo on the VM) |
+| [`tools/gen_acl.py`](../tools/gen_acl.py) | writes the Mosquitto ACL that pins each gateway to its own nodes (`deploy/acl/gateways.json` or the registry); tests in `tests/test_gen_acl.py` and, with a real broker, `tests/test_mqtt_tls_config.py` |
+| [`firmware/ehg_node/Kconfig`](../firmware/ehg_node/Kconfig) | our tunable settings (frames per packet, buffer sizes, `EHG_REQUIRE_PAIRING`) |
+| [`firmware/ehg_node/security.conf`](../firmware/ehg_node/security.conf) | overlay of the SECURE build (`build.sh --secure`): LESC passkey pairing, bonds in flash, protected OTA service |
+| [`firmware/gen_signing_key.sh`](../firmware/gen_signing_key.sh) | makes the ECDSA P-256 MCUboot signing key OUTSIDE the repository (`$EHG_MCUBOOT_KEY`) |
+| [`tests/test_firmware_security.py`](../tests/test_firmware_security.py) | static guard: default build stays open, the secure overlay keeps its protections, no key in git |
 | [`firmware/ehg_node/prj.conf`](../firmware/ehg_node/prj.conf) | Bluetooth and logging settings |
 | [`firmware/ehg_node/src/main.c`](../firmware/ehg_node/src/main.c) | start-up, advertising, connection events, stats every 10 s |
 | `firmware/ehg_node/src/replay.c/.h` | fake sensor: timed frame release into the ring buffer |
@@ -123,7 +159,53 @@ Step by step:
 | [`gateway/packet.py`](../gateway/packet.py) | packet byte layout (copy 2 of 2) |
 | [`gateway/tracking.py`](../gateway/tracking.py) | missing-packet tracker and clock converter |
 | [`gateway/gateway.py`](../gateway/gateway.py) | Bluetooth (or simulated) → MQTT bridge |
+| [`gateway/outbox.py`](../gateway/outbox.py) | on-disk queue, on by default (`--no-outbox` to disable): a packet is deleted only when the broker confirms it |
 | [`backend/docker-compose.yml`](../backend/docker-compose.yml) | starts broker, database, ingest and Grafana |
+| [`backend/docker-compose.cloud.yml`](../backend/docker-compose.cloud.yml) | optional override: broker on 8883 with TLS 1.3 and client certificates, ingest presents a certificate (no 1883) |
+| [`backend/mosquitto/mosquitto.tls.conf`](../backend/mosquitto/mosquitto.tls.conf), [`acl`](../backend/mosquitto/acl) | the TLS broker settings and the per-identity topic permissions used by the override |
+| [`tools/pki.sh`](../tools/pki.sh) | makes the private CA, broker and client certificates and the revocation list (`init`, `client`, `revoke`, `crl`) |
+| [`deploy/README.md`](../deploy/README.md) | the cloud core as code: Terraform, cloud-init, compose, secrets; what is checked and what is not |
+| [`deploy/update.sh`](../deploy/update.sh) | idempotent update of the VM to a tagged release with health check and rollback (`--dry-run` shows the steps) |
+| [`deploy/postgres/10-init-databases.sh`](../deploy/postgres/10-init-databases.sh) | first start of PostgreSQL: creates the databases and login roles |
+| [`tests/test_deploy_assets.py`](../tests/test_deploy_assets.py) | checks Terraform, cloud-init, compose, `update.sh` and that no secret or state can reach git |
+| [`tests/test_mqtt_tls_config.py`](../tests/test_mqtt_tls_config.py) | checks the TLS config, ACL, compose merge, PKI and (opt-in) a real local Mosquitto |
+| [`backend/bus.py`](../backend/bus.py) | the NATS JetStream layout: stream, subjects, message ids, consumer settings |
+| [`backend/mqtt_env.py`](../backend/mqtt_env.py) | MQTT connection settings from environment variables, for services built from the repo root |
+| [`backend/bridge/bridge.py`](../backend/bridge/bridge.py) | MQTT -> JetStream; acknowledges the broker only after the stream has the message |
+| [`backend/ts_writer/writer.py`](../backend/ts_writer/writer.py) | JetStream -> PostgreSQL/TimescaleDB, idempotent, atomic batches, reports "degraded" when the database is down |
+| [`backend/db/migrate.py`](../backend/db/migrate.py) | applies or undoes the database migrations (Alembic) |
+| [`backend/db/migrations/env.py`](../backend/db/migrations/env.py), [`versions/0001_base_schema.py`](../backend/db/migrations/versions/0001_base_schema.py), [`versions/0002_triage_registry.py`](../backend/db/migrations/versions/0002_triage_registry.py), [`versions/0003_timescale.py`](../backend/db/migrations/versions/0003_timescale.py) | Alembic environment; plain time-series tables; alerts, append-only audit log and device/subject registry; TimescaleDB hypertables, compression, retention, roll-ups |
+| [`backend/enroll/app.py`](../backend/enroll/app.py) | the enrolment API: token + certificate request in, short-lived client certificate out; revocation; public CRL |
+| [`backend/enroll/csr.py`](../backend/enroll/csr.py) | vets certificate requests (EC P-256, valid signature, no wildcard or CA request) and re-checks what the CA issued |
+| [`backend/enroll/stepca_client.py`](../backend/enroll/stepca_client.py) | talks to step-ca with one-time tokens: sign and revoke |
+| [`backend/enroll/cli.py`](../backend/enroll/cli.py) | `enrol-mac`, `list`, `revoke` from the command line (token via environment, key made locally) |
+| [`deploy/step-ca/README.md`](../deploy/step-ca/README.md), [`deploy/keycloak/README.md`](../deploy/keycloak/README.md) | what the CA template and the realm file assume, and what is not verified |
+| [`deploy/keycloak/realm-ehg.json`](../deploy/keycloak/realm-ehg.json) | the Keycloak realm as code: roles, clients (PKCE, device grant), TOTP for staff; no secrets, no users |
+| [`backend/triage/stream.py`](../backend/triage/stream.py) | per-node measurement from the packet stream, the once-a-second rule evaluation, health rows, and the service entry point |
+| [`backend/triage/app.py`](../backend/triage/app.py) | the triage HTTP API: worklist, trends, alert workflow, registry, audit, config; role-checked and audited |
+| [`backend/triage/registry.py`](../backend/triage/registry.py) | gateways, nodes, pseudonymous subjects with consent, and the health history behind the trends |
+| [`backend/triage/audit.py`](../backend/triage/audit.py) | hash-chained append-only audit log and its verifier (`--verify`); tamper-evident, not write-once |
+| [`backend/triage/state.py`](../backend/triage/state.py) | alert lifecycle in PostgreSQL (open, acknowledged, escalated, resolved), required notes, auto-resolve, audit in the same transaction |
+| [`viewer/triage.html`](../viewer/triage.html), [`viewer/triage.css`](../viewer/triage.css), [`viewer/triage.js`](../viewer/triage.js) | the triage page: sign-in (OIDC code flow with PKCE), worklist, node detail (trend, alerts, EHR), alert actions; served by the triage API at `/` |
+| [`backend/fhir_sync/worker.py`](../backend/fhir_sync/worker.py) | copies complete stored windows into the reference FHIR server (HAPI) as conditional, idempotent transactions, only for nodes with active consent |
+| [`tools/export_api_docs.py`](../tools/export_api_docs.py) | writes `docs/api/openapi-triage.json` and `openapi-enroll.json` from the FastAPI apps; `--check` says if they are stale |
+| [`docs/api/asyncapi.yaml`](api/asyncapi.yaml) | the MQTT topics, payload keys and NATS subjects (checked against the code by `tests/test_api_docs.py`) |
+| [`docs/regulatory.md`](regulatory.md), [`docs/slo.md`](slo.md), [`docs/dr.md`](dr.md) | regulatory framing and hazard table (no compliance claim), service-level objectives, backups and failure drills |
+| [`tools/gen_packet_vectors.py`](../tools/gen_packet_vectors.py) | writes the golden wire-format, gap-tracker and clock-map vectors (`tests/fixtures/packet_vectors.json`) from `gateway/packet.py`; `--check` says if they are stale |
+| [`ios/EHGWire/`](../ios/EHGWire/Package.swift) | Swift package: wire v2 decoder and encoder (`Sources/EHGWire/Packet.swift`), `GapTracker`, `ClockMap` and `ResendScheduler` ports (`Tracking.swift`), plus the `EHGGatewayCore` target next to it and tests that replay the golden vectors; command line only, no app, no Xcode project |
+| [`backend/enroll/service.py`](../backend/enroll/service.py) | starts the enrolment API from environment variables; refuses unsafe settings; `/crl` asks the CA (never serves an empty list) |
+| [`deploy/crl-sync.sh`](../deploy/crl-sync.sh) | cron job on the VM: fetches the CRL, verifies it (signature, expiry, not older), installs it into the broker's file and signals Mosquitto |
+| [`backend/triage/slis.py`](../backend/triage/slis.py) | fleet-level gauges for the service-level objectives and the bus consumers' backlog (Prometheus) |
+| [`deploy/backup/backup.sh`](../deploy/backup/backup.sh), [`deploy/backup/restore_drill.sh`](../deploy/backup/restore_drill.sh) | database backup with checksums, audit-chain head and a freshness metric; the timed restore drill on a clean server |
+| [`deploy/observability/rules/slo.yml`](../deploy/observability/rules/slo.yml), [`alerts.yml`](../deploy/observability/rules/alerts.yml) | SLO recording rules and 12 alert rules (never evaluated by Prometheus) |
+| [`deploy/observability/grafana/dashboards/pipeline-overview.json`](../deploy/observability/grafana/dashboards/pipeline-overview.json) | the one provisioned dashboard (read-only, as code) |
+| [`backend/triage/fhir_api.py`](../backend/triage/fhir_api.py) | the read-only FHIR facade (`/fhir/*`): node-scoped, consent-checked, audited; the browser never reaches HAPI |
+| [`deploy/hapi/application.yaml`](../deploy/hapi/application.yaml) | HAPI FHIR R5 configuration (no CORS, no Swagger, no mass delete); never started |
+| [`backend/jwtauth.py`](../backend/jwtauth.py) | JWT validation (explicit algorithms, required claims), role mapping and the dev mode (loopback only) |
+| [`backend/triage/rules.py`](../backend/triage/rules.py) | pipeline-health alert rules, hysteresis, severity score and worklist order (pure functions; nothing clinical) |
+| [`backend/platform.Dockerfile`](../backend/platform.Dockerfile), [`backend/docker-compose.platform.yml`](../backend/docker-compose.platform.yml) | the platform services' image and the compose override (profile `platform`) |
+| [`eval/parity.py`](../eval/parity.py) | compares InfluxDB and TimescaleDB for the same run; fails if they differ |
+| [`tests/conftest.py`](../tests/conftest.py) | a throwaway local PostgreSQL for the tests that need real SQL |
 | [`backend/.env.example`](../backend/.env.example) | shared names and passwords (copy to `.env`) |
 | [`backend/mosquitto/mosquitto.conf`](../backend/mosquitto/mosquitto.conf) | broker settings (keeps a queue on disk) |
 | [`backend/ingest/ingest.py`](../backend/ingest/ingest.py) + `Dockerfile` | MQTT → InfluxDB writer |
@@ -133,7 +215,7 @@ Step by step:
 | [`eval/backend_client.py`](../eval/backend_client.py) | shared database queries |
 | [`eval/latency.py`](../eval/latency.py) | H1 numbers and CDF plot |
 | [`eval/integrity.py`](../eval/integrity.py) | H2 delivery and H4 bit-exact numbers |
-| `tests/*.py` | automatic checks for the pure-logic parts (`uv run pytest -q`) |
+| `tests/*.py` | automatic checks for the pure-logic parts, and [`test_docs.py`](../tests/test_docs.py): the docs and the two wire-format copies still match the code (`uv run pytest -q`, also on every push: [`.github/workflows/tests.yml`](../.github/workflows/tests.yml)) |
 
 ## The Grafana dashboard ([`ehg-overview.json`](../backend/grafana/dashboards/ehg-overview.json))
 

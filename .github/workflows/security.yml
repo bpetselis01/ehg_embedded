@@ -1,0 +1,46 @@
+# PURPOSE: Checks that guard the deployment code on every push and pull request: shell scripts are linted, and the pin/secret/exposure tests of the deployment files run on their own so a failure
+#   points at the right place. Linux runners only (never macOS: 10x minutes on a private repository). Only actions already used in tests.yml are used, at the same pinned versions.
+# NOT here, on purpose: Trivy, Syft, cosign, gitleaks, CodeQL. Their action/tool versions could not be verified from here and the repository is private (no CodeQL); docs/supply-chain.md says how to run them locally.
+name: security
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # shellcheck is preinstalled on GitHub's Ubuntu runners. Warnings and errors fail the build; info/style notes (a runner's older shellcheck reported SC2015 on a safe `a && b || c`) do not.
+      - run: shellcheck -S warning -s sh $(git ls-files '*.sh')
+  deployment-guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.2  # this action publishes exact tags only, no moving v10
+      - run: uv sync --frozen
+      # images pinned by digest, only 80/443/8883 published, host-mount allowlist, no secret-looking text, state and keys gitignored, Caddy routes/headers, realm without secrets
+      - run: uv run pytest -q tests/test_deploy_assets.py tests/test_platform_compose.py tests/test_caddy_config.py tests/test_realm_export.py tests/test_mqtt_tls_config.py tests/test_observability_rules.py
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # the whole history: a key that was committed and deleted is still a leaked key
+      # pinned by digest (gitleaks 8.30.1); the allowlist is .gitleaks.toml (two exact look-alikes, guarded by tests/test_gitleaks_config.py)
+      - run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f git /repo --no-banner --redact --config /repo/.gitleaks.toml
+  hadolint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # hadolint 2.15.1 by digest; every Dockerfile in the repository
+      - run: for f in $(git ls-files '*Dockerfile'); do echo "== $f"; docker run --rm -i hadolint/hadolint@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d < "$f"; done
+  python-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.2
+      # pyflakes-class checks only (unused names, undefined names, syntax): these find real bugs; style rules are not enforced. Ruff pinned to the version used when the code was cleaned.
+      - run: uvx ruff@0.17.3 check backend gateway eval tools tests deploy --select F,E9

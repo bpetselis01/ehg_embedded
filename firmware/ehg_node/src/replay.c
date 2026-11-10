@@ -2,6 +2,9 @@
  * replay.c - the sensor stand-in: takes frames the laptop streams in over the serial port and
  * releases them at the recording's real speed (report 8.2, digital injection, Sensor-in-the-Loop [60]).
  *
+ * MODES (chosen at build time): serial feed (default, below) or built-in recording
+ *   (firmware/build.sh --record <npz>, CONFIG_EHG_BAKED_RECORD: replay_data.h compiled in, no laptop needed;
+ *   take_frame() reads the array, CONFIG/DATA/FAULT are refused, SYNC still answered).
  * PURPOSE: Releases 1 frame (1 sample per channel) at the recording's own rate, e.g. 20 per second
  *   for TPEHG, as if a real sensor were measuring. The laptop only fills a queue ahead of time;
  *   the board's own timer decides when each frame is "sampled".
@@ -50,6 +53,14 @@
 
 LOG_MODULE_REGISTER(replay, LOG_LEVEL_INF);
 
+#ifdef CONFIG_EHG_BAKED_RECORD
+/* Built-in mode (firmware/build.sh --record <npz>): the recording is compiled in by tools/make_replay.py,
+ * so the board runs stand-alone. The serial feed is off; only clock pings (SYNC) are still answered. */
+#define REPLAY_DEFINE_SAMPLES
+#include "replay_data.h"
+BUILD_ASSERT(REPLAY_N_CH <= EHG_MAX_CH, "built-in record has more channels than EHG_MAX_CH");
+#endif
+
 #define MSG_CONFIG 0x10
 #define MSG_DATA 0x11
 #define MSG_SYNC 0x12
@@ -71,7 +82,12 @@ static struct {
 	bool valid;
 	uint8_t n_ch, bits;
 	uint16_t fs, record_id, session;
-} cfg;
+} cfg
+#ifdef CONFIG_EHG_BAKED_RECORD
+	= {.valid = true, .n_ch = REPLAY_N_CH, .bits = REPLAY_SAMPLE_BITS, .fs = REPLAY_FS_HZ,
+	   .record_id = REPLAY_RECORD_ID}
+#endif
+	;
 
 /* State shared by replay_start/stop (laptop or button) and the replay thread.
  * The lock stops both from changing it at the same moment. */
@@ -220,6 +236,10 @@ static void on_message(uint8_t *buf, int len)
 		return;
 	}
 	len -= 2;
+	if (IS_ENABLED(CONFIG_EHG_BAKED_RECORD) && buf[0] != MSG_SYNC) {
+		at_line("ERR built-in record mode: rebuild without --record to stream");
+		return;
+	}
 	switch (buf[0]) {
 	case MSG_CONFIG:
 		on_config(buf + 1, len - 1);
@@ -256,6 +276,12 @@ static void parser_thread(void *a, void *b, void *c)
 	bool overlong = false;
 	int64_t next_lvl = k_uptime_get();
 
+#ifdef CONFIG_EHG_BAKED_RECORD
+	LOG_INF("source: built-in record %u (%u ch @ %u Hz, %u frames, %u-bit); START to play", REPLAY_RECORD_ID,
+		REPLAY_N_CH, REPLAY_FS_HZ, REPLAY_N_FRAMES, REPLAY_SAMPLE_BITS);
+#else
+	LOG_INF("source: serial feed (run tools/feed.py)");
+#endif
 	uart_callback_set(uart, uart_cb, NULL);
 	dma_next = 1;
 	uart_rx_enable(uart, dma_buf[0], sizeof(dma_buf[0]), 1000);
@@ -288,7 +314,8 @@ static void parser_thread(void *a, void *b, void *c)
 				LOG_WRN("serial receive trouble: ring full %u, line errors %u", rx_full, rx_err);
 			}
 			next_lvl += 1000;
-			if (cfg.valid) { /* silence before CONFIG tells tools/feed.py the board (re)started */
+			/* silence before CONFIG tells tools/feed.py the board (re)started */
+			if (cfg.valid && !IS_ENABLED(CONFIG_EHG_BAKED_RECORD)) {
 				at_line("LVL %u", k_msgq_num_used_get(&feed_q));
 			}
 		}
@@ -308,7 +335,7 @@ void replay_start(void)
 	bool was = running, ok = cfg.valid;
 
 	if (!was && ok) {
-		start_idx = first;
+		start_idx = IS_ENABLED(CONFIG_EHG_BAKED_RECORD) ? 0 : first; /* built-in: every session from frame 0 */
 		first_pending = true;
 		t0 = k_uptime_ticks();
 		n = 0;
@@ -339,6 +366,19 @@ void replay_stop(void)
 }
 
 /* Take the frame numbered want from feed_q: drop older ones, leave newer ones. 0 if found. */
+#ifdef CONFIG_EHG_BAKED_RECORD
+/* Built-in: frame `want` is row want % length of the compiled-in recording (loops), always there. */
+static int take_frame(uint32_t want, struct src_frame *f)
+{
+	const uint32_t row = (want % REPLAY_N_FRAMES) * REPLAY_N_CH;
+
+	f->frame_idx = want;
+	for (int c = 0; c < REPLAY_N_CH; c++) {
+		f->s[c] = replay_samples[row + c];
+	}
+	return 0;
+}
+#else
 static int take_frame(uint32_t want, struct src_frame *f)
 {
 	while (k_msgq_peek(&feed_q, f) == 0) {
@@ -353,6 +393,7 @@ static int take_frame(uint32_t want, struct src_frame *f)
 	}
 	return -1;
 }
+#endif
 
 /* The sensor loop. Outer loop: wait for START. Inner loop: 1 pass per frame. */
 static void replay_thread(void *a, void *b, void *c)

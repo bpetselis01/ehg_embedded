@@ -110,6 +110,11 @@ def per_sample_latencies(pkts: list[dict], fs: float, to_host=None) -> np.ndarra
     return np.array(out)
 
 
+def without_replayed(pkts: list[dict]) -> list[dict]:
+    """Packets that went out the moment the gateway had them. Rows stored before the outbox existed have no `replayed` field: all live."""
+    return [p for p in pkts if not p.get("replayed")]
+
+
 def summary(x: np.ndarray) -> str:
     """Median / 95th / 99th percentile / max, in ms, as one line."""
     q = np.percentile(x, [50, 95, 99]) * 1000
@@ -120,14 +125,25 @@ def main():
     """Query, compute, print PASS/FAIL against the H1 targets, and save the CDF plot."""
     from backend_client import query_pkts
 
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--node", required=True)
     ap.add_argument("--since", default="1h")
     ap.add_argument("--fs", type=float, default=20.0)
+    ap.add_argument("--backend", choices=["influx", "timescale"], help="which store to read (default: $EHG_BACKEND or influx)")
+    ap.add_argument("--exclude-replayed", action="store_true",
+                    help="drop packets a gateway outbox sent late (default: report all, and the live-only figure beside it)")
     a = ap.parse_args()
-    pkts = [p for p in query_pkts(a.node, a.since) if not p["retrans"]]
+    pkts = [p for p in query_pkts(a.node, a.since, backend=a.backend) if not p["retrans"]]
     if not pkts:
         raise SystemExit("no packets")
+    n_replayed = len(pkts) - len(without_replayed(pkts))
+    if n_replayed:
+        print(f"{n_replayed} of {len(pkts)} packets were replayed from a gateway outbox (they waited through an outage, so their latency is not H1 latency)"
+              + ("; excluded" if a.exclude_replayed else "; included, live-only figure printed below"))
+    if a.exclude_replayed:
+        pkts = without_replayed(pkts)
+        if not pkts:
+            raise SystemExit("no live packets left after --exclude-replayed")
     to_host, sync_file = None, Path("eval/results") / f"sync_{a.node}.csv"
     if sync_file.exists():
         rx = [p["t_gw_rx"] for p in pkts]
@@ -145,6 +161,10 @@ def main():
         print(f"offset method: serial sync ({len(rows)} pings, +/-{unc * 1000:.1f} ms); "
               f"BLE envelope would read {(np.median(lat) - np.median(env)) * 1000:.1f} ms lower (median)")
     print("H1 per-sample end-to-end:", summary(lat))
+    if n_replayed and not a.exclude_replayed:
+        live = without_replayed(pkts)
+        if live:
+            print("H1 live packets only:   ", summary(per_sample_latencies(live, a.fs, to_host)))
     print(f"   target p95 < 2000 ms: {'PASS' if np.percentile(lat, 95) < 2 else 'FAIL'};"
           f" stretch p95 < 1000 ms: {'PASS' if np.percentile(lat, 95) < 1 else 'FAIL'}")
     stages = [("inject->gateway rx (incl. batching)", "t_inject_host", "t_gw_rx"),

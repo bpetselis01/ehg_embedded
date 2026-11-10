@@ -1,0 +1,12 @@
+# PURPOSE: Template for terraform.tfvars (gitignored). Replace every REPLACE_* value; nothing in this file is a secret.
+# HOW: cp terraform.tfvars.example terraform.tfvars, edit, then `terraform plan` and read it before `terraform apply`.
+# BEFORE -> AFTER: Before: placeholders. After: your own values (kept on your Mac).
+region              = "ap-sydney-1"
+tenancy_ocid        = "ocid1.tenancy.oc1..REPLACE_ME"
+compartment_ocid    = "ocid1.tenancy.oc1..REPLACE_ME" # the tenancy OCID uses the root compartment
+admin_cidr          = "203.0.113.7/32"                # REPLACE with your own public IP /32
+ssh_public_key      = "ssh-ed25519 AAAAREPLACE_ME byron@laptop"
+notification_email  = "you@example.org"
+domain_name         = "REPLACE-ME.duckdns.org"
+repo_url            = "git@github.com:REPLACE/REPO.git" # SSH form: the repository is private, so the VM uses a read-only deploy key
+repo_tag            = "REPLACE-TAG"

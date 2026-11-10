@@ -2,6 +2,10 @@
 
 Date: 2026-09-29 · Author: Byron Petselis · Status: **self-approved, needs Byron's review**
 
+> **Historical design (2026-09-29).** Kept as the record of the original plan; parts are superseded and marked.
+> Current facts: [interface-spec.md](../interface-spec.md) (formats), [firmware.md](../firmware.md) (board code).
+> Why things changed: [decisions/](../decisions/).
+
 Source of truth for intent: *BIOM4951 Interim Report* (Thesis A, 10 Aug 2026), read in full (all 34 pages, including Fig. 10 architecture and Fig. 12 Gantt chart).
 
 ## 1. Understanding
@@ -51,7 +55,7 @@ A BLE notification carries one packet, little-endian:
 
 | off | type | field | notes |
 |---|---|---|---|
-| 0 | u8 | version | = 1 |
+| 0 | u8 | version | = 1 *(now 2: v2 adds a CRC-16 trailer, [interface-spec.md](../interface-spec.md) §3)* |
 | 1 | u8 | n_ch | 3 (TPEHG) or 16 (EHGDB) |
 | 2 | u16 | fs_hz | 20 / 200 |
 | 4 | u32 | seq | packet counter, starts at 0 on stream start |

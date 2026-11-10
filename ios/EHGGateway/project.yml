@@ -1,0 +1,38 @@
+# PURPOSE: Describes the iPhone gateway app for XcodeGen (`xcodegen generate` writes EHGGateway.xcodeproj, which is not committed). Keeps the project reviewable as text and reproducible.
+# INPUT: ../EHGWire (the Swift package: wire format, gateway core, MQTT client). OUTPUT: an iOS 16+ SwiftUI app with the Bluetooth background mode.
+# SIGNING: left to you. Open the generated project, pick your Personal Team under Signing & Capabilities and change the bundle identifier (a free account needs a unique one). The signature lasts 7 days (docs/ios-gateway.md).
+name: EHGGateway
+options:
+  bundleIdPrefix: net.thesisb
+  deploymentTarget:
+    iOS: "16.0"
+packages:
+  EHGWire:
+    path: ../EHGWire
+targets:
+  EHGGateway:
+    type: application
+    platform: iOS
+    sources: [Sources]
+    dependencies:
+      - package: EHGWire
+        product: EHGWire
+      - package: EHGWire
+        product: EHGGatewayCore
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: EHG Gateway
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UIBackgroundModes: [bluetooth-central]
+        NSBluetoothAlwaysUsageDescription: "Receives the EHG node's measurements over Bluetooth and forwards them to the cloud. Research prototype, not for clinical use."
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.thesisb.ehggateway
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "5.9"
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"

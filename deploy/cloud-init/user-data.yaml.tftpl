@@ -1,0 +1,187 @@
+#cloud-config
+# PURPOSE: First-boot setup of the EHG cloud VM (Ubuntu 24.04, arm64): hardened SSH, automatic security updates, a host firewall that repeats the cloud
+#   security list, the 150 GB data volume, Docker, a non-root service user, and the repository at a pinned tag.
+# INPUT: Terraform fills four values: admin_cidr, domain_name, repo_url, repo_tag (deploy/terraform/main.tf). NO secret is in this file.
+#   e.g. admin_cidr = 203.0.113.7/32, domain_name = ehg-demo.duckdns.org, repo_url = git@github.com:OWNER/REPO.git, repo_tag = v0.1.0
+#   A PRIVATE repository is cloned over SSH with a read-only deploy key that you place by hand (/opt/ehg/secrets/deploy_key) plus a known_hosts file; the git
+#   settings for that are written to /opt/ehg/.gitconfig below. No key is ever part of this file.
+# OUTPUT: a VM with /srv/ehg-data mounted, Docker running with its data there and its logs in the journal, /opt/ehg/repo checked out, and a status file
+#   /opt/ehg/state/first-boot.status that says what worked. The stack starts only once the age key is copied to /opt/ehg/secrets/age.key (by hand).
+# HOW: cloud-init writes the config files, then runs /usr/local/sbin/ehg-first-boot.sh once. Docker is installed AFTER the volume is mounted, so its
+#   data never lands on the small boot disk. Everything is idempotent: re-running the script changes nothing that is already right.
+#   Only the four named dollar-brace placeholders are Terraform's; the script uses plain $name shell variables on purpose.
+# STATUS: UNVERIFIED on a real VM (no cloud account yet): the block-device path /dev/oracleoci/oraclevdb, the Docker packages and the timings are expectations.
+# ROLE IN THESIS: Makes the VM rebuildable from code (docs/decisions/0010, 0017); the restore drill (Unit 12) starts from this.
+# BEFORE -> AFTER: Before: a blank Ubuntu image. After first boot: ready for deploy/update.sh and the compose stack.
+package_update: true
+package_upgrade: true
+
+packages:
+  - git
+  - ufw
+  - unattended-upgrades
+  - curl
+  - jq
+  - age
+  - ca-certificates
+
+users:
+  - default
+  - name: ehg
+    system: true
+    shell: /usr/sbin/nologin
+    home: /opt/ehg
+    lock_passwd: true
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/99-ehg-hardening.conf
+    permissions: "0644"
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin no
+      X11Forwarding no
+      MaxAuthTries 3
+      AllowUsers ubuntu
+  - path: /etc/apt/apt.conf.d/52ehg-unattended-upgrades
+    permissions: "0644"
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      Unattended-Upgrade::Automatic-Reboot "false";
+  - path: /etc/docker/daemon.json
+    permissions: "0644"
+    content: |
+      {
+        "data-root": "/srv/ehg-data/docker",
+        "log-driver": "journald",
+        "live-restore": true
+      }
+  - path: /etc/systemd/journald.conf.d/ehg.conf
+    permissions: "0644"
+    content: |
+      [Journal]
+      Storage=persistent
+      SystemMaxUse=2G
+  - path: /etc/systemd/system/ehg-block-imds.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Stop containers reaching the cloud metadata service (169.254.169.254)
+      After=docker.service
+      Requires=docker.service
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/bin/sh -c 'iptables -C DOCKER-USER -d 169.254.169.254 -j DROP 2>/dev/null || iptables -I DOCKER-USER -d 169.254.169.254 -j DROP'
+      [Install]
+      WantedBy=multi-user.target
+  - path: /usr/local/sbin/ehg-df-metrics.sh
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      # PURPOSE: Write disk size and free space of the boot and data volumes in Prometheus text format, once a minute (cron). node-exporter reads the file
+      #   through its textfile collector, so it needs no access to the host filesystem (a host-root mount would expose the Docker socket).
+      set -eu
+      out=/var/lib/ehg-metrics/disk.prom
+      tmp="$out.$$"
+      {
+        echo "# TYPE ehg_disk_size_bytes gauge"
+        echo "# TYPE ehg_disk_avail_bytes gauge"
+        for path in / /srv/ehg-data; do
+          [ "$path" = / ] || mountpoint -q "$path" || continue
+          df -B1 --output=size,avail "$path" | tail -n 1 | {
+            read -r size avail
+            printf 'ehg_disk_size_bytes{mount="%s"} %s\nehg_disk_avail_bytes{mount="%s"} %s\n' "$path" "$size" "$path" "$avail"
+          }
+        done
+      } > "$tmp"
+      mv "$tmp" "$out"
+  - path: /etc/cron.d/ehg-df-metrics
+    permissions: "0644"
+    content: |
+      * * * * * root /usr/local/sbin/ehg-df-metrics.sh
+  - path: /etc/tmpfiles.d/ehg.conf
+    permissions: "0644"
+    content: |
+      # the decrypted secrets live only here, in memory (tmpfs); /run is root-owned, so the service user's directory is made at every boot
+      d /run/ehg 0700 ehg ehg -
+  - path: /etc/cron.d/ehg-crl-sync
+    permissions: "0644"
+    content: |
+      # every 5 minutes: fetch the revocation list from the enrolment API, verify it and tell the broker (deploy/crl-sync.sh; failures go to the system log)
+      */5 * * * * ehg /opt/ehg/repo/deploy/crl-sync.sh >/dev/null 2>&1
+  - path: /opt/ehg/.gitconfig
+    permissions: "0644"
+    content: |
+      [core]
+          sshCommand = ssh -i /opt/ehg/secrets/deploy_key -o IdentitiesOnly=yes -o UserKnownHostsFile=/opt/ehg/etc/known_hosts -o StrictHostKeyChecking=yes
+  - path: /etc/sysctl.d/99-ehg.conf
+    permissions: "0644"
+    content: |
+      vm.max_map_count=262144
+  - path: /usr/local/sbin/ehg-first-boot.sh
+    permissions: "0750"
+    content: |
+      #!/bin/sh
+      # PURPOSE: One-time VM setup after the packages are in: data volume, Docker, firewall, repository. Safe to run again.
+      set -u
+      STATUS_DIR=/opt/ehg/state
+      mkdir -p "$STATUS_DIR" /opt/ehg/secrets /opt/ehg/pki /opt/ehg/etc
+      status() { echo "$(date -u +%FT%TZ) $*" >> "$STATUS_DIR/first-boot.status"; }
+
+      # 1. the 150 GB data volume (attached after the VM is created, so wait for it)
+      DEV=/dev/oracleoci/oraclevdb
+      i=0
+      while [ ! -b "$DEV" ] && [ "$i" -lt 120 ]; do sleep 5; i=$((i + 1)); done
+      if [ -b "$DEV" ]; then
+        blkid "$DEV" >/dev/null 2>&1 || mkfs.ext4 -L ehgdata "$DEV"
+        mkdir -p /srv/ehg-data
+        grep -q ehgdata /etc/fstab || echo "LABEL=ehgdata /srv/ehg-data ext4 defaults,nofail 0 2" >> /etc/fstab
+        mount -a
+        mountpoint -q /srv/ehg-data && status "data volume mounted" || status "ERROR data volume not mounted"
+      else
+        status "ERROR data volume device $DEV did not appear in 10 minutes: Docker NOT installed (it would fill the boot disk)"
+        exit 1
+      fi
+
+      # 2. Docker, only now that its data directory is on the volume (daemon.json already points there)
+      mkdir -p /srv/ehg-data/docker /var/log/journal /var/lib/ehg-metrics
+      systemctl restart systemd-journald
+      apt-get install -y docker.io docker-compose-v2 && status "docker installed" || status "ERROR docker install failed"
+      systemctl daemon-reload
+      systemctl enable --now ehg-block-imds.service && status "containers cannot reach the metadata service" || status "ERROR metadata block not active"
+      /usr/local/sbin/ehg-df-metrics.sh || status "ERROR disk metrics script failed"
+      usermod -aG docker ehg
+      sysctl --system >/dev/null
+
+      # 3. host firewall that repeats the cloud security list (Docker-published ports bypass ufw, so the cloud list is the real filter)
+      ufw --force reset >/dev/null
+      ufw default deny incoming
+      ufw default allow outgoing
+      ufw allow from ${admin_cidr} to any port 22 proto tcp
+      ufw allow 80/tcp
+      ufw allow 443/tcp
+      ufw allow 8883/tcp
+      ufw --force enable && status "firewall on"
+      systemctl restart ssh
+
+      # 4. the repository at the pinned tag (a private repository needs a deploy key placed by hand; see the deployment runbook (Unit 5))
+      echo "EHG_DOMAIN=${domain_name}" > /opt/ehg/etc/site.env
+      if [ ! -d /opt/ehg/repo/.git ]; then
+        git clone --depth 1 --branch ${repo_tag} ${repo_url} /opt/ehg/repo && status "repo cloned at ${repo_tag}" || status "NOTE git clone failed: expected for a private repository until the deploy key and known_hosts are in place; follow step 10 of the deployment runbook"
+      fi
+      chown -R ehg:ehg /opt/ehg
+      chmod 700 /opt/ehg/secrets /opt/ehg/pki
+
+      # 5. try to start the stack; it waits (and says so) until the age key is in place (/run/ehg first: the service user cannot create it under the root-owned /run)
+      systemd-tmpfiles --create /etc/tmpfiles.d/ehg.conf || status "ERROR could not create /run/ehg"
+      if [ -x /opt/ehg/repo/deploy/update.sh ]; then
+        su -s /bin/sh ehg -c "/opt/ehg/repo/deploy/update.sh --bootstrap" && status "update.sh --bootstrap ran" || status "update.sh --bootstrap reported a problem (see its output)"
+      fi
+      status "first boot finished"
+
+runcmd:
+  - [sh, -c, "/usr/local/sbin/ehg-first-boot.sh >> /var/log/ehg-first-boot.log 2>&1"]
+
+final_message: "EHG first boot done after $UPTIME seconds. Read /opt/ehg/state/first-boot.status"

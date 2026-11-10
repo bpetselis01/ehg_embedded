@@ -1,0 +1,33 @@
+# PURPOSE: Keep the Docker build context (the repository root, see backend/platform.Dockerfile) small and free of anything secret or local. The Dockerfile copies only
+#   backend/, gateway/tracking.py, gateway/packet.py, tools/fhir_export.py, eval/backend_client.py and viewer/triage.*; everything else is dropped before the build starts,
+#   so a key, a decrypted secret or a recording that happens to be on the machine can never end up in an image layer by accident.
+.git
+.venv
+**/__pycache__
+**/*.pyc
+data
+papers
+docs
+tests
+firmware
+ios
+tools/*.sh
+.github
+.env
+**/.env
+**/*.key
+**/*.pem
+**/*.p12
+**/*.crt
+backend/pki
+backend/.env
+deploy/secrets
+deploy/terraform
+deploy/.sops.yaml
+gateway/logs
+gateway/outbox.db*
+eval/results
+.claude
+.serena
+.ua
+.vscode

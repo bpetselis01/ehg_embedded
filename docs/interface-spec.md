@@ -63,7 +63,10 @@ CRC as in §3 (CCITT-FALSE, over type + payload). Malformed, wrong-CRC or wrong-
 | `@HELLO <name> <n_ch> <fs> <record_id>` | CONFIG accepted |
 | `@LVL <frames>` | frames queued on the board, once a second, only after CONFIG. The feeder tops up to `--lead` seconds; 3 s without one = board reset, so the feeder sends CONFIG again |
 | `@SYNC <id> <tick>` | board clock (u32, 32768/s) when ping `id` was parsed |
-| `@ERR <text>` | refused command (e.g. START before CONFIG, CONFIG while running) |
+| `@ERR <text>` | refused command (e.g. START before CONFIG, CONFIG while running; any CONFIG/DATA/FAULT on a board built with a built-in recording: `ERR built-in record mode: rebuild without --record to stream`) |
+
+Built-in mode (`build.sh --record`): the board takes no CONFIG/DATA/FAULT and sends no `@LVL`; it still answers SYNC.
+`feed.py --sync-only --node <name>` sends only SYNC, so built-in runs also get `eval/results/sync_<name>.csv`.
 
 `frame_idx` is set by the feeder: from 0, continuing when the record loops (row = `frame_idx % n_frames`).
 At START the board takes the oldest queued frame as the session's first and then expects consecutive numbers:
@@ -73,10 +76,24 @@ older frames are dropped (`late`), a missing one is skipped (`starved`, frame_id
 
 `{node_id, seq, frame_idx, t_inject, t_inject_host, n_ch, fs_hz, record_id, flags, samples: [[...]], t_gw_rx, t_mqtt_pub}`
 
+Optional `"replayed": true` (added in Unit 3, only while the gateway's outbox is on, which is the default; `--no-outbox` never sets it): the message did not go out the moment the gateway had it (it waited through a broker outage, a restart or the in-flight limit). `t_gw_rx` is the original receive time and `t_mqtt_pub` is stamped when it is actually sent, so the latency of a replayed message is NOT H1 latency (`eval/latency.py --exclude-replayed`). Consumers must treat a missing `replayed` as false.
+
+Gateway status (only with `--gateway-id ID`): retained `ehg/_gw/ID/status`, payload `online` (on connect) or `offline` (the broker's last will, or a clean exit), QoS 1.
+
 ## 5. InfluxDB schema (bucket `ehg`)
 
 - `ehg_raw`: one point per frame. Tags `node_id`, `record_id`. Fields `c0..c{n-1}` (int), `seq`, `frame_idx`. Time = injection time of the frame.
-- `ehg_pkt`: one point per packet. Fields `seq, n_frames, retrans, t_inject_dev, t_inject_host, t_gw_rx, t_mqtt_pub, t_ingest_rx, t_db_ack`.
+- `ehg_pkt`: one point per packet. Fields `seq, n_frames, retrans, replayed, t_inject_dev, t_inject_host, t_gw_rx, t_mqtt_pub, t_ingest_rx, t_db_ack`.
+
+## 5a. PostgreSQL/TimescaleDB schema and the NATS bus (cloud profile; decisions 0007, 0012)
+
+Same data as section 5, different shape. `ehg_raw(time, node, record_id, seq, frame_idx, ch, v)`: one row per frame **and channel**, `v` = the raw integer sample (never scaled), primary key `(node, seq, ch, time)`;
+`time` = `t_inject_host` + i / `fs_hz`. `ehg_pkt(time, node, seq, n_frames, retrans, replayed, t_inject_dev, t_inject_host, t_gw_rx, t_mqtt_pub, t_ingest_rx, t_db_ack)`, key `(node, seq, time)`.
+`ehg_health(time, node, delivery_pct, p95_latency_ms, rx, missing, unrecovered, flatline_channels, saturated_pct, score)`, key `(node, time)` (written by the triage worker, Unit 8). Created by `backend/db/migrations` (revision 0001 plain tables, 0002 triage and registry, 0003 TimescaleDB).
+Writes use `ON CONFLICT DO NOTHING`, so replays are harmless. `eval/backend_client.py --backend timescale` returns exactly the shapes the InfluxDB path returns; `eval/parity.py` checks it.
+
+NATS JetStream stream `EHG` (one stream subject, `EHG.>`, covering the three sub-trees below, because a consumer's filter must lie inside the stream's subjects; file storage, 7 days / 8 GB, one-hour duplicate window): `EHG.PKT.<node>` = the packet JSON (header `Nats-Msg-Id: <node>:<seq>:<t_inject>`), `EHG.GW.<gateway>` = status text,
+`EHG.BAD.<reason>` = messages the bridge could not read (kept as received). Durable pull consumers `ts-writer`, `influx-writer`, later `triage` and `fhir-sync`; 30 s ack wait, at most 5 deliveries.
 
 **Proposed classifier hook:** the classifier reads `ehg_raw` for a `node_id` over a 60 s window with a 30 s step (Flux query in [`eval/backend_client.py:query_frames`](../eval/backend_client.py)), converts to mV with the gain above, runs unchanged, and writes the label to measurement `ehg_label` (tags `node_id`, fields `label`, `score`, `window_start`). A separate subscriber like this is also how report §8.4 describes the hook.
 
@@ -86,6 +103,15 @@ older frames are dropped (`late`), a missing one is skipped (`starved`, frame_id
 with one `component` per channel, each `valueSampledData` = raw counts in `data` ("E" for frames that never arrived),
 `factor` = 1/gain, `origin` = −baseline/gain mV, `interval` = 1000/fs ms. Raw counts stay unchanged (H4).
 The live path (BLE → MQTT → InfluxDB) stays custom. Codes use a local system: no standard EHG code was found.
+
+## 5c. Services and message documents (Units 7 to 12)
+
+- **Wire format copies:** three, all checked against `tests/fixtures/packet_vectors.json` (generated from `gateway/packet.py` by `tools/gen_packet_vectors.py`): `firmware/ehg_node/src/ehg_packet.h`, `gateway/packet.py`, `ios/EHGWire/Sources/EHGWire/Packet.swift`.
+- **MQTT and bus:** [`docs/api/asyncapi.yaml`](api/asyncapi.yaml) (topics, QoS, payload keys, `replayed`, gateway status, `EHG.PKT|GW|BAD` subjects, `Nats-Msg-Id`). Changed by Units 3 and 6.
+- **HTTP APIs:** [`docs/api/openapi-triage.json`](api/openapi-triage.json) (worklist, node detail and trend, alerts and their actions, registry, audit, configuration, `/fhir/*`, `/ui-config.json`, probes) and [`openapi-enroll.json`](api/openapi-enroll.json) (certificate enrolment, revocation, CRL). Both are generated from the code and diffed by `tests/test_api_docs.py`.
+- **Database:** migrations `backend/db/migrations/versions/0001` (time series), `0002` (alerts, append-only audit log, registry of gateways, nodes, subjects and certificates), `0003` (TimescaleDB). Applied revisions are frozen: change by adding a new revision.
+- **FHIR resources written** (by `backend/fhir_sync/worker.py`): `Device` (identifier `urn:thesisb:ehg/node-id|<node>`) and `Observation` (identifier `urn:thesisb:ehg/obs-key|<node>/<subject>/<record>/<chunk>`: the SUBJECT is in the key so that a node handed to another subject can never overwrite the first subject's windows), one per 600-frame chunk, SampledData in raw counts. `Consent`, `AuditEvent` and `Provenance` are NOT written: consent is enforced from the registry and the audit is the hash chain.
+- **Metrics:** `ehg_fleet_packets_60s`, `ehg_fleet_latency_p95_seconds`, `ehg_fleet_nodes_reporting`, `ehg_consumer_pending`, `ehg_triage_alerts`, `ehg_triage_bad_messages_total`, `ehg_triage_dead_letters_total`, `ehg_writer_*`, `ehg_bridge_*`, `ehg_disk_*`, `ehg_backup_*` (see [slo.md](slo.md)).
 
 ## 6. Icelandic → classifier decimation policy (H4 stretch; proposed)
 

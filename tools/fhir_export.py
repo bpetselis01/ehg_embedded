@@ -95,13 +95,14 @@ def main():
     from backend_client import query_frames  # local import: keeps bundle() testable without Influx
     from tools.convert import source_file
 
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--node", required=True)
     ap.add_argument("--since", default="10m")
     ap.add_argument("--db", default="tpehgdb")
     ap.add_argument("-o", "--out")
+    ap.add_argument("--backend", choices=["influx", "timescale"], help="which store to read (default: $EHG_BACKEND or influx)")
     a = ap.parse_args()
-    record_id, frames, start = query_frames(a.node, a.since)
+    record_id, frames, start = query_frames(a.node, a.since, backend=a.backend)
     path = source_file(Path(f"data/converted/{a.db}"), record_id)
     text = json.dumps(bundle(frames, np.load(path), a.node, path.stem, record_id, start), indent=1)
     Path(a.out).write_text(text) if a.out else print(text)

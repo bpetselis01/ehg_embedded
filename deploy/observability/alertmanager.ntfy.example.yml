@@ -1,0 +1,24 @@
+# PURPOSE: The alert routing to use ONCE a notification channel exists. NOT loaded by the stack: deploy/observability/alertmanager.yml stays the startable "null" receiver until you switch.
+# INPUT: a file holding the webhook address (for ntfy: https://ntfy.sh/<a long random topic name>, which is itself a secret: anyone who knows it can read the alerts). The file is NOT in git.
+#   To switch: put the address in /opt/ehg/secrets/alert_webhook_url (mode 600), mount it read-only at /etc/alertmanager/secrets/alert_webhook_url in the alertmanager service, copy this file over alertmanager.yml, restart alertmanager.
+# OUTPUT: pages (severity "page") repeat every 4 h until they resolve; tickets every 24 h. Messages contain no node ids, hostnames or addresses (the alert annotations are fixed text; see tests/test_observability_rules.py).
+# HOW: A webhook receiver with url_file, so the address never appears in a config file in git. Alertmanager's webhook body is its own JSON; whether ntfy shows it readably needs ntfy's webhook-template feature or a small relay: UNVERIFIED, check ntfy's documentation before relying on it.
+#   Alertmanager is on the internal Docker network with no route out, so for this to work it must be added to the "edge" network deliberately (see the comment in docker-compose.cloud.yml).
+# ROLE IN THESIS: Decision 0016's alert path. The out-of-band "VM down" path is the OCI Monitoring alarm (deploy/terraform/modules/monitoring), not this.
+# BEFORE -> AFTER: Before: alerts are accepted and dropped. After (when switched): they reach a phone.
+route:
+  receiver: ehg-webhook
+  group_by: [alertname]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 24h
+  routes:
+    - matchers: [severity="page"]
+      receiver: ehg-webhook
+      repeat_interval: 4h
+
+receivers:
+  - name: ehg-webhook
+    webhook_configs:
+      - url_file: /etc/alertmanager/secrets/alert_webhook_url
+        send_resolved: true

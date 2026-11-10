@@ -1,0 +1,39 @@
+# 0009. Durable gateway outbox (store and forward)
+
+**Date:** 2026-11-03
+
+## Status
+
+Accepted (Checkpoint 1, 2026-11-03). Python outbox implemented by Unit 3 on 2026-11-03 and **switched on by default by Byron at Checkpoint 2** (same day). `--no-outbox` restores the old path. Swift outbox is Unit 15, not built.
+
+## Context
+
+The gateway publishes MQTT QoS 1 through an in-memory, unbounded paho queue. If the process dies or the broker is unreachable for a long time,
+queued packets are lost, and the board's 256-packet history ([decision 0004](0004-end-to-end-loss-recovery.md)) only covers about two minutes.
+Over a cellular link, outages are expected, not exceptional.
+
+## Decision
+
+- `gateway/outbox.py` keeps pending messages in SQLite (WAL, `synchronous=NORMAL`, file mode 0600). `publish()` writes the row **first**, then
+  publishes if connected. A row is deleted only when the PUBACK arrives. Oldest first, at most 100 in flight, backoff 1 s to 60 s with jitter.
+- Replayed messages keep their original receive time, get a fresh publish time and carry `"replayed": true`. Ingest stores the flag;
+  `eval/latency.py` can exclude replayed messages. Duplicate delivery is already harmless because writes are keyed on (node, seq).
+- A disk cap (`--outbox-max-mb`, default 512) drops the oldest rows loudly and counts them, so a loss stays identifiable.
+- The outbox is **on by default** at `gateway/outbox.db` (Byron's decision at Checkpoint 2; the prompt had it off). `--no-outbox` restores the in-memory path; `--outbox PATH` picks another file.
+  One process per file, enforced with a lock file, because two processes would each send the other's rows. Because `connect_async` never raises, an unreachable broker is reported by an `on_connect_fail` message instead of being retried in silence.
+- What "replayed" means (as built): the message was not sent in the same `add()` call that stored it, or it is being sent again after a disconnect or restart. `attempts` counts re-sends only, so a live message that is acknowledged leaves the row at 0 (one write less on the hot path).
+- Backoff is paho's `reconnect_delay_set(1, 60)`: it doubles from 1 s to 60 s but offers **no jitter** (the prompt asked for jitter; paho 2.1 has no option for it). A single gateway has no thundering-herd problem; revisit for a fleet. With `--outbox` the first connection uses `connect_async`, so a broker that is down at start-up does not stop the gateway.
+- `--gateway-id ID` (independent of the outbox) publishes retained `online`/`offline` on `ehg/_gw/ID/status` with a last will; under TLS the id must equal the certificate CN or the ACL refuses it.
+- The BLE callback never blocks on the outbox. A retained status topic `ehg/_gw/<gateway_id>/status` with a Last Will marks the gateway online or offline.
+- The iOS gateway gets the same behaviour: SQLite in a file with Data Protection class `completeUntilFirstUserAuthentication`.
+
+## Consequences
+
+- The outbox is plain SQLite, protected by file mode and disk encryption (FileVault, iOS Data Protection). SQLCipher was rejected for awkward
+  macOS wheels; this is a documented gap against encrypted-at-rest storage.
+- Disk writes sit on the hot path, so Unit 3 measures the overhead (a benchmark recorded in `docs/progress.md`, not a CI assertion).
+- **Cost, measured:** gateway receive to publish, 400 packets at 20 per second against a plain local broker: median 124 us without the outbox, about 630 us with it (p95 about 150 us vs about 2 ms; worst about 1.3 ms vs about 5 ms). Under 1 % of the H1 median (259 ms) but not zero, and the validated H1 numbers were measured without it. H1 with the outbox on has not been re-measured.
+- Left-over rows from an earlier (even simulated) run are replayed at the next start, marked `replayed`, with their old timestamps.
+- An outbox protects against broker outages and restarts, not against a long outage while the iOS app is not running.
+
+**Sources:** [hardening prompt](../claude-code-prompt-thesis-b-hardening.md) §2 (row on store and forward), §9 Unit 3, Unit 15b; [`gateway/gateway.py`](../../gateway/gateway.py); [decision 0004](0004-end-to-end-loss-recovery.md).

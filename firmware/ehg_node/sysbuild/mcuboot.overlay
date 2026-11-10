@@ -1,6 +1,14 @@
 /* MCUboot (the bootloader, sysbuild.conf) is a separate program with its own devicetree: give its
  * boot message the same serial speed as the app (boards/nrf52840dk_nrf52840.overlay), so it reads
  * as text instead of junk in tools/feed.py. */
+/* A user overlay REPLACES mcuboot's own boot/zephyr/app.overlay, which is what puts the bootloader in the boot partition (0x0..0xC000).
+ * Without this line it was linked into slot 0 (0xC000), where it overwrote the app slot and never ran (found 2026-11-04, Unit 13). */
+/ {
+	chosen {
+		zephyr,code-partition = &boot_partition;
+	};
+};
+
 &uart0 {
 	current-speed = <460800>;
 	hw-flow-control;

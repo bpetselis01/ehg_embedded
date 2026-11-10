@@ -1,0 +1,19 @@
+# PURPOSE: Tells gitleaks about the two strings in this repository that look like secrets and are not.
+# 1. the documented DEV-MODE tokens (dev-viewer, dev-operator, dev-admin): fixed, passwordless, loopback-only, shown in docs on purpose (backend/jwtauth.py refuses them off loopback);
+# 2. the fake access key in tests/test_deploy_assets.py, which exists to prove that the repository's own secret scan catches that pattern.
+# Nothing else is allowed: a real key anywhere else still fails the scan.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "documented dev-mode bearer tokens"
+regexTarget = "match"
+regexes = ['''Bearer dev-(viewer|operator|admin)\b''']
+
+[[allowlists]]
+description = "fake key used as a test sample for the repository's own secret scanner"
+targetRules = ["aws-access-token"]
+condition = "AND"   # BOTH must hold: this exact line AND this file. Without it gitleaks ORs the two, which skipped every finding in the file and that key everywhere (checked 2026-11-04).
+paths = ['''(^|/)tests/test_deploy_assets\.py$''']
+regexTarget = "line"   # "secret"/"match" did NOT narrow it in gitleaks 8.30.1: a different key in the same file was still skipped
+regexes = ['''^\s*\("access_key = AKIAABCDEFGHIJKLMNOP", "AWS-style access key"\),\s*$''']

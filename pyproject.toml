@@ -15,12 +15,23 @@ dependencies = [
     "influxdb-client>=1.46",
     "matplotlib>=3.9",
     "websockets>=13",
+    "nats-py>=2.16.0",
+    "psycopg[binary]>=3.3.7",
+    "alembic>=1.20.1",
+    "prometheus-client>=0.26.0",
+    "fastapi>=0.162.0",
+    "httpx>=0.28.1",
+    "pyjwt[crypto]>=2.15.1",
+    "uvicorn>=0.54.0",
 ]
 
 [dependency-groups]
 dev = [
+    "fhir-resources==8.3.0",
     "pyserial>=3.5",
     "pytest>=8",
+    "python-hcl2>=8.1.4",
+    "pyyaml>=6.0.3",
 ]
 
 [tool.pytest.ini_options]

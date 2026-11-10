@@ -16,9 +16,44 @@ gateway/logs/
 
 # local AI tooling
 CLAUDE.md
+Claude outputs/
 .claude/
 .serena/
 .ua/
 .vscode/
 .superpowers/
 docs/superpowers/
+firmware/ehg_node/src/replay_data.h
+
+# local symlink to the XIAO blinky test project outside this repo
+xiao_blinky
+
+# TLS keys and certificates (tools/pki.sh writes them to backend/pki/): never commit
+backend/pki/
+*.key
+*.pem
+*.p12
+
+# gateway outbox (queued packets on disk)
+gateway/outbox*.db*
+
+# deployment secrets and Terraform state: never commit (only *.sops.yaml encrypted files and *.example files are tracked)
+deploy/**/.env*
+deploy/**/*.tfstate*
+deploy/**/terraform.tfvars
+deploy/**/.terraform/
+deploy/**/secrets/*
+!deploy/**/secrets/*.sops.yaml
+!deploy/**/secrets/*.example.yaml
+!deploy/**/secrets/README.md
+**/age.key
+*.agekey
+deploy/**/*.tfplan
+
+# SwiftPM build output
+ios/**/.build/
+ios/**/.swiftpm/
+
+# iPhone gateway app: the Xcode project is generated from project.yml (xcodegen); the CA chain is copied in before a device build
+ios/EHGGateway/EHGGateway.xcodeproj/
+ios/EHGGateway/Sources/ca-chain.crt
