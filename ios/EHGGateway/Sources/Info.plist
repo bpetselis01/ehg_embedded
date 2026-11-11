@@ -20,8 +20,12 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Receives the EHG node's measurements over Bluetooth and forwards them to the cloud. Research prototype, not for clinical use.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Connects to the EHG broker on your local network during testing.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -31,6 +35,8 @@
 	<array>
 		<string>bluetooth-central</string>
 	</array>
+	<key>UIFileSharingEnabled</key>
+	<true/>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

@@ -52,4 +52,21 @@ config EHG_REQUIRE_PAIRING
 	  passkey the board prints on the UART log). Set by the security.conf overlay
 	  (firmware/build.sh --secure), which also turns on the Bluetooth security options this needs.
 
+config EHG_PAIRING_BUTTON
+	bool "Pair only while Button 2 has been pressed (Just Works), instead of a passkey from the UART log"
+	depends on EHG_REQUIRE_PAIRING
+	default n
+	help
+	  y = no passkey. The link must be ENCRYPTED (LE Secure Connections, Just Works), and the board accepts a
+	  NEW pairing only for CONFIG_EHG_PAIRING_WINDOW_S seconds after Button 2 is pressed (LED3 lit); it then also
+	  asks a connected central to pair. A central that is already bonded reconnects without the button.
+	  Protects against passive listening and against anyone who is not at the board; it does NOT stop an active
+	  man-in-the-middle during the window (Just Works has no code to compare). Set by security-button.conf
+	  (firmware/build.sh --pairing-button).
+
+config EHG_PAIRING_WINDOW_S
+	int "Seconds a Button 2 press keeps pairing open"
+	depends on EHG_PAIRING_BUTTON
+	default 60
+
 endmenu

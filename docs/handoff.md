@@ -1,5 +1,7 @@
 # Handoff pin (written 2026-11-04, after the non-cloud sweep)
 
+**Note, 11 Nov 2026.** This handoff predates the custom-code reduction. The triage service, enrolment API, bridge, TimescaleDB writer, NATS, the MQTT exporter and `deploy/crl-sync.sh` it mentions no longer exist ([reuse ledger](licences.md#reuse-ledger)).
+
 ## Resume from
 - Unit: Unit 17 is DONE. Everything Byron asked for ("complete all the units that do not require the cloud first", 2026-11-03) is committed on `feat/enterprise-topology`: Units 6, 7, 8, 9, 10, 11, 11b (the compose file completed as far as possible), 12, 14, 15 (the phone-free part only) and 17.
   The units still open all need Byron or the cloud: Unit 13 is DONE on the DK as of 2026-11-04 (see progress.md; board left on the SECURE build, bonded to this Mac; end-to-end 100 % / H1 266 / 481 ms measured with pairing), Unit 15's app (needs an Apple ID and the iPhone), Unit 16 (needs the Oracle account and the VM).

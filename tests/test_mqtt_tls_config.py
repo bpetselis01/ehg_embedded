@@ -92,7 +92,8 @@ def test_tls_conf_requires_tls13_and_client_certs():
 
 def test_acl_is_least_privilege():
     users = acl_stanzas()
-    assert set(users) == {"ehg-gw-01", *READERS}
+    assert set(users) == {"ehg-gw-01", "ehg-ios-01", *READERS}
+    assert set(users["ehg-ios-01"]["write"]) == {"ehg/EHG-93C0/pkt", "ehg/_gw/ehg-ios-01/status"}, "the phone is pinned to its one board"
     for user, grants in users.items():
         for topic in grants["read"] + grants["write"]:
             assert "#" not in topic, f"{user}: wildcard '#' grant {topic}"

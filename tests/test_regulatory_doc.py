@@ -10,7 +10,7 @@ PURPOSE = "Research prototype for measuring wireless telemetry performance. Not 
 
 def test_every_test_file_named_exists():
     names = set(re.findall(r"`(test_[a-z0-9_]+)`", DOC))
-    assert len(names) >= 25
+    assert len(names) >= 20
     for n in names:
         assert (ROOT / "tests" / f"{n}.py").exists(), f"docs/regulatory.md names {n}, which does not exist"
 

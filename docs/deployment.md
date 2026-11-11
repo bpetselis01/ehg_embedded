@@ -3,7 +3,7 @@
 **You run every step; I never touch the cloud or ask for credentials.** This is written from the code in [`deploy/`](../deploy/README.md) and from facts checked on 2026-11-03.
 Nothing in it has been run against a real Oracle account, so expect to correct it: the log at the end is where you note what you actually saw, and the checklist ([`deploy/runbook/checklist.md`](../deploy/runbook/checklist.md)) is the tick-box version.
 
-**Purpose of the unit:** a reachable VM, with the Mac gateway publishing over TLS 1.3 and a client certificate **from the internet** (Checkpoint 3). The data platform (NATS bridge, TimescaleDB, parity proof) goes on it only after you confirm that.
+**Purpose of the unit:** a reachable VM, with the Mac gateway publishing over TLS 1.3 and a client certificate **from the internet** (Checkpoint 3). Since 11 Nov 2026 the stack has no step from the broker to the database: Telegraf is the standard tool for it and is not configured here.
 
 ## Decisions already made (2026-11-03)
 
@@ -59,7 +59,7 @@ Sign in at duckdns.org (it offered Google, GitHub, Twitter, Persona and Reddit o
 age-keygen -o ~/ehg-age.key && chmod 600 ~/ehg-age.key      # prints "Public key: age1..."; back this file up OFF this computer
 ```
 
-Put the public key in [`deploy/.sops.yaml`](../deploy/.sops.yaml), then follow [`deploy/secrets/README.md`](../deploy/secrets/README.md) to make `deploy/secrets/secrets.sops.yaml` (random values: `openssl rand -hex 24`: hex, not base64, because the passwords go into URLs and connection strings). The list now also has `KEYCLOAK_ADMIN_PASSWORD` and the three client secrets `TRIAGE_API_CLIENT_SECRET`, `ENROLL_API_CLIENT_SECRET`, `FHIR_SYNC_CLIENT_SECRET` (see `deploy/secrets/secrets.example.yaml`).
+Put the public key in [`deploy/.sops.yaml`](../deploy/.sops.yaml), then follow [`deploy/secrets/README.md`](../deploy/secrets/README.md) to make `deploy/secrets/secrets.sops.yaml` (random values: `openssl rand -hex 24`: hex, not base64, because the passwords go into URLs and connection strings). The list now also has `KEYCLOAK_ADMIN_PASSWORD` and the client secret `FHIR_SYNC_CLIENT_SECRET` (see `deploy/secrets/secrets.example.yaml`).
 Commit the **encrypted** file and `.sops.yaml` only. The encrypt command passes the recipient with `--age`; it is untested because sops was not installed here.
 
 ### 6. SSH keys
@@ -135,15 +135,15 @@ On the Mac (the signing keys never go to the VM):
 tools/pki.sh init --host yourname.duckdns.org --out ~/ehg-pki
 ```
 
-Move `~/ehg-pki/root/root.key` to offline storage now. Copy **only** these nine files to the VM, into `/opt/ehg/pki/` (create it owned by `ehg`, mode 700): `ca-chain.crt`, `broker.crt`, `broker.key`, `ca.crl`, and the bridge's own identity `clients/ehg-bridge.crt` and `clients/ehg-bridge.key` (copy them to `/opt/ehg/pki/ehg-bridge.crt` and `.key`; the MQTT exporter's `clients/ehg-exporter.crt` and `.key` likewise; the bridge and exporter containers run as UID 10001: `sudo deploy/fix-key-permissions.sh` (below) gives it, and only it, read access). Never copy `intermediate/` or `root/`.
-The containers run as fixed non-root users (Mosquitto uid/gid 1883, the Python services uid 10001, step-ca uid 1000), and on Linux a bind-mounted key keeps its host owner and mode, so a key that is 600 and owned by `ehg` is UNREADABLE to them (this never shows on a Mac). After copying the certificates, and whenever you replace one, run `sudo deploy/fix-key-permissions.sh`: it makes `broker.key` group-readable for gid 1883, `ehg-bridge.key` and the enrolment key for gid 10001, hands the step-ca folder to uid 1000, and prints one line per file (**untested on a VM**; the logic is tested with recorders in `tests/test_fix_key_permissions.py`).
-Cloud-init also installs a cron job (`/etc/cron.d/ehg-crl-sync`, every 5 minutes, user `ehg`) that runs `deploy/crl-sync.sh` to bring revocations to the broker. **Until you have made the CA (`deploy/step-ca/init-offline.sh`) and turned on the `enrol` profile it will fail every time** ("could not fetch the revocation list" in the system log: `journalctl -t ehg-crl-sync`); that is expected and harmless, the broker simply keeps the CRL you copied here. The job needs `/opt/ehg/pki/ca.crl` to be writable by `ehg` (the directory is owned by `ehg`) and the broker container to be named `ehg-mosquitto-1` (check with `docker ps`).
+Move `~/ehg-pki/root/root.key` to offline storage now. Copy **only** these four files to the VM, into `/opt/ehg/pki/` (create it owned by `ehg`, mode 700): `ca-chain.crt`, `broker.crt`, `broker.key` and `ca.crl`. Never copy `intermediate/` or `root/`.
+The containers run as fixed non-root users (Mosquitto uid/gid 1883, the Python services uid 10001, step-ca uid 1000), and on Linux a bind-mounted key keeps its host owner and mode, so a key that is 600 and owned by `ehg` is UNREADABLE to them (this never shows on a Mac). After copying the certificates, and whenever you replace one, run `sudo deploy/fix-key-permissions.sh`: it makes `broker.key` group-readable for gid 1883, hands the step-ca folder to uid 1000, and prints one line per file (**untested on a VM**; the logic is tested with recorders in `tests/test_fix_key_permissions.py`).
+No job refreshes the revocation list since 11 Nov 2026: after a revocation, copy the new `ca.crl` to `/opt/ehg/pki/` by hand and send Mosquitto SIGHUP.
 Your gateway certificate stays on the Mac: `~/ehg-pki/clients/ehg-gw-01.{crt,key}` (valid 30 days; renewal is manual until Unit 7).
 
 ### 13. Start the edge subset (Caddy and Mosquitto only)
 
-Since Unit 11b the compose file also holds the Python services (`migrate`, `bridge`, `ts-writer`, `triage`), Keycloak and HAPI. **They have never been started anywhere**, so this runbook still brings up only the edge first; start the rest only after step 14 works, one service at a time
-(`update.sh --services "postgres nats"`, then `"migrate ts-writer"`, `bridge`, `triage`, and last `keycloak hapi`, which together need about 3.7 GB), and expect first-start fixes. Optional: the `enrol` profile (step-ca + enrolment API: run `deploy/step-ca/init-offline.sh ~/ehg-ca` on your computer, copy `~/ehg-ca/vm` to `/opt/ehg/step-ca`, run `sudo deploy/fix-key-permissions.sh` (it does the `chown` for uid 1000 AND the one file the enrolment API must read, in the right order), append `~/ehg-ca/env.txt` to `/opt/ehg/etc/site.env`, keep `~/ehg-ca/offline` OFFLINE; the broker must then trust `intermediate_ca.crt` + `root_ca.crt` for gateway certificates).
+The compose file also holds `migrate`, `fhir-sync`, Keycloak and HAPI. **They have never been started anywhere**, so this runbook still brings up only the edge first; start the rest only after step 14 works, one service at a time
+(`update.sh --services postgres`, then `migrate`, and last `keycloak hapi`, which together need about 3.7 GB), and expect first-start fixes. Optional: the `enrol` profile (step-ca only: run `deploy/step-ca/init-offline.sh ~/ehg-ca` on your computer, copy `~/ehg-ca/vm` to `/opt/ehg/step-ca`, run `sudo deploy/fix-key-permissions.sh`, append `~/ehg-ca/env.txt` to `/opt/ehg/etc/site.env`, keep `~/ehg-ca/offline` OFFLINE; certificates are then issued with the `step` CLI, and the broker must trust `intermediate_ca.crt` + `root_ca.crt`).
 
 ```sh
 sudo -H -u ehg /opt/ehg/repo/deploy/update.sh --bootstrap --services "caddy mosquitto"

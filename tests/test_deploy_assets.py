@@ -26,11 +26,10 @@ INTEGRATION = os.environ.get("EHG_INTEGRATION") == "1"
 # Services that arrive with later units (their config does not exist yet). Their memory is reserved NOW so the finished stack is known to fit (MiB).
 RESERVED_MIB: dict[str, int] = {}  # every planned service is in the compose file now; kept so a future unit can reserve memory before its config exists
 BUDGET_MIB = int(9.5 * 1024)  # the whole-stack ceiling: ~9.5 GB of the 12 GB, leaving the OS, Docker and headroom
-EXPECTED_SERVICES = {"caddy", "mosquitto", "nats", "postgres", "prometheus", "alertmanager", "loki", "grafana", "alloy", "node-exporter", "cadvisor", "postgres-exporter", "nats-exporter", "mosquitto-exporter", "fhir-sync",
-                     "migrate", "bridge", "ts-writer", "triage", "keycloak", "hapi"}
+EXPECTED_SERVICES = {"caddy", "mosquitto", "postgres", "prometheus", "alertmanager", "loki", "grafana", "alloy", "node-exporter", "cadvisor", "postgres-exporter", "fhir-sync", "migrate", "keycloak", "hapi"}
 SECRET_ENV = {"EHG_DOMAIN": "x.example", "POSTGRES_PASSWORD": "x", "EHG_DB_PASSWORD": "x", "HAPI_DB_PASSWORD": "x", "KEYCLOAK_DB_PASSWORD": "x",
-              "EXPORTER_DB_PASSWORD": "x", "TRIAGE_DB_PASSWORD": "x", "ENROLL_DB_PASSWORD": "x", "FHIR_DB_PASSWORD": "x", "GRAFANA_ADMIN_PASSWORD": "x", "KEYCLOAK_ADMIN_PASSWORD": "x",
-              "TRIAGE_API_CLIENT_SECRET": "x", "ENROLL_API_CLIENT_SECRET": "x", "FHIR_SYNC_CLIENT_SECRET": "x"}
+              "EXPORTER_DB_PASSWORD": "x", "FHIR_DB_PASSWORD": "x", "GRAFANA_ADMIN_PASSWORD": "x", "KEYCLOAK_ADMIN_PASSWORD": "x",
+              "FHIR_SYNC_CLIENT_SECRET": "x"}
 
 
 def deploy_files() -> list[Path]:
@@ -289,12 +288,12 @@ def mib(value: str) -> int:
     return int(m.group(1)) * (1024 if m.group(2) == "g" else 1)
 
 
-ENROL_PROFILE = {"step-ca", "enroll"}  # started only with COMPOSE_PROFILES=enrol, after deploy/step-ca/init-offline.sh
+ENROL_PROFILE = {"step-ca"}  # started only with COMPOSE_PROFILES=enrol, after deploy/step-ca/init-offline.sh
 
 
 def test_compose_has_exactly_the_planned_services():
     assert set(services()) == EXPECTED_SERVICES | ENROL_PROFILE
-    assert {n for n, s in services().items() if s.get("profiles")} == ENROL_PROFILE, "only the CA and the enrolment API are optional"
+    assert {n for n, s in services().items() if s.get("profiles")} == ENROL_PROFILE, "only the CA is optional"
     assert all(s["profiles"] == ["enrol"] for n, s in services().items() if n in ENROL_PROFILE)
 
 
@@ -365,10 +364,7 @@ def test_memory_budget_including_what_later_units_will_add():
     limits = {name: mib(svc["mem_limit"]) for name, svc in services().items()}
     defined, reserved = sum(limits.values()), sum(RESERVED_MIB.values())
     assert defined + reserved <= BUDGET_MIB, f"{defined} MiB defined + {reserved} MiB reserved = {defined + reserved} MiB; the ceiling is {BUDGET_MIB} MiB"
-    assert limits["postgres"] == 2048 and limits["nats"] == 400
-    nats = (DEPLOY / "nats/nats.conf").read_text()
-    assert "max_memory_store: 256MB" in nats and "max_file_store:" in nats, "NATS defaults to 75% of system RAM unless capped"
-    assert "GOMEMLIMIT: 384MiB" in COMPOSE.read_text()
+    assert limits["postgres"] == 2048
     assert "-c\", \"shared_buffers=1GB\"" in COMPOSE.read_text()
 
 
@@ -477,7 +473,7 @@ def test_sops_config_holds_a_public_key_or_a_placeholder_only():
 
 # ---------------------------------------------------------------- the Python services, Keycloak and HAPI (Unit 11b)
 
-PYTHON_SERVICES = {"migrate", "bridge", "ts-writer", "triage"}
+PYTHON_SERVICES = {"migrate", "fhir-sync"}
 
 
 def test_python_services_share_one_built_image_with_no_privileges_and_a_read_only_root():
@@ -492,38 +488,20 @@ def test_python_services_share_one_built_image_with_no_privileges_and_a_read_onl
 def test_migrations_run_once_and_the_services_that_need_the_schema_wait_for_them():
     svcs = services()
     assert svcs["migrate"]["restart"] == "no" and svcs["migrate"]["command"][-2:] == ["upgrade", "head"]
-    for name in ("ts-writer", "triage"):
-        assert svcs[name]["depends_on"]["migrate"]["condition"] == "service_completed_successfully", name
-    for name in ("bridge", "ts-writer", "triage"):
-        assert svcs[name]["depends_on"]["nats"]["condition"] == "service_healthy", name
+    assert svcs["fhir-sync"]["depends_on"]["migrate"]["condition"] == "service_completed_successfully"
 
 
 def test_each_service_gets_only_its_own_database_role_and_passwords_come_from_the_secrets():
     svcs = services()
-    assert "user=ehg " in svcs["ts-writer"]["environment"]["EHG_DB_DSN"] and "user=ehg_triage " in svcs["triage"]["environment"]["EHG_TRIAGE_DSN"]
-    assert "${TRIAGE_DB_PASSWORD:?" in svcs["triage"]["environment"]["EHG_TRIAGE_DSN"] and "${EHG_DB_PASSWORD:?" in svcs["ts-writer"]["environment"]["EHG_DB_DSN"]
+    assert "user=ehg_fhir " in svcs["fhir-sync"]["environment"]["EHG_DB_DSN"] and "${FHIR_DB_PASSWORD:?" in svcs["fhir-sync"]["environment"]["EHG_DB_DSN"]
     assert svcs["keycloak"]["environment"]["KC_DB_USERNAME"] == "keycloak" and "${KEYCLOAK_DB_PASSWORD:?" in svcs["keycloak"]["environment"]["KC_DB_PASSWORD"]
     assert "${HAPI_DB_PASSWORD:?" in svcs["hapi"]["environment"]["HAPI_DB_PASSWORD"]
-
-
-def test_the_triage_service_runs_with_real_sign_in_never_dev_mode_and_reaches_keycloak_privately():
-    env = services()["triage"]["environment"]
-    assert env["AUTH_MODE"] == "oidc" and env["OIDC_AUDIENCE"] == "triage-api"
-    assert env["OIDC_JWKS_URL"].startswith("http://keycloak:8080/auth/realms/ehg/") and env["OIDC_ISSUER"].endswith("/auth/realms/ehg")
-    assert env["FHIR_BASE_URL"] == "http://hapi:8080/fhir"
-    assert "dev" not in COMPOSE.read_text().lower().replace("device", "").replace("develop", "").replace("deploy", "").split("auth_mode")[1][:12]
-
-
-def test_the_bridge_mounts_only_its_own_certificate_files():
-    mounts = services()["bridge"]["volumes"]
-    assert sorted(m.split(":")[1].rsplit("/", 1)[-1] for m in mounts) == ["ca-chain.crt", "ehg-bridge.crt", "ehg-bridge.key"]
-    assert not any("ehg-ingest" in m or "broker.key" in m or m.rstrip("/").endswith("/pki") for m in mounts)
 
 
 def test_every_placeholder_in_the_realm_file_is_supplied_to_keycloak():
     realm = (DEPLOY / "keycloak/realm-ehg.json").read_text()
     needed = set(re.findall(r"\$\{([A-Z_]+)\}", realm))
-    assert {"EHG_DOMAIN", "TRIAGE_API_CLIENT_SECRET", "ENROLL_API_CLIENT_SECRET", "FHIR_SYNC_CLIENT_SECRET"} <= needed
+    assert needed == {"FHIR_SYNC_CLIENT_SECRET"}
     env = services()["keycloak"]["environment"]
     assert needed <= set(env), f"not passed to Keycloak: {needed - set(env)}"
     assert "realm-ehg.json:/opt/keycloak/data/import/realm-ehg.json:ro" in " ".join(services()["keycloak"]["volumes"])
@@ -557,11 +535,10 @@ def test_update_builds_the_local_image_and_accepts_an_exited_one_shot_job_but_no
     assert sorted(out.stdout.split()) == ["crashed", "made", "sick", "starting"]
 
 
-def test_the_broker_gets_revocations_through_a_cron_job_that_runs_as_the_service_user():
-    text = CLOUD_INIT.read_text()
-    assert re.search(r"^\s+\*/5 \* \* \* \* ehg /opt/ehg/repo/deploy/crl-sync\.sh", text, re.M), "cron.d entries need a user column"
-    assert (DEPLOY / "crl-sync.sh").exists() and os.access(DEPLOY / "crl-sync.sh", os.X_OK)
-    assert "-v ca.crl" not in COMPOSE.read_text() and "/ca.crl:/mosquitto/pki/ca.crl:ro" in COMPOSE.read_text(), "the script writes INTO this single bind-mounted file"
+def test_the_broker_reads_the_revocation_list_from_one_bind_mounted_file_and_no_job_refreshes_it():
+    """The cron job that fetched the list from the enrolment API went with that service (2026-11-11): an administrator replaces the file by hand (`step ca crl`)."""
+    assert "crl-sync" not in CLOUD_INIT.read_text() and not (DEPLOY / "crl-sync.sh").exists()
+    assert "/ca.crl:/mosquitto/pki/ca.crl:ro" in COMPOSE.read_text()
 
 
 def test_the_database_init_script_creates_the_timescaledb_extension_as_superuser_for_the_migrations():

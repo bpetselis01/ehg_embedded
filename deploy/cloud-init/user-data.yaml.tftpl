@@ -106,11 +106,6 @@ write_files:
     content: |
       # the decrypted secrets live only here, in memory (tmpfs); /run is root-owned, so the service user's directory is made at every boot
       d /run/ehg 0700 ehg ehg -
-  - path: /etc/cron.d/ehg-crl-sync
-    permissions: "0644"
-    content: |
-      # every 5 minutes: fetch the revocation list from the enrolment API, verify it and tell the broker (deploy/crl-sync.sh; failures go to the system log)
-      */5 * * * * ehg /opt/ehg/repo/deploy/crl-sync.sh >/dev/null 2>&1
   - path: /opt/ehg/.gitconfig
     permissions: "0644"
     content: |

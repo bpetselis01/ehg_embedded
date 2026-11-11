@@ -1,5 +1,7 @@
 # 0011. Triage service ranks pipeline and signal health, not clinical state
 
+**Superseded 11 Nov 2026.** The triage service was removed; Grafana alerting, Prometheus rules and Alertmanager cover this. See the [reuse ledger](../licences.md#reuse-ledger). The record below is kept as written.
+
 **Date:** 2026-11-03
 
 ## Status

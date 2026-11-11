@@ -3,16 +3,16 @@
 # USAGE: deploy/step-ca/init-offline.sh OUTDIR        (OUTDIR must not exist; e.g. ~/ehg-ca)
 # OUTPUT (all under OUTDIR; nothing is written inside the repository):
 #   vm/        copy this folder to the VM as /opt/ehg/step-ca, then run `sudo deploy/fix-key-permissions.sh` on the VM (uid 1000 owns it, except the enrolment key). It holds the config, the root CERTIFICATE, the intermediate certificate and
-#              key (folder keys/), the password file of the intermediate key, and enroll/provisioner.pem (the key the enrolment API signs one-time tokens with, mode 640) and enroll/root_ca.crt.
+#              key (folder keys/), the password file of the intermediate key, and enroll/provisioner.pem (the key that signs one-time tokens for `step ca certificate`, mode 640) and enroll/root_ca.crt.
 #   offline/   the ROOT KEY (root_ca_key, encrypted) and its password: keep OFFLINE (password manager / encrypted disk image). Not needed again until the intermediate must be replaced.
-#   env.txt    one line to add to /opt/ehg/etc/site.env on the VM: EHG_STEPCA_ROOT_FP=<root fingerprint>   (plus COMPOSE_PROFILES=enrol to start the CA and the enrolment API)
+#   env.txt    one line to add to /opt/ehg/etc/site.env on the VM: EHG_STEPCA_ROOT_FP=<root fingerprint>   (plus COMPOSE_PROFILES=enrol to start the CA)
 #   The broker's trust chain for gateway certificates is vm/certs/intermediate_ca.crt followed by vm/certs/root_ca.crt: use it as /opt/ehg/pki/ca-chain.crt (with the broker's own certificate
 #   issued by the same CA or kept as a separate trust anchor: see docs/deployment.md).
 # HOW: TWO passwords: the root key keeps the first (offline/ca-password.txt), the intermediate key is re-encrypted under a second one that is the only one on the VM (vm/keys/password), so a stolen VM
 #   does not unlock the root key file even if that file leaked. The init provisioner (which the CA's own password could unlock) is REMOVED again, leaving only ehg-enroll. No remote management: the provisioner is written INTO ca.json (a file you can read and back up), not into a database that would also have to be copied.
 #   Runs smallstep/step-ca (pinned) in a throwaway container with a random password, adds the JWK provisioner "ehg-enroll" (leaf template deploy/step-ca/templates/ehg-gateway.tpl, 1 h to 7 days, default 7 days; renewal by the old certificate and the SSH CA switched OFF: a certificate is renewed only by enrolling again through the API, where the registry is checked),
 #   enables the CRL with a 24 h cache (a CRL that expires locks EVERY client out), copies the files out and removes the container. The two passwords are random and only in files under OUTDIR (mode 600).
-# STATUS: the same steps as deploy/step-ca/local-check.sh, which signs, revokes and verifies the CRL against a CA made this way (real step-ca 0.30.2). The compose profile "enrol" using the result was started locally once.
+# STATUS: the same steps were run against real step-ca 0.30.2 on 2026-11-04 by a check script (sign, revoke, verify the CRL) that was removed on 2026-11-11 with the enrolment service. The compose profile "enrol" using the result was started locally once.
 set -eu
 [ $# -eq 1 ] || { echo "usage: $0 OUTDIR"; exit 2; }
 OUT="$1"

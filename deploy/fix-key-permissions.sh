@@ -2,10 +2,10 @@
 # PURPOSE: Gives every container user read access to exactly the key files it needs, and nobody else. Run it once with sudo after copying the certificates (and the CA bundle) to the VM, and again after replacing any of them.
 # USAGE: sudo deploy/fix-key-permissions.sh [--pki /opt/ehg/pki] [--step-ca /opt/ehg/step-ca] [--owner ehg]
 # WHY: bind-mounted files keep their host owner and mode on Linux (on a Mac they look permissive, so this never showed there). The containers run as fixed non-root users:
-#   Mosquitto uid/gid 1883 (reads broker.key), the Python services uid 10001 (read ehg-bridge.key and the enrolment key), step-ca uid 1000 (owns its folders). A key that is 600 and owned by `ehg` is unreadable to them.
+#   Mosquitto uid/gid 1883 (reads broker.key), the Python image uid 10001 (ehg-bridge.key and the provisioner key are set for it; since 2026-11-11 no service in the stack reads either, see docs/licences.md), step-ca uid 1000 (owns its folders). A key that is 600 and owned by `ehg` is unreadable to them.
 #   Certificates are public and stay world-readable; every PRIVATE key is group-readable by its one consumer only (640, group = that container's gid), never world-readable.
-# WHAT IT SETS: pki/broker.key ehg:1883 640 | pki/ehg-bridge.key and ehg-exporter.key ehg:10001 640 | pki/*.crt, ca.crl ehg:ehg 644 (ca.crl is rewritten by deploy/crl-sync.sh as ehg) |
-#   step-ca/ recursively 1000:1000 (database, intermediate key, password), THEN step-ca/enroll/provisioner.pem ehg:10001 640 (the enrolment API reads it; the order matters) and enroll/root_ca.crt 644.
+# WHAT IT SETS: pki/broker.key ehg:1883 640 | pki/ehg-bridge.key and ehg-exporter.key ehg:10001 640 | pki/*.crt, ca.crl ehg:ehg 644 (ca.crl is replaced by hand as ehg; the script that refreshed it was removed on 2026-11-11) |
+#   step-ca/ recursively 1000:1000 (database, intermediate key, password), THEN step-ca/enroll/provisioner.pem ehg:10001 640 (the one-time-token key, for an administrator using the `step` CLI; the order matters) and enroll/root_ca.crt 644.
 # OUTPUT: one line per file; exit 1 if a required key is missing (broker.key, ehg-bridge.key); the step-ca part is skipped with a note if that folder does not exist (profile "enrol" not in use).
 # TEST: tests/test_fix_key_permissions.py runs it against a temporary folder with chown/chmod replaced by recorders (CHOWN=, CHMOD=). NEVER run on a real VM before today: expect the first run to need a look.
 set -eu

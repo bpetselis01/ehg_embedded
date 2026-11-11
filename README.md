@@ -9,7 +9,7 @@ public EHG record ─▶ nRF52840 DK (Zephyr, digital injection) ─BLE GATT not
                                                                                                     └─────▶ WebSocket raw viewer
 ```
 
-The validated chain above is what the thesis results (H1 to H4) were measured on. Around it sits an **enterprise-style evolution** (mutual-TLS MQTT, a durable bus, TimescaleDB, a triage service and page, a reference FHIR server, observability, backups, infrastructure as code, a Swift wire library),
+The validated chain above is what the thesis results (H1 to H4) were measured on. Around it sits an **enterprise-style evolution** (mutual-TLS MQTT, a reference FHIR server, sign-in, observability, backups, infrastructure as code, a Swift wire library),
 written and unit-tested but **mostly never started** because Docker and a cloud account were not available: [`docs/production-topology.md`](docs/production-topology.md) marks every hop built, written-only or design-only.
 
 **Reading path:** [codebase guide](docs/codebase-guide.md) (how it fits together) → [reproducing the results](#reproducing-the-results)
@@ -24,18 +24,52 @@ Status, run results and open items: [`docs/progress.md`](docs/progress.md).
 | [`tools/`](tools) | [`convert.py`](tools/convert.py) (WFDB → int16 `.npz`), [`feed.py`](tools/feed.py) (streams a `.npz` into the board over serial), [`make_replay.py`](tools/make_replay.py) (`.npz` → built-in firmware recording, via `build.sh --record`), [`fhir_export.py`](tools/fhir_export.py) (stored window → FHIR R5), [`watch_db.py`](tools/watch_db.py) + [`demo.sh`](tools/demo.sh) (live demo), [`pki.sh`](tools/pki.sh) (certificates for the TLS cloud profile) |
 | [`firmware/ehg_node/`](firmware/ehg_node) | Zephyr app for `nrf52840dk/nrf52840`, NCS v3.4.1. [`firmware/build.sh`](firmware/build.sh) builds and flashes it |
 | [`gateway/`](gateway) | Bleak central → MQTT; `--simulate N` software nodes use the same wire format |
-| [`backend/`](backend) | docker compose: Mosquitto, InfluxDB 2.7, ingest, Grafana (provisioned dashboard); optional `platform` profile; Python services: [`bridge/`](backend/bridge), [`ts_writer/`](backend/ts_writer), [`triage/`](backend/triage) (rules, alerts, audit, API), [`enroll/`](backend/enroll), [`fhir_sync/`](backend/fhir_sync), [`db/`](backend/db) (migrations) |
-| [`viewer/`](viewer) | WebSocket raw multichannel viewer; the [triage page](viewer/triage.html) (`triage.html`, `.css`, `.js`) |
+| [`backend/`](backend) | docker compose: Mosquitto, InfluxDB 2.7, ingest, Grafana (provisioned dashboard); Python services: [`ingest/`](backend/ingest), [`signal_metrics/`](backend/signal_metrics), [`fhir_sync/`](backend/fhir_sync), [`db/`](backend/db) (migrations) |
+| [`viewer/`](viewer) | WebSocket raw multichannel viewer |
 | [`ios/EHGWire/`](ios/EHGWire) | Swift package: wire format, gateway core and a real-broker-tested MQTT client for the iPhone gateway (`swift test`); the app is [`ios/EHGGateway/`](ios/EHGGateway/project.yml), see [docs/ios-gateway.md](docs/ios-gateway.md) |
 | [`eval/`](eval) | [`latency.py`](eval/latency.py) (H1), [`integrity.py`](eval/integrity.py) (H2 + H4 bit-exact) |
 | [`papers/`](papers) | [`INDEX.md`](papers/INDEX.md) (tracked) + open-access PDFs (not tracked) |
 | [`tests/`](tests) | pytest for the host code, plus [`test_docs.py`](tests/test_docs.py) (docs and wire-format copies match the code) |
 | [`deploy/`](deploy) | the Oracle cloud core as code: Terraform, cloud-init, compose, `update.sh`, SOPS secrets (written, never applied; see [`deploy/README.md`](deploy/README.md)) |
-| [`docs/api/`](docs/api) | OpenAPI (triage, enrolment) exported from the code, and AsyncAPI for the MQTT topics and bus subjects; both checked by tests |
+| [`docs/api/`](docs/api) | AsyncAPI for the two MQTT topics |
 | [`docs/slo.md`](docs/slo.md), [`docs/dr.md`](docs/dr.md), [`docs/security.md`](docs/security.md), [`docs/regulatory.md`](docs/regulatory.md) | service levels, backups and drills, threat model and controls, regulatory framing (no compliance claims) |
 | [`docs/decisions/`](docs/decisions) | why the main design choices were made |
 | [`docs/production-topology.md`](docs/production-topology.md) | the planned enterprise-style chain (sensor, BLE, mobile gateway, cellular, cloud, EHR), with each hop marked built, planned or design-only; [`docs/licences.md`](docs/licences.md) lists every component's licence |
 | [`docs/research/`](docs/research) | nRF / BLE / macOS environment notes with sources |
+
+### What was measured and what was not
+
+| Status | Parts | Meaning |
+|---|---|---|
+| **Measured** | [`firmware/ehg_node/`](firmware/ehg_node), the wire format, [`gateway/`](gateway), [`backend/ingest/`](backend/ingest), Mosquitto, InfluxDB, [`eval/`](eval) | The thesis results (H1 to H4) were taken on these |
+| **Run** | gateway outbox, [`backend/signal_metrics/`](backend/signal_metrics), Grafana dashboard and alert rules, raw viewer, [`tools/fhir_export.py`](tools/fhir_export.py) | Started locally and seen working; no thesis result depends on them |
+| **Configured, not validated** | MCUboot and the over-the-air update service in the firmware | Built into every image; no over-the-air upload has been performed |
+| **Written** | [`backend/fhir_sync/`](backend/fhir_sync), [`backend/db/`](backend/db), [`ios/`](ios), [`deploy/`](deploy) | Code and unit tests only; never run against real servers; a design artefact and future work, not a result |
+| **Removed 11 Nov 2026** | the triage service and page, the enrolment API, the MQTT-to-NATS bridge and TimescaleDB writer, the Mosquitto metrics exporter | Custom code that a standard tool already covers; deleted, and the tool is named in the [reuse ledger](docs/licences.md#reuse-ledger) |
+
+Each part's existing off-the-shelf alternative is in the [reuse ledger](docs/licences.md#reuse-ledger).
+
+## Choosing a run
+
+`tools/run.sh` shows a menu, and Enter starts the default run. `tools/run.sh <name>` skips the menu, `--list` prints this table and `--dry-run <name>` prints the commands without running them. It asks before flashing the board, and you open Docker Desktop yourself.
+
+| Run | Status | What it is |
+|---|---|---|
+| `default` | Thesis A default | Thesis A MVP deployed locally: nRF52840, Mac gateway, Mosquitto, InfluxDB, Grafana and the live viewer, with the outbox, alerts and signal metrics |
+| `measured` | Tested on hardware | The run 3 configuration: seeded faults, no outbox |
+| `faults` | Tested on hardware | Default plus seeded faults, to see re-request working. This mix with the outbox has not been run |
+| `built-in` | In development | Recording compiled into the board |
+| `simulate` | In development | Software node, no board |
+| `status` | In development | Gateway online/offline messages |
+| `fhir` | In development | FHIR R5 export of the last 10 minutes |
+| `passkey` | In development | LESC passkey pairing |
+| `button` | In development | Button 2 pairing, only exercised with the iPhone |
+| `tls` | In development | MQTT over TLS 1.3 with client certificates |
+| `iphone` | In development | iPhone app replaces the Mac gateway |
+| `cloud` | Planned | Hosted InfluxDB and Grafana, not built yet |
+| `keycloak`, `hapi-fhir`, `observability`, `oracle` | Not runnable locally yet | Exist only in `deploy/` |
+
+Only `measured` and `faults` claim hardware testing. Signal metrics are descriptive statistics, not clinical information. Contraction identification is not included.
 
 ## Quickstart
 
@@ -56,11 +90,13 @@ uv run python tools/feed.py data/converted/tpehgdb/tpehg1007.npz   # leave runni
 #    (recording compiled in; optional clock pings: tools/feed.py --sync-only --node EHG-93C0) — docs/firmware.md
 #    optional: --faults drop=0.05,burst=3,corrupt=0.01,disc=120 (docs/fault-injection.md)
 #    sampling starts when the gateway connects (START) or with DK Button 1; firmware updates over
-#    Bluetooth: build/dfu_application.zip via the nRF Device Manager app (docs/firmware.md Stage F)
+#    Bluetooth: build/dfu_application.zip via the nRF Device Manager app (docs/firmware.md Stage F);
+#    configured, not validated: no over-the-air upload has been performed
 
 # 2. backend
-cp backend/.env.example backend/.env && (cd backend && docker compose up -d)
-#    Grafana http://localhost:3300 (admin/admin) → EHG overview. Influx http://localhost:8086
+[ -f backend/.env ] || cp backend/.env.example backend/.env   # never overwrite an existing .env: InfluxDB keeps the token it first started with
+(cd backend && docker compose up -d)
+#    Grafana http://localhost:3300 (user admin, GRAFANA_ADMIN_PASSWORD in backend/.env) → EHG overview. Influx http://localhost:8086
 
 # 3. gateway (the macOS terminal app needs Bluetooth permission, see docs/progress.md)
 uv run python -m gateway.gateway              # or: --simulate 3 --sim-loss 0.01 (no hardware)
@@ -92,17 +128,6 @@ EHG_INTEGRATION=1 uv run pytest tests/test_mqtt_tls_config.py -q   # also tests 
 Each component has its own certificate: the ingest container uses `ehg-ingest` (set by the override), the viewer needs `MQTT_TLS=1 MQTT_CA=… MQTT_CERT=… MQTT_KEY=…` ([`viewer/server.py`](viewer/server.py)).
 The containers of this profile have **not been started** yet (Docker was not running when this was written); the broker config and ACL were tested against a local Mosquitto 2.1.2 ([docs/security.md](docs/security.md)).
 
-### Data platform (optional profile): NATS + TimescaleDB beside InfluxDB
-
-```sh
-cd backend && docker compose --profile platform -f docker-compose.yml -f docker-compose.platform.yml up -d     # needs Docker; the default `docker compose up -d` is unchanged (4 containers)
-docker compose stop ingest                                   # so InfluxDB is fed only from the stream
-uv run python -m gateway.gateway --simulate 1 --sim-loss 0.01 --no-outbox   # a few minutes, then Ctrl-C
-EHG_TS_DSN="host=localhost port=5433 dbname=ehg user=ehg password=local-only-change-me" uv run python eval/parity.py --node SIM-0000 --since 10m
-```
-
-`eval/integrity.py`, `eval/latency.py` and `tools/fhir_export.py` take `--backend influx|timescale`. Nothing here has run against real NATS/TimescaleDB yet ([decision 0012](docs/decisions/0012-timescaledb-nats-data-platform.md)); the SQL, bridge and writer logic is tested with fakes and a local PostgreSQL.
-
 ### Gateway outbox (on by default): survive broker outages and restarts
 
 ```sh
@@ -115,18 +140,13 @@ Every packet is written to the SQLite file first and deleted only when the broke
 One gateway process per outbox file (a second one stops with a message; give it `--outbox OTHER.db`). Left-over packets from an earlier run are sent at the next start, marked replayed; delete `gateway/outbox.db` first if you do not want them.
 It costs time on the gateway: about 0.5 ms more between "gateway received" and "published" ([progress.md](docs/progress.md), 2026-11-03).
 
-### Triage service, page and reference EHR (optional; NEVER RUN against real servers)
+### FHIR sync worker (optional; NEVER RUN against real servers)
 
 ```sh
-# needs the data platform profile above (Docker). Role ehg_triage is created by deploy/postgres/10-init-databases.sh; the migrate job creates the tables.
-export AUTH_MODE=dev  # fixed dev users, loud banner, refuses to bind anywhere but 127.0.0.1; use AUTH_MODE=oidc with OIDC_ISSUER, OIDC_AUDIENCE, OIDC_JWKS_URL for real sign-in
-export EHG_TRIAGE_DSN="host=localhost port=5433 dbname=ehg user=ehg_triage password=local-only-change-me" NATS_URL=nats://localhost:4222
-uv run python -m backend.triage.stream           # rules + API + page on http://127.0.0.1:8780/  (pick a dev user; roles viewer < operator < admin)
 uv run python -m backend.fhir_sync.worker        # needs EHG_DB_DSN, FHIR_BASE_URL (a HAPI R5 server, config in deploy/hapi/) and the converted .npz folder; copies only nodes whose subject has active consent
 ```
 
-What IS tested: every route and role, the consent rule, the page's static safety rules and a hand run of the page in a browser against stub data, the sync worker against a fake FHIR server (`tests/test_triage_*.py`, `test_fhir_*.py`). What is NOT: the service against real NATS and TimescaleDB, HAPI, Keycloak ([docs/progress.md](docs/progress.md)).
-The API documents: [`docs/api/openapi-triage.json`](docs/api/openapi-triage.json); refresh with `uv run python tools/export_api_docs.py`.
+Tested against a fake FHIR server (`tests/test_fhir_*.py`); never run against HAPI. It reads TimescaleDB, and since 11 Nov 2026 nothing in this repository fills TimescaleDB (the custom bridge and writer were removed; Telegraf's `mqtt_consumer` input with its PostgreSQL output is the standard tool for that step, and it is not configured here).
 
 ### Wire format in Swift, observability and backups
 
@@ -151,8 +171,8 @@ Each row: what to run (after Quickstart steps 0 and 2: data converted, backend u
 | **H4** bit-exact at the interface | same run | same `eval/integrity.py` | `bit-exact mismatches: 0` |
 | **H1** p95 < 2 s (stretch < 1 s) | same run; `feed.py` writes the clock pings `eval/results/sync_EHG-93C0.csv` | `eval/latency.py --node EHG-93C0 --since 15m` | `offset method: serial sync …`, `H1 per-sample end-to-end: … median=259 ms p95=478 ms …`, `target p95 < 2000 ms: PASS; stretch p95 < 1000 ms: PASS`, plus `eval/results/latency_cdf_EHG-93C0.png` |
 | Wire format identical in C, Python and Swift | no hardware | `uv run pytest -q tests/test_ios_wire_format.py`, `cd ios/EHGWire && swift test` | 8 vectors decode bit-exact, 7 bad packets refused for the same reason, every bit flip refused |
-| Backups restore, audit chain intact | a local PostgreSQL (`brew install postgresql@14`) | `uv run pytest -q tests/test_backup_scripts.py` | dump, restore on a second clean server, `OK: 3 rows`, damaged backup refused |
-| Parity of TimescaleDB with InfluxDB, SLO numbers, failure drills | needs Docker and the VM | see above and [`docs/dr.md`](docs/dr.md) | **not measured yet** |
+| Backups restore | a local PostgreSQL (`brew install postgresql@14`) | `uv run pytest -q tests/test_backup_scripts.py` | dump, restore on a second clean server, `OK: 3 rows`, damaged backup refused |
+| SLO numbers, failure drills | needs Docker and the VM | [`docs/dr.md`](docs/dr.md) | **not measured yet** |
 | **H3** ≥ 8 boards at once | needs 8 boards (one DK here) | `gateway.gateway --nodes 8`; code path exercised by `--simulate 8` | not measured yet ([progress.md](docs/progress.md)) |
 
 All results per run: [`docs/progress.md`](docs/progress.md). When a step fails: [`docs/troubleshooting.md`](docs/troubleshooting.md).

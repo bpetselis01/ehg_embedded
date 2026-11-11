@@ -31,7 +31,7 @@ Known failures, each as **symptom → cause → fix**. Found something new? Add 
 | Symptom | Cause | Fix |
 |---|---|---|
 | `docker compose up -d` seems stuck | Docker Desktop on this Mac takes 5–15 min to start containers | Wait. Do not restart Docker Desktop: another project (Supabase) runs in it. Once up, the stack stays up (`restart: unless-stopped`) |
-| Grafana not at `localhost:3000` | It is on port **3300** (VS Code holds 3000–3003) | http://localhost:3300 (admin/admin) |
+| Grafana not at `localhost:3000` | It is on port **3300** (VS Code holds 3000–3003) | http://localhost:3300 (user admin, `GRAFANA_ADMIN_PASSWORD` in `backend/.env`) |
 | `eval/*.py` finds no rows | `--since` does not cover the run, or the node name is wrong | `--since 1h`; node names are `EHG-XXXX` (board) or `SIM-0000` (simulated) |
 | H1 reads a few ms low, `offset method: BLE lower envelope` | No serial clock pings for this run (`eval/results/sync_<node>.csv` missing) | Run `feed.py` (or `feed.py --sync-only` for a built-in board) during the run ([decision 0005](decisions/0005-h1-clock-offset-from-serial-sync.md)) |
 | H1 values shifted by a constant | Ingest stamps `t_db_ack` with the Docker VM clock | Check the VM-to-macOS clock offset before final H1 runs, or run ingest on the host ([progress.md](progress.md)) |
@@ -85,31 +85,21 @@ Background: [deploy/README.md](../deploy/README.md). Added 2026-11-03.
 | `update.sh`: "another update is running" | A previous run crashed and left `/opt/ehg/state/update.lock` | Make sure no update is running, then remove that directory |
 | `update.sh`: "sops is not installed" | cloud-init does not install it (no distribution package) | Install it by hand and verify its checksum (`deploy/secrets/README.md`) |
 
-## Data platform (NATS, TimescaleDB, writers)
+## TimescaleDB
 
 Background: [decision 0012](decisions/0012-timescaledb-nats-data-platform.md). Added 2026-11-03; none of these has been seen on a running stack yet.
 
 | Symptom | Cause | Fix |
 |---|---|---|
 | `migrate` fails with `extension "timescaledb" is not available` | The database server has no TimescaleDB (a plain PostgreSQL image) | By design the failure is loud and leaves revision 0001. Use the `timescaledb-ha` image, or set `EHG_MIGRATE_TARGET=0001` for a plain schema |
-| ts-writer logs `DEGRADED, database write failed` | PostgreSQL is down or unreachable | Nothing is lost: the messages wait in NATS (7 days). Start the database; the writer recovers by itself and reports `ehg_writer_degraded 0` |
-| ts-writer logs `cannot parse a message ... terminated` | A message in the stream is not a valid packet | It is kept as a dead letter (JetStream advisory); inspect it with `nats` tools. It will not be retried |
-| `eval/parity.py` says FAIL | The two stores differ | Do not switch the cloud profile to TimescaleDB. Read which check failed; check that `ingest` was stopped and both writers read the same stream |
 | `eval/*.py --backend timescale`: "needs EHG_TS_DSN" | The connection string is not set | `export EHG_TS_DSN="host=localhost port=5433 dbname=ehg user=ehg password=..."` (5433 is the local platform database; Supabase uses 5432) |
 | Tests using real SQL are skipped | No local PostgreSQL | `brew install postgresql@14` (tests start a throwaway cluster in /tmp; TimescaleDB tests still need Docker) |
 
-## Triage, FHIR, observability, backups, Swift (Units 8 to 15; none of these has run against real servers)
+## FHIR, observability, backups, Swift (none of these has run against real servers)
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Triage page shows "Your session ended" after a few minutes | Access tokens last 5 minutes and the page holds no refresh token | Sign in again (by design: nothing is kept in the browser) |
-| Page asks to sign in but the Keycloak login returns "invalid audience" at the API | The token carries no `aud: triage-api` | The `triage-ui` client needs the audience mapper in `deploy/keycloak/realm-ehg.json`; re-import the realm (found and fixed 2026-11-04, not tested on a real Keycloak) |
-| `AUTH_MODE=dev refuses to run` | Dev mode has fixed users and only runs on loopback | Bind to 127.0.0.1 or use `AUTH_MODE=oidc` |
-| `/fhir/Observation` answers 403 for a node you can see on the worklist | The FHIR routes need ACTIVE consent; a node with no subject is refused (the worklist is more lenient) | Register the node with a subject whose `consent_status` is `active` |
-| `/fhir/*` answers 404 | No FHIR server is configured (`fhir_upstream` unset) | Give the triage service a FHIR base URL |
 | FHIR sync sends nothing | The node has no consent, or no chunk is complete yet (a chunk is sent once a later frame arrives) | Check the worker log line per node: `skipped: consent`, `pending: N` |
 | `swift test` cannot find `tests/fixtures/packet_vectors.json` | Run from a copy of the package outside the repository | Run it in `ios/EHGWire` inside the repository (the test finds the file relative to its own path) |
 | `tests/test_ios_wire_format.py` says the vectors are stale | The wire format changed, or `gateway/packet.py` did | `uv run python tools/gen_packet_vectors.py`, then update the Swift copy and run `swift test` |
-| `tests/test_api_docs.py` says an API document is stale | A route or model changed | `uv run python tools/export_api_docs.py` and commit the result |
 | `restore_drill.sh` says `REFUSING: database ... already exists` | It never overwrites | Run it on a clean server, not on a live database |
-| `EhgTargetDown` for bridge, ts-writer or triage straight after deployment | Those services are not in the cloud compose file yet | Expected until they are added (docs/progress.md, Unit 12) |

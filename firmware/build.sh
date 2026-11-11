@@ -39,7 +39,7 @@ export ZEPHYR_BASE="$HOME/ncs/v3.4.1/zephyr"
 WEST="nrfutil toolchain-manager launch --ncs-version v3.4.1 -- west"
 DEV_ID="${DEV_ID:-1050208294}"   # nRF52840 DK serial; `nrfutil device list` shows yours
 APP="$LINK/firmware/ehg_node"
-P=""; FLASH=""; RECORD=""; SECS=""; SECURE=""
+P=""; FLASH=""; RECORD=""; SECS=""; SECURE=""; BUTTON=""
 while [ $# -gt 0 ]; do
 	case "$1" in
 		pristine) P="-p" ;;
@@ -47,7 +47,8 @@ while [ $# -gt 0 ]; do
 		--record) RECORD="$2"; shift ;;
 		--seconds) SECS="$2"; shift ;;
 		--secure) SECURE=1 ;;
-		*) echo "unknown argument: $1 (use: [pristine] [flash] [--secure] [--record <npz> [--seconds S]])"; exit 1 ;;
+		--pairing-button) SECURE=1; BUTTON=1 ;;
+		*) echo "unknown argument: $1 (use: [pristine] [flash] [--secure | --pairing-button] [--record <npz> [--seconds S]])"; exit 1 ;;
 	esac
 	shift
 done
@@ -67,8 +68,11 @@ if [ -n "$SECURE" ]; then
 	BUILD="$APP/build-secure"
 	[ -n "$EHG_MCUBOOT_KEY" ] && [ -f "$EHG_MCUBOOT_KEY" ] || { echo "--secure: set EHG_MCUBOOT_KEY to your signing key (make one with firmware/gen_signing_key.sh)"; exit 1; }
 	case "$(cd "$(dirname "$EHG_MCUBOOT_KEY")" && pwd -P)/" in "$REPO"/*) echo "--secure: the signing key must be OUTSIDE the repository"; exit 1 ;; esac
-	set -- "$@" "-Dehg_node_EXTRA_CONF_FILE=$APP/security.conf" "-DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE=\"$EHG_MCUBOOT_KEY\""
+	CONF="$APP/security.conf"
+	if [ -n "$BUTTON" ]; then BUILD="$APP/build-button"; CONF="$APP/security-button.conf"; fi
+	set -- "$@" "-Dehg_node_EXTRA_CONF_FILE=$CONF" "-DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE=\"$EHG_MCUBOOT_KEY\""
 	MODE="$MODE + SECURE (LESC pairing, own signing key)"
+	[ -z "$BUTTON" ] || MODE="$MODE, pairing only after Button 2 (Just Works)"
 fi
 $WEST build $P -b nrf52840dk/nrf52840 -d "$BUILD" "$APP" -- "$@"
 # only "file" lines: the "command" lines must keep space-free paths

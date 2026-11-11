@@ -68,6 +68,12 @@ static void adv_work_handler(struct k_work *work)
 }
 static K_WORK_DEFINE(adv_work, adv_work_handler);
 
+#ifdef CONFIG_EHG_PAIRING_BUTTON
+static void pairing_on_connect(struct bt_conn *conn);
+#else
+#define pairing_on_connect(conn) ((void)0)
+#endif
+
 /* Laptop connected: hand the connection to ehg_service.c, ask for faster radio settings. */
 static void connected(struct bt_conn *conn, uint8_t err)
 {
@@ -76,6 +82,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
 		return;
 	}
 	LOG_INF("connected");
+	pairing_on_connect(conn);
 	ehg_service_set_conn(conn);
 	/* Only requests: the laptop decides. 2M PHY = 2 Mbit/s radio mode; data length = bigger radio packets. */
 	bt_conn_le_phy_update(conn, BT_CONN_LE_PHY_PARAM_2M);
@@ -128,21 +135,70 @@ BT_CONN_CB_DEFINE(conn_cb) = {
 /* Pairing (security.conf build only). The board can only DISPLAY a passkey (no keyboard, no yes/no button), so the
  * laptop or phone types it in its own system dialog. The host makes a fresh random 6-digit passkey for every pairing.
  * The board never asks for security itself: the central starts pairing when its first protected access is refused. */
+#ifndef CONFIG_EHG_PAIRING_BUTTON
 static void passkey_display(struct bt_conn *conn, unsigned int passkey)
 {
 	LOG_INF("PASSKEY %06u (type this in the pairing dialog)", passkey);
 }
+#endif
 
 static void pairing_cancel(struct bt_conn *conn)
 {
 	LOG_WRN("pairing cancelled");
 }
 
+#ifdef CONFIG_EHG_PAIRING_BUTTON
+/* Button pairing (security-button.conf build). Button 2 opens a window; a NEW pairing is accepted only inside it, and
+ * the board then asks the central to pair (an SMP security request), because iOS did not start pairing by itself on a refused access.
+ * No passkey: IO capability NoInputNoOutput, so the pairing is LE Secure Connections Just Works (encrypted, not authenticated). */
+static int64_t window_end_ms;
+
+static bool pairing_window_open(void)
+{
+	return k_uptime_get() < window_end_ms;
+}
+
+static enum bt_security_err pairing_accept(struct bt_conn *conn, const struct bt_conn_pairing_feat *const feat)
+{
+	if (!pairing_window_open()) {
+		LOG_WRN("pairing refused: press Button 2 first");
+		return BT_SECURITY_ERR_PAIR_NOT_ALLOWED;
+	}
+	return BT_SECURITY_ERR_SUCCESS;
+}
+
+static void ask_to_pair(struct bt_conn *conn, void *data)
+{
+	if (bt_conn_get_security(conn) < BT_SECURITY_L2) {
+		LOG_INF("asking the central to pair (%d)", bt_conn_set_security(conn, BT_SECURITY_L2));
+	}
+}
+
+static void pairing_on_connect(struct bt_conn *conn)
+{
+	if (pairing_window_open()) {
+		ask_to_pair(conn, NULL);
+	}
+}
+
+static void open_pairing_window(void)
+{
+	window_end_ms = k_uptime_get() + CONFIG_EHG_PAIRING_WINDOW_S * 1000LL;
+	LOG_INF("pairing OPEN for %d s", CONFIG_EHG_PAIRING_WINDOW_S);
+	bt_conn_foreach(BT_CONN_TYPE_LE, ask_to_pair, NULL);
+}
+
+static const struct bt_conn_auth_cb auth_cb = {.pairing_accept = pairing_accept, .cancel = pairing_cancel};
+#else
 static const struct bt_conn_auth_cb auth_cb = {.passkey_display = passkey_display, .cancel = pairing_cancel};
+#endif
 
 static void pairing_complete(struct bt_conn *conn, bool bonded)
 {
 	LOG_INF("pairing complete (bonded: %s)", bonded ? "yes" : "no");
+#ifdef CONFIG_EHG_PAIRING_BUTTON
+	window_end_ms = 0; /* one new pairing per Button 2 press */
+#endif
 }
 
 static void pairing_failed(struct bt_conn *conn, enum bt_security_err reason)
@@ -171,6 +227,11 @@ static struct bt_gatt_cb gatt_cb = {.att_mtu_updated = mtu_updated};
  * over Bluetooth does the same; a START while running is ignored, so the two never fight. */
 static void button_changed(uint32_t state, uint32_t has_changed)
 {
+#ifdef CONFIG_EHG_PAIRING_BUTTON
+	if (has_changed & state & DK_BTN2_MSK) {
+		open_pairing_window();
+	}
+#endif
 	if (has_changed & state & DK_BTN1_MSK) {
 		if (replay_running()) {
 			LOG_INF("button: stop");
@@ -206,7 +267,11 @@ int main(void)
 	/* bonds (the keys of paired laptops) are kept in flash across resets. Right after bt_enable and BEFORE bt_set_name: the name and the GATT
 	 * database hash are saved through the settings, which only work once they are loaded. */
 	settings_load();
+#ifdef CONFIG_EHG_PAIRING_BUTTON
+	LOG_INF("pairing REQUIRED (encrypted link; new pairings only after Button 2, %d s)", CONFIG_EHG_PAIRING_WINDOW_S);
+#else
 	LOG_INF("pairing REQUIRED (LESC passkey)");
+#endif
 #endif
 	bt_set_name(name);
 	bt_gatt_cb_register(&gatt_cb);
@@ -219,6 +284,9 @@ int main(void)
 		k_sleep(K_MSEC(200));
 		dk_set_led(DK_LED1, ehg_service_connected());
 		dk_set_led(DK_LED2, replay_running());
+#ifdef CONFIG_EHG_PAIRING_BUTTON
+		dk_set_led(DK_LED3, pairing_window_open());
+#endif
 		if (i % 50 == 0) {
 			ehg_service_log_stats();
 		}

@@ -32,3 +32,8 @@ topic read $SYS/broker/bytes/sent
 topic read $SYS/broker/publish/messages/dropped
 topic read $SYS/broker/store/messages/count
 topic read $SYS/broker/uptime
+
+# The phone gateway (ios/EHGGateway), pinned to the one board it serves (docs/ios-gateway.md).
+user ehg-ios-01
+topic write ehg/EHG-93C0/pkt
+topic write ehg/_gw/ehg-ios-01/status

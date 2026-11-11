@@ -7,7 +7,8 @@ why it is acceptable. Written 2026-11-03 as part of Unit 1.
 *UNVERIFIED* means the licence comes from the planning prompt ([claude-code-prompt-thesis-b-hardening.md](claude-code-prompt-thesis-b-hardening.md) §5c) and nothing in this repository or on this machine confirms it.
 Each UNVERIFIED row is checked in the unit that first uses the component, and this file is updated then. Images are to be pinned by version (and by digest where practical) when they enter a compose file.
 
-**This repository's own licence is still pending** (awaiting the supervisor; see the [README](../README.md)). This register does not decide it.
+**This repository's own licence is still pending** (awaiting the supervisor; see the [README](../README.md)). This register does not decide it; [what the dependencies allow](#which-licence-this-repository-could-take) is below.
+The [reuse ledger](#reuse-ledger) lists what this repository builds itself and what existing tool could replace each part.
 
 ## Already in use
 
@@ -28,10 +29,7 @@ Each UNVERIFIED row is checked in the unit that first uses the component, and th
 | PyYAML 6.0.3 (dev, added in Unit 2) | MIT | Parses compose and cloud-init files in tests | Permissive | Confirmed locally (package metadata and classifier) |
 | OpenSSL 3.0.12 (command line, used by `tools/pki.sh` and the tests) | Not read; stated as Apache-2.0 for OpenSSL 3 in general | Makes the certificates | Free; a tool run locally, not shipped | UNVERIFIED |
 | Mosquitto 2.1.2 (Homebrew build used for the local tests; same version as the `eclipse-mosquitto:2` image) | `EPL-2.0 OR BSD-3-Clause` | Real-broker tests; cloud broker | Free; the licence is read from the Docker image's own label `org.opencontainers.image.licenses` | Confirmed from the image label (2026-11-03); licence text not read |
-| FastAPI 0.162.0, Pydantic 2.14.2 | MIT | Triage and enrolment APIs | Permissive | Confirmed locally (package metadata) |
-| Starlette 1.10.0, uvicorn 0.54.0, httpx 0.28.1 | BSD-3-Clause | Web server and test client | Permissive | Confirmed locally (package metadata) |
-| PyJWT 2.15.1 | MIT | Token validation | Permissive | Confirmed locally (package metadata) |
-| cryptography 50.0.2 | Apache-2.0 OR BSD-3-Clause | CSR validation, test keys | Permissive | Confirmed locally (package metadata) |
+| httpx 0.28.1 | BSD-3-Clause | HTTP client of the FHIR sync worker | Permissive | Confirmed locally (package metadata) |
 | nats-py 2.16.0 | Apache-2.0 | NATS client | Permissive | Confirmed locally (package metadata) |
 | psycopg 3.3.7 (+ psycopg-binary) | **LGPL-3.0-only** | PostgreSQL client | Free; used as an unmodified library, so the LGPL does not extend to this code. Keep it a normal dependency (do not vendor or modify it) | Confirmed locally (package metadata) |
 | Alembic 1.20.1, SQLAlchemy 2.1.6, Mako 1.4.3 | MIT | Migrations | Permissive | Confirmed locally (package metadata) |
@@ -40,15 +38,15 @@ Each UNVERIFIED row is checked in the unit that first uses the component, and th
 | fhir.resources 8.3.0, fhir-core 1.1.12 (dev, added in Unit 9) | BSD (OSI classifier in the package metadata) | Checks our FHIR resources against the R5 models in tests | Permissive | Confirmed locally (package metadata) |
 | Terraform CLI 1.14.9 (installed here) | Business Source Licence 1.1 (per the prompt) | Validates and applies the IaC | Free for our own use | Version confirmed (`terraform version`); licence text NOT read: UNVERIFIED |
 | `oracle/oci` Terraform provider 9.11.0 | Not read | Oracle resources | Free to use | UNVERIFIED |
-| Eclipse Mosquitto | EPL/EDL (as stated in the prompt) | Edge MQTT broker | Open source, free to self-host | UNVERIFIED |
-| InfluxDB 2.7 (OSS) | Not stated in the prompt | Reference time-series store | Free to self-host | UNVERIFIED |
-| Grafana OSS | Apache-2.0 or AGPL-3.0 (the prompt says "check") | Dashboards | Free to self-host for own use; AGPL terms matter only if modified and offered to others | UNVERIFIED |
+| Eclipse Mosquitto (`eclipse-mosquitto:2`, the default run's broker) | `EPL-2.0 OR BSD-3-Clause` | Edge MQTT broker | Open source, free to self-host | Confirmed from the image label (2026-11-11) |
+| InfluxDB 2.7 (OSS) | Not stated in the prompt | Reference time-series store | Free to self-host | UNVERIFIED: the `influxdb:2.7` image (v2.7.12) has no licence label and no licence file (checked 2026-11-11) |
+| Grafana OSS 13.0.2 | AGPL-3.0 | Dashboards and alert rules | Free to self-host for own use; run unmodified as a separate container, so the AGPL does not reach this code | Confirmed from `/usr/share/grafana/LICENSE` in the image (2026-11-11) |
 
 ## Planned for the cloud profile
 
 | Component | Licence | Edition / note | Why acceptable | Status |
 |---|---|---|---|---|
-| NATS Server (JetStream) | Apache-2.0 | Internal bus | Permissive | UNVERIFIED |
+| NATS Server (JetStream) | Apache-2.0 | Internal bus. Removed from the stack 11 Nov 2026; `backend/ingest/ingest.py` keeps an unused NATS input | Permissive | UNVERIFIED |
 | PostgreSQL 16 | PostgreSQL licence | Enterprise store | Permissive | UNVERIFIED |
 | **TimescaleDB Community edition** | **Tiger Data Licence (not OSI-approved)** | Needed for compression and continuous aggregates | Self-hosting for own use is allowed; offering it as a service is not. Confirm with `SHOW timescaledb.license;` in Unit 6 | UNVERIFIED |
 | HAPI FHIR JPA server (image `hapiproject/hapi:v7.6.0`; its starter config was read from the GitHub tag `image/v7.6.0` on 2026-11-04) | Apache-2.0 (per the prompt; licence text not read) | Reference EHR | Permissive | UNVERIFIED |
@@ -75,7 +73,6 @@ Each is pinned by version and digest; **all have a `linux/arm64` manifest** (che
 | Image | Version | Licence (status) |
 |---|---|---|
 | `eclipse-mosquitto` | 2.1.2-alpine (same digest as `2`) | EPL-2.0 OR BSD-3-Clause (read from the image label) |
-| `nats` | 2.15.2-alpine | Apache-2.0 (UNVERIFIED) |
 | `caddy` | 2.11.7-alpine | Apache-2.0 (UNVERIFIED) |
 | `timescale/timescaledb-ha` | pg16.15-ts2.31.0 | PostgreSQL licence + TimescaleDB Community edition under the Tiger Data licence (UNVERIFIED; confirm `SHOW timescaledb.license;` in Unit 6). The non-HA `timescale/timescaledb:2.31.0-pg16` also has an arm64 manifest |
 | `prom/prometheus`, `prom/alertmanager`, `prom/node-exporter`, `prometheuscommunity/postgres-exporter` | v3.15.1, v0.34.2, v1.12.1, v0.20.1 | Apache-2.0 (UNVERIFIED) |
@@ -91,6 +88,45 @@ Each is pinned by version and digest; **all have a `linux/arm64` manifest** (che
 | Redpanda | Business Source Licence | Not needed; Kafka-API scale-up path is design-only |
 | Apache Kafka | Apache-2.0 | Too heavy next to two JVM services on 12 GB |
 | HashiCorp Vault | Business Source Licence | Replaced by SOPS and age; OCI Vault optional |
+
+## Reuse ledger
+
+What this repository builds itself, and what existing tool could have done the job instead. Written 2026-11-11 after a build-versus-reuse audit.
+**Verdict:** *Custom justified* = no existing tool does this job. *Reuse possible* = a tool exists, and the custom code is small or needed for a measurement. *Should have reused* = a tool exists and the custom code adds little.
+**Status:** *Measured* = the thesis results (H1 to H4) were taken on it. *Run* = started locally, no thesis result depends on it. *Written* = code and unit tests only, never run as a service ([production-topology.md](production-topology.md)).
+Line counts are approximate (2026-11-11).
+
+| Component | What it does | Lines | Verdict | Existing alternative | Status |
+|---|---|---|---|---|---|
+| [`firmware/ehg_node/`](../firmware/ehg_node) | Replays a recording, packs frames, keeps a resend history | about 2,000 | Custom justified | None. Built on Zephyr and NCS; the CRC is Zephyr's `crc16_itu_t`, not hand-written | Measured |
+| Wire format ([`gateway/packet.py`](../gateway/packet.py), `ehg_packet.h`) | 12-byte header, int16 samples, CRC-16 | 93 | Custom justified | None for raw multichannel EHG. Python CRC is the standard library's `binascii.crc_hqx` | Measured |
+| [`gateway/`](../gateway) | BLE central, gap tracking and RESEND, MQTT publish | 820 | Custom justified | None. Built on Bleak and paho-mqtt | Measured |
+| [`gateway/outbox.py`](../gateway/outbox.py) | SQLite store-and-forward across broker outages and restarts | 187 | Reuse possible | `persist-queue`; paho's own queue is in memory only and is lost on restart | Run (default run); not part of the measured run 3 |
+| [`backend/ingest/`](../backend/ingest) | MQTT to InfluxDB, stamps receive and write-acknowledged times | 179 | Reuse possible | Telegraf `mqtt_consumer`. Kept because H1 needs the write-acknowledged timestamp per packet, which Telegraf does not record | Measured |
+| [`tools/convert.py`](../tools/convert.py) | PhysioNet record to int16 `.npz` | small | Reuse possible | Reads records with `wfdb`; only the scaling is custom | Measured (input data) |
+| [`eval/`](../eval) | H1 latency, H2 delivery, H4 bit-exact comparison | 509 | Custom justified | None | Measured |
+| [`viewer/`](../viewer) raw viewer | WebSocket multichannel plot | about 280 | Reuse possible | Grafana Live. Kept small | Run |
+| [`backend/signal_metrics/`](../backend/signal_metrics) | RMS, median frequency, flatline and saturation per channel | 132 | Reuse possible | Flux tasks could do RMS; median frequency needs an FFT | Run (default run) |
+| Grafana alert rules (`backend/grafana/provisioning/alerting/`) | Node offline, loss, latency, flatline, saturation | config only | Reused | This is Grafana's own alerting | Run (one rule seen firing) |
+| [`tools/fhir_export.py`](../tools/fhir_export.py) | Stored window to a FHIR R5 bundle | 114 | Reuse possible | `fhir.resources` models (used in the tests) | Run |
+| Triage service and page (`backend/triage/`, `viewer/triage.*`) | Rules, alert state, audit log, API, worklist page | 1,464 + page | **Removed 11 Nov 2026** | Use Grafana alerting (already provisioned here), Prometheus rules and Alertmanager | Deleted |
+| Enrolment API (`backend/enroll/`) | Enrolment API in front of the private CA | 460 | **Removed 11 Nov 2026** | Use the `step` CLI with step-ca's ACME provisioner or a one-time token | Deleted |
+| Bridge, bus helper and writer (`backend/bridge/`, `backend/bus.py`, `backend/ts_writer/`) | MQTT to NATS, NATS to TimescaleDB | 481 | **Removed 11 Nov 2026** | Use Telegraf (`mqtt_consumer` input, PostgreSQL output), or NATS's own MQTT support | Deleted |
+| Mosquitto exporter (`backend/mqtt_exporter.py`) | Mosquitto `$SYS` topics as Prometheus metrics | 77 | **Removed 11 Nov 2026** | Use `sapcc/mosquitto-exporter` | Deleted |
+| Token helper (`backend/jwtauth.py`) | Token checks and roles for the two removed APIs | 126 | **Removed 11 Nov 2026** | It wrapped PyJWT; no caller was left | Deleted |
+| [`backend/fhir_sync/`](../backend/fhir_sync) | Live write-back to a FHIR server | 215 | Reuse possible | Out of thesis scope; the batch export above is the demonstration | Written |
+| [`ios/`](../ios) | Swift wire library, gateway core and iPhone app, with a hand-written MQTT client (`MQTT.swift`, 172 lines) | about 2,800 | Reuse possible | CocoaMQTT or MQTT NIO for the client | Written; not part of the measured results ([ios-gateway.md](ios-gateway.md)) |
+| [`deploy/`](../deploy) | Terraform, cloud-init, compose, backups | about 2,500 | Reused | Standard tools throughout; no custom service | Written, never applied |
+
+## Which licence this repository could take
+
+No licence is chosen yet; the supervisor decides. This note only records what the dependencies allow (2026-11-11).
+
+- **Apache-2.0 or MIT would both fit.** Every library the code imports is permissive (MIT, BSD, Apache-2.0, EPL-2.0 OR BSD-3-Clause), except psycopg.
+- **psycopg is LGPL-3.0-only.** It is used as an unmodified, separately installed library by the Written services only, so it does not constrain this code's licence. Do not vendor or modify it.
+- **No GPL or AGPL code is linked.** Grafana OSS is AGPL-3.0 and Mosquitto is EPL-2.0 OR BSD-3-Clause; both run as unmodified, separate containers and are not redistributed here.
+- **Firmware:** the app's own sources can be Apache-2.0 like Zephyr. The NCS `nrf` repository is under Nordic's 5-clause licence, so a built firmware image is tied to Nordic devices. The repository ships source, not images.
+- **Question for the supervisor:** "May I release the thesis code under Apache-2.0, matching Zephyr and the BioGAP firmware?"
 
 ## Services (terms, not licences)
 

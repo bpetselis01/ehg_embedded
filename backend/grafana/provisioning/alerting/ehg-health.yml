@@ -1,0 +1,180 @@
+# PURPOSE: Pipeline-health alerts shown on the EHG overview dashboard. They describe the data path and the signal channels, never a person.
+# INPUT: InfluxDB measurements ehg_pkt (backend/ingest/ingest.py) and ehg_metric (backend/signal_metrics/worker.py).
+# OUTPUT: 5 rules, 1 alert instance per node (or per node and channel), evaluated every 10 s.
+#   e.g. "Node offline" firing for node_id=EHG-93C0 once its newest packet is more than 5 s old.
+# HOW: Thresholds equal backend/triage/rules.py Config. Each rule is a Flux query (A), its last value (B) and a threshold (C).
+#   No contact point is configured, so nothing leaves this computer.
+# ROLE IN THESIS: The alerts promised for Grafana in Thesis A section 8.5. Latency here is operational; eval/latency.py stays the authority for H1.
+# BEFORE -> AFTER: Before: only dashboard panels. After: Grafana loads these rules at start-up and the Alert list panel shows what is firing.
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: ehg-pipeline-health
+    folder: EHG
+    interval: 10s
+    rules:
+      - uid: ehg-node-offline
+        title: Node offline
+        condition: C
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        labels: {severity: critical}
+        annotations: {summary: "No packets stored from this node for more than 5 s. A node silent for over 5 minutes stops being tracked, and this alert then clears."}
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: influx
+            model:
+              refId: A
+              query: |-
+                from(bucket: v.defaultBucket) |> range(start: -5m)
+                 |> filter(fn: (r) => r._measurement == "ehg_pkt" and r._field == "seq")
+                 |> group(columns: ["node_id"])
+                 |> last()
+                 |> map(fn: (r) => ({_time: now(), node_id: r.node_id, _value: float(v: int(v: now()) - int(v: r._time)) / 1000000000.0}))
+          - &reduce
+            refId: B
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model: {refId: B, type: reduce, expression: A, reducer: last, datasource: {type: __expr__, uid: __expr__}}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              datasource: {type: __expr__, uid: __expr__}
+              conditions: [{type: query, evaluator: {type: gt, params: [5]}}]
+
+      - uid: ehg-loss-rate
+        title: Packet loss over 1 percent
+        condition: C
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        labels: {severity: warning}
+        annotations: {summary: "More than 1 % of packets were still missing after the retry time, over 60 s."}
+        data:
+          - refId: A
+            relativeTimeRange: {from: 70, to: 0}
+            datasourceUid: influx
+            model:
+              refId: A
+              query: |-
+                from(bucket: v.defaultBucket) |> range(start: -70s, stop: -10s)
+                 |> filter(fn: (r) => r._measurement == "ehg_pkt" and r._field == "seq")
+                 |> group(columns: ["node_id"])
+                 |> sort(columns: ["_time"])
+                 |> difference()
+                 |> filter(fn: (r) => r._value > 0)
+                 |> reduce(fn: (r, accumulator) => ({n: accumulator.n + 1.0, missing: accumulator.missing + float(v: r._value) - 1.0}), identity: {n: 0.0, missing: 0.0})
+                 |> filter(fn: (r) => r.n >= 10.0)
+                 |> map(fn: (r) => ({_time: now(), node_id: r.node_id, _value: 100.0 * r.missing / (r.n + r.missing)}))
+          - *reduce
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              datasource: {type: __expr__, uid: __expr__}
+              conditions: [{type: query, evaluator: {type: gt, params: [1]}}]
+
+      - uid: ehg-latency-p95
+        title: Latency p95 over 2 s
+        condition: C
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        labels: {severity: warning}
+        annotations: {summary: "p95 of live first-attempt packets, inject to database, was over 2 s for the last 60 s."}
+        data:
+          - refId: A
+            relativeTimeRange: {from: 60, to: 0}
+            datasourceUid: influx
+            model:
+              refId: A
+              query: |-
+                from(bucket: v.defaultBucket) |> range(start: -60s)
+                 |> filter(fn: (r) => r._measurement == "ehg_pkt")
+                 |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+                 |> filter(fn: (r) => not r.retrans and not (exists r.replayed and r.replayed))
+                 |> map(fn: (r) => ({_time: r._time, node_id: r.node_id, _value: r.t_db_ack - r.t_inject_host}))
+                 |> group(columns: ["node_id"])
+                 |> quantile(q: 0.95, method: "exact_selector")
+                 |> map(fn: (r) => ({_time: now(), node_id: r.node_id, _value: r._value}))
+          - *reduce
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              datasource: {type: __expr__, uid: __expr__}
+              conditions: [{type: query, evaluator: {type: gt, params: [2]}}]
+
+      - uid: ehg-flatline
+        title: Channel flatline
+        condition: C
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        labels: {severity: warning}
+        annotations: {summary: "A channel did not change at all for 10 s."}
+        data:
+          - refId: A
+            relativeTimeRange: {from: 120, to: 0}
+            datasourceUid: influx
+            model:
+              refId: A
+              query: |-
+                from(bucket: v.defaultBucket) |> range(start: -2m)
+                 |> filter(fn: (r) => r._measurement == "ehg_metric" and r._field == "flatline")
+                 |> group(columns: ["node_id", "channel"])
+                 |> last()
+                 |> map(fn: (r) => ({_time: now(), node_id: r.node_id, channel: r.channel, _value: if r._value then 1.0 else 0.0}))
+          - *reduce
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              datasource: {type: __expr__, uid: __expr__}
+              conditions: [{type: query, evaluator: {type: gt, params: [0]}}]
+
+      - uid: ehg-saturation
+        title: Channel saturation
+        condition: C
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        labels: {severity: warning}
+        annotations: {summary: "More than 5 % of a channel's samples were at the rails over 10 s."}
+        data:
+          - refId: A
+            relativeTimeRange: {from: 120, to: 0}
+            datasourceUid: influx
+            model:
+              refId: A
+              query: |-
+                from(bucket: v.defaultBucket) |> range(start: -2m)
+                 |> filter(fn: (r) => r._measurement == "ehg_metric" and r._field == "saturated_pct")
+                 |> group(columns: ["node_id", "channel"])
+                 |> last()
+                 |> map(fn: (r) => ({_time: now(), node_id: r.node_id, channel: r.channel, _value: r._value}))
+          - *reduce
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              datasource: {type: __expr__, uid: __expr__}
+              conditions: [{type: query, evaluator: {type: gt, params: [5]}}]

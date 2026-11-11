@@ -6,7 +6,7 @@ What guards the code and the images, what is only planned, and how to run the he
 
 | Control | Where | Checked by |
 |---|---|---|
-| Every image in the compose files is pinned by version AND digest, and every digest was checked for `linux/arm64` | `deploy/compose/docker-compose.cloud.yml`, `backend/docker-compose.platform.yml` | `tests/test_deploy_assets.py`, `tests/test_platform_compose.py` |
+| Every image in the compose files is pinned by version AND digest, and every digest was checked for `linux/arm64` | `deploy/compose/docker-compose.cloud.yml` | `tests/test_deploy_assets.py`, `tests/test_platform_compose.py` |
 | Dockerfile base images carry an explicit tag (not `latest`); digests for them are NOT pinned | `backend/ingest/Dockerfile`, `backend/platform.Dockerfile` | `tests/test_ci_config.py` (tag only) |
 | Python dependencies pinned in `uv.lock`, installed with `--frozen` | `pyproject.toml`, `uv.lock` | CI (`uv sync --frozen`) |
 | No commit carries an AI co-author or generated-with line | `.github/workflows/tests.yml` | CI |
@@ -42,18 +42,18 @@ A finding from any scan, review or dependency update is recorded in `docs/progre
 Not scanned: the Terraform provider and the Swift package. The third-party images were scanned the same day (next section).
 Re-run: `docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:stable -S warning $(git ls-files '*.sh')`; `docker run --rm -i hadolint/hadolint < backend/platform.Dockerfile`; `docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest git /repo --config /repo/.gitleaks.toml`; `deploy/scan-images.sh` (every image; trivy pinned by digest, no Docker socket mounted).
 
-## Third-party images (scanned 2026-11-04 with `deploy/scan-images.sh`, fixable HIGH/CRITICAL only)
-Every image was checked against the registry: **each pinned release is already the newest one** (and the pinned digest is the newest build of its tag), except the NATS exporter, which moved from 0.17.3 (3 CRITICAL, 63 HIGH) to 0.20.3 (clean) and was bumped. What the scan finds in the others sits in libraries bundled inside the vendor's binary or jar, and only the vendor can fix it.
+## Third-party images (scanned 2026-11-04 with `deploy/scan-images.sh`, fixable HIGH/CRITICAL only; the scan and `docs/sbom/ehg-platform.cdx.json` predate the 11 Nov 2026 trim)
+Every image was checked against the registry: **each pinned release is already the newest one** (and the pinned digest is the newest build of its tag). What the scan finds in the others sits in libraries bundled inside the vendor's binary or jar, and only the vendor can fix it.
 
 | Image | CRITICAL / HIGH | Where | Exposure |
 |---|---|---|---|
 | **Caddy (the edge, ports 80/443)** | was 1 / 8, now **0 / 0** | Go standard library, x/net, go-jose, Alpine brotli and curl | **Rebuilt**: `deploy/caddy/Dockerfile` compiles the same Caddy v2.11.7 with Go 1.27.3 and the two patched modules, and upgrades the OS packages |
 | Mosquitto (port 8883) | 0 / 0 | | internet-facing, clean |
 | ehg-platform (Python services) | 0 / 0 | | internal |
-| Prometheus, Alertmanager, Loki, Alloy, NATS, nats-exporter | 0 / 0 | | internal |
+| Prometheus, Alertmanager, Loki, Alloy | 0 / 0 | | internal |
 | Keycloak 26.8.1 | 0 / 1 | guava | behind Caddy, `/auth` only (admin console and master realm answer 404) |
 | Grafana 13.0.2 | 2 / 103 | bundled Go modules and Alpine libs | behind Caddy at `/grafana` with its own login |
-| HAPI FHIR 7.6.0 | 28 / 104 | Java libraries (HAPI's own and transitive) | NOT routed by Caddy; reachable only by the triage facade (GET, consent-checked) and the sync worker |
+| HAPI FHIR 7.6.0 | 28 / 104 | Java libraries (HAPI's own and transitive) | NOT routed by Caddy; reachable only by the sync worker |
 | step-ca 0.30.2 | 7 / 187 | Go modules, Alpine libs | internal; profile `enrol` only |
 | TimescaleDB-HA | 2 / 103 | Go tooling bundled in the image (not the database) | internal |
 | cAdvisor, node-exporter, postgres-exporter | 4 / 78, 0 / 15, 0 / 18 | Go modules | internal |

@@ -1,5 +1,21 @@
 # Progress log
 
+## 2026-11-11: custom-code reduction (build-vs-reuse audit)
+
+- **Removed:** the triage service and page, enrolment API, MQTT-to-NATS bridge, `backend/bus.py`, TimescaleDB writer, Mosquitto exporter, `backend/jwtauth.py`, and code left with no caller. 56 files deleted, 20 of them tests. The `platform` and `triage` runs left `tools/run.sh`. FastAPI, uvicorn and PyJWT left the dependencies. Standard tools are named in the [reuse ledger](licences.md#reuse-ledger); no new configs were written.
+- **`deploy/` trimmed to match:** 15 services plus step-ca in the `enrol` profile. Caddy fronts Keycloak and Grafana only.
+- **Checked:** `uv run pytest -q`: 461 passed, 18 skipped. Before: 915 passed, 20 skipped. `docs/security.md` no longer names the removed tests (edited with Byron's OK; Byron's own uncommitted edit kept). `tools/run.sh --dry-run default` is byte-identical to before. `docker compose config` resolves the trimmed stack.
+- **NOT done / not verified:** the trimmed stack was never started; the trimmed image was not built; the trimmed Keycloak realm was not imported; `shellcheck`, `promtool` and `caddy validate` were not run (not installed).
+- **Consequences:** nothing fills TimescaleDB, so `fhir-sync` has no data until a Telegraf step exists; the iPhone enrolment screen has no server; the revocation list reaches the broker by hand; backups no longer record an audit-chain head; delivery and latency objectives on the VM are gone (H1 and H2 are still measured by `eval/`).
+
+## 2026-11-11: run selector, signal metrics, Grafana alerts; default run on the real board
+
+- **Added:** `tools/run.sh` (menu of the Thesis A default and every optional run, with status labels; asks before flashing), `backend/signal_metrics/worker.py` (RMS, median frequency, flatline, saturation into `ehg_metric`; not clinical information), five provisioned Grafana alert rules, five dashboard panels. `gateway/outbox` stays on in the default run.
+- **Default run, DK EHG-93C0, macOS gateway, plain MQTT, outbox on, TPEHG tpehg1007, no injected faults, about 9 min:** delivery 11060/11060 = 100.0000 %, 0 bit-exact mismatches. H1 per-sample median 258.6 ms, p95 474.1 ms, p99 490.6 ms, max 534.2 ms (first-attempt packets; serial sync +/-1.8 ms). A short run, not the 6 h soak, and with no faults it is not comparable with run 3.
+- **Alerts on the real stack:** all five rules evaluate healthy. Node offline fired within 35 s of stopping the gateway and cleared after restarting it, on the board and on a simulated node. The other four have not been seen firing.
+- **Found:** a query during a live run can see a row whose fields are still being written. The metrics worker skips those; `eval/integrity.py` and `eval/latency.py` still raise, so run them after stopping the gateway. A gateway restart continued numbering from where it stopped while the feeder kept running.
+- **NOT done / not verified:** every other run in the menu has only had its commands checked; `shellcheck` on `tools/run.sh` (CI only); the `cloud` run is not built.
+
 ## 2026-11-04: in-app enrolment for the phone gateway
 
 - `EHGGatewayCore/Enrolment.swift`: Keycloak device grant (RFC 8628: pending, slow_down, denied, expired tested with a fake server), a PKCS#10 request built and signed in Swift (**accepted by `backend/enroll/csr.py:validate_csr` on the first try**: `tests/test_ios_csr.py`), the token's user name as the CN, the enrolment call. The app's model and screen got an "Enrol with Keycloak" button that stores the key and certificate in the Keychain (builds for the simulator). Checked against the REAL Keycloak from Python: the device endpoint returns `device_code, user_code, verification_uri(_complete), interval, expires_in` and the token endpoint answers `authorization_pending` with 400, exactly what the client parses. Not run: the full flow from Swift against the live stack, and anything Keychain on a phone. Renewal is the same flow (a person each week: no refresh token is kept).
@@ -523,3 +539,6 @@ These are **not H1/H2 results**, because the BLE hop is missing. They only show 
 2. Run a 10 min run, then the 6 h TPEHG soak (H2 MVP): [`eval/integrity.py`](../eval/integrity.py) + [`eval/latency.py`](../eval/latency.py).
 3. Agree the interface spec with Zicheng; wire the classifier hook (H4).
 4. Cloud deployment decision (3a).
+
+### 2026-11-06 - first iPhone run (Mac side prepared, phone run supervised)
+Prepared (certificates for `Byrons-Burger.local`, LAN broker, `.p12` copied into the app, command-line signing and install), then ran the phone against the board. Found and fixed three app bugs and one firmware design error, added the Button 2 pairing build, and measured 100 % delivery and H1 p95 549 ms through the phone (details and what is still untested: docs/ios-gateway.md, docs/security.md). The passkey build's UART-only code is not usable by real users; the button build is the practical alternative (weaker against an active attacker, documented).

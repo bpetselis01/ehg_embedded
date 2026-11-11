@@ -9,7 +9,7 @@ import yaml
 
 ROOT = Path(__file__).parents[1]
 WORKFLOWS = sorted((ROOT / ".github/workflows").glob("*.yml"))
-KNOWN_ACTIONS = {"actions/checkout@v7", "astral-sh/setup-uv@v10.3.2"}  # the only third-party actions already vetted in tests.yml
+KNOWN_ACTIONS = {"actions/checkout@v7", "astral-sh/setup-uv@v10.3.3"}  # the only third-party actions already vetted in tests.yml
 
 
 def load(path):

@@ -27,7 +27,7 @@ def test_all_routing_is_inside_one_route_block_so_order_is_the_written_order():
     handles = [m.start(1) for m in re.finditer(r"^[ \t]*(handle)", body, re.M)]
     assert handles and all(open_at < h < close_at for h in handles), "every handle block must be inside the route block"
     assert body.index("handle @internal") == min(handles), "the deny rule is the first thing the route does"
-    assert body.rstrip().endswith("}\n}") and re.search(r"\thandle \{\s*import csp\s*reverse_proxy triage:8780\s*\}\s*\}\s*\}\s*$", body), "the catch-all is last"
+    assert body.rstrip().endswith("}\n}") and re.search(r"\thandle \{\s*respond 404\s*\}\s*\}\s*\}\s*$", body), "the catch-all is last and answers 404"
 
 
 def test_grafana_does_not_serve_its_own_metrics_even_if_a_route_were_wrong():
@@ -37,12 +37,12 @@ def test_grafana_does_not_serve_its_own_metrics_even_if_a_route_were_wrong():
 
 
 def test_the_routes_are_exactly_the_designed_ones():
-    assert re.findall(r"^\s*(handle(?:_path)?)\s+(\S+)?\s*\{", body, re.M) == [("handle", "@internal"), ("handle", "/api/*"), ("handle", "/fhir/*"), ("handle", "@keycloak"), ("handle", "/auth/*"), ("handle", "/grafana/*"), ("handle_path", "/enroll-api/*"), ("handle", "")]
+    assert re.findall(r"^\s*(handle(?:_path)?)\s+(\S+)?\s*\{", body, re.M) == [("handle", "@internal"), ("handle", "@keycloak"), ("handle", "/auth/*"), ("handle", "/grafana/*"), ("handle", "")]
     proxied = re.findall(r"reverse_proxy\s+(\S+)", body)
-    assert sorted(proxied) == sorted(["triage:8780", "triage:8780", "keycloak:8080", "grafana:3000", "enroll:8790", "triage:8780"])
+    assert sorted(proxied) == ["grafana:3000", "keycloak:8080"]
 
 
-@pytest.mark.parametrize("internal", ["prometheus", "alertmanager", "loki", "postgres", "nats", "hapi", "mosquitto", "node-exporter", "cadvisor", "alloy", "9090", "5432", "4222", "8086", "3100"])
+@pytest.mark.parametrize("internal", ["prometheus", "alertmanager", "loki", "postgres", "hapi", "mosquitto", "node-exporter", "cadvisor", "alloy", "9090", "5432", "8086", "3100"])
 def test_nothing_internal_is_proxied(internal):
     assert internal not in " ".join(re.findall(r"reverse_proxy\s+(\S+)", body))
 
@@ -61,11 +61,11 @@ def matches(patterns: list[str], path: str) -> bool:
 def test_metrics_and_probe_paths_are_blocked_by_the_first_handle_block_not_a_bare_respond():
     """Regression for a review finding: Caddy runs handle blocks BEFORE a bare `respond`, so a respond beside them was unreachable."""
     assert re.search(r"handle @internal \{\s*respond 404\s*\}", body) and not re.search(r"^\s*respond @internal", body, re.M)
-    assert body.index("handle @internal") < body.index("handle /api/*")
+    assert body.index("handle @internal") < body.index("handle @keycloak")
     internal = matcher("internal")
-    for path in ("/metrics", "/metrics/x", "/healthz", "/readyz", "/grafana/metrics", "/enroll-api/healthz", "/api/metrics", "/auth/healthz"):
+    for path in ("/metrics", "/metrics/x", "/healthz", "/readyz", "/grafana/metrics", "/auth/healthz"):
         assert matches(internal, path), f"{path} must be blocked"
-    for path in ("/api/alerts", "/", "/grafana/d/abc", "/enroll-api/enroll"):
+    for path in ("/", "/grafana/d/abc", "/auth/realms/ehg"):
         assert not matches(internal, path), f"{path} must stay reachable"
 
 
@@ -83,23 +83,18 @@ def test_every_response_gets_the_security_headers(header):
     assert re.search(rf"^\s*{re.escape(header)}\b", body, re.M)
 
 
-def test_hsts_lasts_at_least_six_months_and_csp_allows_nothing_external_or_inline():
-    max_age = int(re.search(r"max-age=(\d+)", body).group(1))
-    assert max_age >= 15_552_000
-    csp = re.search(r'Content-Security-Policy "([^"]+)"', body).group(1)
-    assert "'unsafe-inline'" not in csp and "'unsafe-eval'" not in csp and "http:" not in csp and "*" not in csp.replace("'self'", "")
-    assert "frame-ancestors 'none'" in csp and "default-src 'self'" in csp and "script-src 'self'" in csp
+def test_hsts_lasts_at_least_six_months():
+    assert int(re.search(r"max-age=(\d+)", body).group(1)) >= 15_552_000
 
 
-def test_bodies_are_size_limited_and_enrolment_more_tightly():
-    sizes = re.findall(r"max_size\s+(\S+)", body)
-    assert sizes == ["1MB", "16KB"]
+def test_bodies_are_size_limited():
+    assert re.findall(r"max_size\s+(\S+)", body) == ["1MB"]
 
 
 def test_tls_is_not_weakened_and_the_domain_comes_from_the_environment():
     for weak in ("tls internal", "skip_verify", "insecure", "auto_https off", "disable_redirects", "http://"):
         assert weak not in body, weak
-    assert body.lstrip().startswith("(csp) {") and "\n{$EHG_DOMAIN} {" in body, "one snippet, then the one site block"
+    assert body.lstrip().startswith("{$EHG_DOMAIN} {"), "the one site block"
 
 
 def test_the_missing_rate_limit_is_written_down_not_implied():
@@ -112,30 +107,9 @@ def test_caddy_validate_accepts_it():
     assert r.returncode == 0, r.stderr
 
 
-def handle_blocks():
-    """(opening line, text) of every top-level handle block inside the route, by brace counting."""
-    out, route = [], body[body.index("route {") + len("route {"):]
-    for m in re.finditer(r"^\t\t(handle(?:_path)?[^\n]*)\{\n", route, re.M):
-        depth, i = 1, m.end()
-        while depth:
-            depth += {"{": 1, "}": -1}.get(route[i], 0)
-            i += 1
-        out.append((m.group(1).strip(), route[m.end():i]))
-    return out
-
-
-def test_the_strict_csp_is_only_on_what_the_triage_service_serves_not_on_keycloak_or_grafana():
+def test_no_content_security_policy_is_set_here_because_keycloak_and_grafana_send_their_own():
     """Keycloak's sign-in pages and Grafana need inline scripts and styles and send their own policy: a blanket header would replace it and break them."""
-    blocks = dict(handle_blocks())
-    with_csp = {k for k, v in blocks.items() if "import csp" in v}
-    assert with_csp == {"handle /api/*", "handle /fhir/*", "handle"}, with_csp
-    assert all("triage:8780" in blocks[k] for k in with_csp)
-    assert not any("Content-Security-Policy" in v or "import csp" in v for k, v in blocks.items() if k not in with_csp)
-    snippet = re.search(r"\(csp\) \{\n\theader Content-Security-Policy \"([^\"]+)\"\n\}", body)
-    assert snippet, "the policy lives in one snippet"
-    csp = snippet.group(1)
-    assert "'unsafe-inline'" not in csp and "'unsafe-eval'" not in csp and "http:" not in csp
-    assert "frame-ancestors 'none'" in csp and "default-src 'self'" in csp and "script-src 'self'" in csp and "style-src 'self'" in csp
+    assert "Content-Security-Policy" not in body and "import " not in body
 
 
 def test_grafana_is_configured_for_the_sub_path_the_front_door_serves_it_on():
