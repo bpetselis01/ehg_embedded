@@ -75,7 +75,8 @@ def test_every_terraform_file_parses_and_the_provider_is_pinned_exactly():
             hcl2.load(fh)
     versions = (TF / "versions.tf").read_text()
     assert re.search(r'required_version\s*=\s*">=\s*1\.6"', versions)
-    assert re.search(r'source\s*=\s*"oracle/oci"', versions) and re.search(r'version\s*=\s*"=\s*\d+\.\d+\.\d+"', versions), "the provider must be pinned to one exact version"
+    # A bare "9.12.1" is also an exact pin in Terraform; Dependabot rewrites "= 9.12.1" to that form.
+    assert re.search(r'source\s*=\s*"oracle/oci"', versions) and re.search(r'version\s*=\s*"(=\s*)?\d+\.\d+\.\d+"', versions), "the provider must be pinned to one exact version"
 
 
 def test_terraform_fits_the_always_free_limits():
