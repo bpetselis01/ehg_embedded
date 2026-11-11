@@ -1,5 +1,7 @@
 # 0016. Observability stack and service-level objectives
 
+**Superseded 11 Nov 2026.** Objectives and alerts that depended on the removed services were dropped; the Mosquitto exporter is replaced in the docs by `sapcc/mosquitto-exporter`. See the [reuse ledger](../licences.md#reuse-ledger). The record below is kept as written.
+
 **Date:** 2026-11-03
 
 ## Status

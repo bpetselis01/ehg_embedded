@@ -1,13 +1,14 @@
 # EHG cloud core: the services that can run today, on the Oracle Always Free VM (2 OCPU / 12 GB arm64).
 # Run (on the VM, by deploy/update.sh): docker compose --env-file /run/ehg/runtime.env --env-file /opt/ehg/etc/site.env -f deploy/compose/docker-compose.cloud.yml up -d
 #
-# PURPOSE: The cloud stack as one file: edge (Caddy), MQTT broker with mTLS, NATS JetStream bus, PostgreSQL + TimescaleDB, and the observability stack.
-#   The private CA and the enrolment API are in the optional profile "enrol" (make the CA first with deploy/step-ca/init-offline.sh). The FHIR sync worker (`fhir-sync`) reads each record's gain and baseline from deploy/fhir/records.json
-#   (tools/export_record_meta.py), exports only nodes whose subject has ACTIVE consent, and does nothing until a subject is registered.
-# INPUT: /run/ehg/runtime.env (decrypted secrets: POSTGRES_PASSWORD, EHG_DB_PASSWORD, HAPI_DB_PASSWORD, KEYCLOAK_DB_PASSWORD, EXPORTER_DB_PASSWORD, TRIAGE_DB_PASSWORD, ENROLL_DB_PASSWORD, FHIR_DB_PASSWORD,
-#   KEYCLOAK_ADMIN_PASSWORD, TRIAGE_API_CLIENT_SECRET, ENROLL_API_CLIENT_SECRET, FHIR_SYNC_CLIENT_SECRET, GRAFANA_ADMIN_PASSWORD; generate with openssl rand -hex 24, because passwords go into URLs and connection strings), /opt/ehg/etc/site.env (EHG_DOMAIN), certificates in EHG_PKI_DIR (default /opt/ehg/pki: ca-chain.crt, broker.crt, broker.key, ca.crl).
+# PURPOSE: The cloud stack as one file: edge (Caddy), MQTT broker with mTLS, PostgreSQL + TimescaleDB, Keycloak, HAPI FHIR, and the observability stack.
+#   NOT in it since 2026-11-11: anything that moves packets from the broker into the database. The custom bridge, NATS bus and writer were removed (docs/licences.md, reuse ledger); the standard tool for that step is Telegraf (mqtt_consumer to PostgreSQL), which is not configured here.
+#   The private CA (step-ca) is in the optional profile "enrol" (make the CA first with deploy/step-ca/init-offline.sh). The FHIR sync worker (`fhir-sync`) reads each record's gain and baseline from deploy/fhir/records.json
+#   (tools/export_record_meta.py), exports only nodes whose subject has ACTIVE consent, and does nothing until a subject is registered (and, since the removal above, until something fills the database).
+# INPUT: /run/ehg/runtime.env (decrypted secrets: POSTGRES_PASSWORD, EHG_DB_PASSWORD, HAPI_DB_PASSWORD, KEYCLOAK_DB_PASSWORD, EXPORTER_DB_PASSWORD, FHIR_DB_PASSWORD,
+#   KEYCLOAK_ADMIN_PASSWORD, FHIR_SYNC_CLIENT_SECRET, GRAFANA_ADMIN_PASSWORD; generate with openssl rand -hex 24, because passwords go into URLs and connection strings), /opt/ehg/etc/site.env (EHG_DOMAIN), certificates in EHG_PKI_DIR (default /opt/ehg/pki: ca-chain.crt, broker.crt, broker.key, ca.crl).
 #   A missing secret stops `up` with a message naming it (the "?" in the variable).
-# OUTPUT: the host publishes ONLY 80, 443 (Caddy) and 8883 (Mosquitto). Postgres, NATS, Grafana, Prometheus, Loki are on the private Docker network only.
+# OUTPUT: the host publishes ONLY 80, 443 (Caddy) and 8883 (Mosquitto). Postgres, Grafana, Prometheus, Loki are on the private Docker network only.
 #   Grafana has no route until Unit 11 puts it behind Caddy and Keycloak. To look at it before then, tunnel to the container's own address
 #   (docker inspect gives it): ssh -L 3000:<container-ip>:3000 ubuntu@<vm>; see deploy/README.md.
 # HOW: HOST MOUNTS ARE MINIMAL ON PURPOSE (a security review found the first draft too generous): no container mounts the host root, /run, /var/run or Docker's
@@ -20,7 +21,8 @@
 #   Named volumes live in Docker's data-root on the 150 GB data volume (/srv/ehg-data/docker). Containers that need to reach the internet later (Alertmanager's
 #   webhook, Unit 12) must be added to "edge" deliberately.
 #   A service that cannot run a health check (its image has no shell or wget) says so in the label ehg.healthcheck instead of silently having none.
-# STATUS: started once on a laptop (2026-11-04, throwaway PKI, EHG_DOMAIN=localhost): all 18 services up, every Prometheus target up, mTLS packets stored; the "enrol" profile too. Four defects were found and fixed that way (see docs/progress.md).
+# STATUS: started once on a laptop (2026-11-04, throwaway PKI, EHG_DOMAIN=localhost): all 18 services of the EARLIER, larger stack up, every Prometheus target up, mTLS packets stored; the "enrol" profile too. Four defects were found and fixed that way (see docs/progress.md).
+#   The stack as trimmed on 2026-11-11 (seven services removed) has NOT been started; only `docker compose config` was run on it.
 #   NEVER run on the VM (journald, arm64, 12 GB): expect first-boot fixes there.
 # ROLE IN THESIS: The cloud core of docs/production-topology.md, sized by docs/decisions/0010 and the budget in tests/test_deploy_assets.py.
 # BEFORE -> AFTER: Before: backend/docker-compose.yml on a laptop. After: this file on the VM, next to (not replacing) the local stack.
@@ -92,25 +94,6 @@ services:
       timeout: 5s
       retries: 3
 
-  nats:
-    <<: *service
-    networks: [internal]
-    image: nats:2.15.2-alpine@sha256:823e7f1d6d8ffe3b30dbd73d4a06bbb939acf94929f7fdf224404da7a05bafb5
-    command: ["-c", "/etc/nats/nats.conf"]
-    environment:
-      GOMEMLIMIT: 384MiB
-    volumes:
-      - ../nats/nats.conf:/etc/nats/nats.conf:ro
-      - nats-data:/data
-    cap_drop: [ALL]
-    read_only: true
-    mem_limit: 400m
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8222/healthz || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
   postgres:
     <<: *service
     networks: [internal]
@@ -122,8 +105,6 @@ services:
       HAPI_DB_PASSWORD: ${HAPI_DB_PASSWORD:?HAPI_DB_PASSWORD is not set}
       KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?KEYCLOAK_DB_PASSWORD is not set}
       EXPORTER_DB_PASSWORD: ${EXPORTER_DB_PASSWORD:?EXPORTER_DB_PASSWORD is not set}
-      TRIAGE_DB_PASSWORD: ${TRIAGE_DB_PASSWORD:?TRIAGE_DB_PASSWORD is not set}
-      ENROLL_DB_PASSWORD: ${ENROLL_DB_PASSWORD:?ENROLL_DB_PASSWORD is not set}
       FHIR_DB_PASSWORD: ${FHIR_DB_PASSWORD:?FHIR_DB_PASSWORD is not set}
     volumes:
       - ../postgres/10-init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro
@@ -258,47 +239,6 @@ services:
     labels:
       ehg.healthcheck: "none: the cAdvisor image has no shell or wget; Prometheus scrapes cadvisor:8080 instead"
 
-  nats-exporter:
-    <<: *service
-    networks: [internal]
-    image: natsio/prometheus-nats-exporter:0.20.3@sha256:4b8ddc1c86fec360b5cd3d5e1fbc6fb52bdafd5805bba3901cc52926538af255
-    command: ["-varz", "-jsz=all", "-connz", "http://nats:8222"]
-    depends_on:
-      nats:
-        condition: service_healthy
-    cap_drop: [ALL]
-    read_only: true
-    mem_limit: 64m
-    labels:
-      ehg.healthcheck: "none: a single static binary with no shell or wget; Prometheus scrapes nats-exporter:7777 instead"
-
-  mosquitto-exporter:
-    <<: *python
-    command: ["python", "-m", "backend.mqtt_exporter"]
-    environment:
-      MQTT_HOST: mosquitto
-      MQTT_PORT: "8883"
-      MQTT_TLS: "1"
-      MQTT_CA: /pki/ca-chain.crt
-      MQTT_CERT: /pki/ehg-exporter.crt
-      MQTT_KEY: /pki/ehg-exporter.key
-      EXPORTER_PORT: "9203"
-    volumes:
-      # single certificate files of this component only, never the PKI directory (its identity may read ONLY the exported $SYS topics: backend/mosquitto/acl)
-      - ${EHG_PKI_DIR:-/opt/ehg/pki}/ca-chain.crt:/pki/ca-chain.crt:ro
-      - ${EHG_PKI_DIR:-/opt/ehg/pki}/ehg-exporter.crt:/pki/ehg-exporter.crt:ro
-      - ${EHG_PKI_DIR:-/opt/ehg/pki}/ehg-exporter.key:/pki/ehg-exporter.key:ro
-    depends_on:
-      mosquitto:
-        condition: service_healthy
-    mem_limit: 64m
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9203/metrics', timeout=3)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
-
   postgres-exporter:
     <<: *service
     networks: [internal]
@@ -330,83 +270,6 @@ services:
       ehg.oneshot: "true"
       ehg.healthcheck: "none: a one-shot job; it must exit 0 once the schema is current (update.sh accepts an exited service with exit code 0)"
 
-  bridge:
-    <<: *python
-    command: ["python", "-m", "backend.bridge.bridge"]
-    environment:
-      NATS_URL: nats://nats:4222
-      MQTT_HOST: mosquitto
-      MQTT_PORT: "8883"
-      MQTT_TLS: "1"
-      MQTT_CA: /pki/ca-chain.crt
-      MQTT_CERT: /pki/ehg-bridge.crt
-      MQTT_KEY: /pki/ehg-bridge.key
-      BRIDGE_METRICS_PORT: "9201"
-    volumes:
-      # single certificate files of this component only, never the PKI directory
-      - ${EHG_PKI_DIR:-/opt/ehg/pki}/ca-chain.crt:/pki/ca-chain.crt:ro
-      - ${EHG_PKI_DIR:-/opt/ehg/pki}/ehg-bridge.crt:/pki/ehg-bridge.crt:ro
-      - ${EHG_PKI_DIR:-/opt/ehg/pki}/ehg-bridge.key:/pki/ehg-bridge.key:ro
-    depends_on:
-      nats:
-        condition: service_healthy
-      mosquitto:
-        condition: service_healthy
-    mem_limit: 96m
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9201/metrics', timeout=3)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-
-  ts-writer:
-    <<: *python
-    command: ["python", "-m", "backend.ts_writer.writer"]
-    environment:
-      NATS_URL: nats://nats:4222
-      EHG_DB_DSN: host=postgres port=5432 dbname=ehg user=ehg password=${EHG_DB_PASSWORD:?EHG_DB_PASSWORD is not set}
-      WRITER_METRICS_PORT: "9202"
-    depends_on:
-      nats:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
-    mem_limit: 128m
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9202/metrics', timeout=3)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-
-  triage:
-    <<: *python
-    command: ["python", "-m", "backend.triage.stream"]
-    environment:
-      AUTH_MODE: oidc
-      OIDC_ISSUER: https://${EHG_DOMAIN:?EHG_DOMAIN is not set (site.env)}/auth/realms/ehg
-      OIDC_UI_AUTHORITY: https://${EHG_DOMAIN}/auth/realms/ehg
-      OIDC_AUDIENCE: triage-api
-      OIDC_JWKS_URL: http://keycloak:8080/auth/realms/ehg/protocol/openid-connect/certs
-      EHG_TRIAGE_DSN: host=postgres port=5432 dbname=ehg user=ehg_triage password=${TRIAGE_DB_PASSWORD:?TRIAGE_DB_PASSWORD is not set}
-      NATS_URL: nats://nats:4222
-      FHIR_BASE_URL: http://hapi:8080/fhir
-      BIND_HOST: 0.0.0.0
-      TRIAGE_PORT: "8780"
-    depends_on:
-      nats:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
-    mem_limit: 192m
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8780/healthz', timeout=3)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-
   keycloak:
     <<: *service
     networks: [internal]
@@ -426,8 +289,6 @@ services:
       JAVA_OPTS_KC_HEAP: -XX:MaxRAMPercentage=65
       # filled into realm-ehg.json at import (the file holds placeholders only)
       EHG_DOMAIN: ${EHG_DOMAIN}
-      TRIAGE_API_CLIENT_SECRET: ${TRIAGE_API_CLIENT_SECRET:?TRIAGE_API_CLIENT_SECRET is not set}
-      ENROLL_API_CLIENT_SECRET: ${ENROLL_API_CLIENT_SECRET:?ENROLL_API_CLIENT_SECRET is not set}
       FHIR_SYNC_CLIENT_SECRET: ${FHIR_SYNC_CLIENT_SECRET:?FHIR_SYNC_CLIENT_SECRET is not set}
     volumes:
       - ../keycloak/realm-ehg.json:/opt/keycloak/data/import/realm-ehg.json:ro
@@ -474,9 +335,9 @@ services:
     cap_drop: [ALL]
     mem_limit: 2300m
     labels:
-      ehg.healthcheck: "none: believed to be a distroless image with no shell or wget (not verified); readiness is seen through the triage facade (/fhir/metadata answers 502 while HAPI is down)"
+      ehg.healthcheck: "none: believed to be a distroless image with no shell or wget (not verified); nothing outside the Docker network can reach it, so readiness is seen only in the fhir-sync log"
 
-  # ---- profile "enrol": the private CA and the enrolment API for gateway certificates. NOT started by default: make the CA first (deploy/step-ca/init-offline.sh on YOUR computer),
+  # ---- profile "enrol": the private CA (step-ca) for gateway certificates; an administrator issues them with the `step` CLI. NOT started by default: make the CA first (deploy/step-ca/init-offline.sh on YOUR computer),
   # copy its vm/ folder to EHG_STEPCA_DIR on the VM, then add EHG_STEPCA_ROOT_FP and COMPOSE_PROFILES=enrol to /opt/ehg/etc/site.env (the script writes both lines to env.txt).
   # Started once locally with such a CA on 2026-11-04; the enrolment API was called with a real Keycloak token (see docs/progress.md).
   step-ca:
@@ -503,39 +364,6 @@ services:
     cap_add: [NET_BIND_SERVICE]   # the step-ca binary carries a file capability (cap_net_bind_service); with ALL dropped it fails to start: "Operation not permitted" (seen 2026-11-04)
     mem_limit: 160m
 
-  enroll:
-    <<: *python
-    profiles: [enrol]
-    command: ["python", "-m", "backend.enroll.service"]
-    environment:
-      AUTH_MODE: oidc
-      OIDC_ISSUER: https://${EHG_DOMAIN:?EHG_DOMAIN is not set (site.env)}/auth/realms/ehg
-      OIDC_AUDIENCE: enroll-api
-      OIDC_JWKS_URL: http://keycloak:8080/auth/realms/ehg/protocol/openid-connect/certs
-      EHG_ENROLL_DSN: host=postgres port=5432 dbname=ehg user=ehg_enroll password=${ENROLL_DB_PASSWORD:?ENROLL_DB_PASSWORD is not set}
-      STEPCA_URL: https://step-ca:9000
-      STEPCA_PROVISIONER: ehg-enroll
-      STEPCA_KEY_FILE: /stepca/provisioner.pem
-      STEPCA_ROOT_CERT: /stepca/root_ca.crt
-      STEPCA_ROOT_FP: ${EHG_STEPCA_ROOT_FP:-}   # empty stops the service with a message naming it (see deploy/step-ca/init-offline.sh, env.txt)
-      BIND_HOST: 0.0.0.0
-      ENROLL_PORT: "8790"
-    volumes:
-      - ${EHG_STEPCA_DIR:-/opt/ehg/step-ca}/enroll/provisioner.pem:/stepca/provisioner.pem:ro
-      - ${EHG_STEPCA_DIR:-/opt/ehg/step-ca}/enroll/root_ca.crt:/stepca/root_ca.crt:ro
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-      step-ca:
-        condition: service_healthy
-    mem_limit: 128m
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8790/healthz', timeout=3)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-
 networks:
   edge: {}
   internal:
@@ -545,7 +373,6 @@ volumes:
   caddy-data:
   caddy-config:
   mosquitto-data:
-  nats-data:
   pg-data:
   prometheus-data:
   alertmanager-data:

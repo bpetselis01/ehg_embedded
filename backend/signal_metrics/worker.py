@@ -11,7 +11,7 @@ OUTPUT: InfluxDB measurement ehg_metric, tags node_id and channel, 1 point per c
   e.g. ehg_metric,node_id=EHG-93C0,channel=c0 frames_present=1200i,rms=412.7,median_freq_hz=0.45,flatline=false,saturated_pct=0 1791243128018676224
 HOW: Windows are 60 s with 30 s overlap, aligned to frame numbers, and end 8 s before the newest frame so re-sent packets have arrived. Rewriting a window therefore replaces the same point.
   Up to 5 % of missing frames are filled by linear interpolation. An FFT keeps 0.08 to 4 Hz, which is zero-phase. RMS is taken on the band-limited signal. Median frequency is where cumulative
-  in-band power reaches half. Flatline and saturation use the last 10 s, with the definitions in backend/triage/stream.py. Window and band are the settings Thesis A reports for the lab's pipeline.
+  in-band power reaches half. Flatline and saturation use the last 10 s: flatline = zero variance on a channel, saturation = share of samples at the int16 rails. Window and band are the settings Thesis A reports for the lab's pipeline.
 ROLE IN THESIS: The signal-quality, RMS and median-frequency metrics promised for Grafana in Thesis A section 8.5. It runs beside the data path, so ingest and the H1/H2/H4 numbers are unaffected.
 BEFORE -> AFTER: Before: frames stored by backend/ingest/ingest.py. After: ehg_metric, read by backend/grafana/dashboards/ehg-overview.json and the alert rules.
 """
@@ -27,7 +27,7 @@ from eval import backend_client
 WINDOW_S, STEP_S, HOLD_S, QUALITY_S = 60, 30, 8, 10
 BAND_HZ = (0.08, 4.0)
 MIN_COMPLETE = 0.95
-RAIL16 = (32767, -32768)  # shortcut: int16 rails only, use the 24-bit rails from backend/triage/stream.py if 24-bit records are ever replayed
+RAIL16 = (32767, -32768)  # shortcut: int16 rails only, use the 24-bit rails (8388607, -8388608) if 24-bit records are ever replayed
 
 
 def descriptors(x: np.ndarray, fs: float) -> dict:

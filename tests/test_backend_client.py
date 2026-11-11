@@ -11,8 +11,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parents[1] / "eval"))
 import backend_client as bc  # noqa: E402  (must import with no backend/.env present)
 from backend.db import migrate  # noqa: E402
-from backend.ts_writer.writer import PgStore, rows_for  # noqa: E402
-from test_ts_writer import message  # noqa: E402
 
 
 def test_imports_without_a_dotenv_file_and_defaults_to_the_reference_store():
@@ -56,17 +54,31 @@ def test_influx_path_still_builds_frames_from_pivoted_rows(monkeypatch):
     assert t0 is not None
 
 
+def message(seq):
+    return {"node_id": "EHG-93C0", "seq": seq, "frame_idx": seq * 10, "samples": [[1093 + f, 171 - f, -748 - 3 * f] for f in range(10)]}
+
+
 @pytest.fixture
 def loaded(pg_url, monkeypatch):
-    """A migrated throwaway database holding two packets written by the real writer code, exposed through EHG_TS_DSN."""
+    """A migrated throwaway database holding three packets (20 Hz, 10 frames each), exposed through EHG_TS_DSN."""
     import time
+    from datetime import datetime
 
     import psycopg
     migrate.main(["upgrade", "0001", "--url", pg_url])
     dsn = pg_url.replace("+psycopg", "")
     now = time.time()
-    msgs = [message(seq=s, t_inject_host=now - 60 + s * 0.5, t_gw_rx=now - 59.5 + s * 0.5, t_mqtt_pub=now - 59.4 + s * 0.5) for s in (0, 1, 3)]  # seq 2 never arrived
-    PgStore(lambda: psycopg.connect(dsn)).write([(*rows_for(m), now - 59.0) for m in msgs])
+    msgs = [message(s) | {"t_inject_host": now - 60 + s * 0.5} for s in (0, 1, 3)]  # seq 2 never arrived
+
+    def ts(t):
+        return datetime.fromtimestamp(t, tz=timezone.utc)
+    with psycopg.connect(dsn) as conn:
+        for m in msgs:
+            t0, seq = m["t_inject_host"], m["seq"]
+            conn.cursor().executemany("INSERT INTO ehg_raw (time, node, record_id, seq, frame_idx, ch, v) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                                      [(ts(t0 + i / 20), m["node_id"], "0", seq, m["frame_idx"] + i, ch, v) for i, f in enumerate(m["samples"]) for ch, v in enumerate(f)])
+            conn.execute("INSERT INTO ehg_pkt (time, node, seq, n_frames, retrans, replayed, t_inject_dev, t_inject_host, t_gw_rx, t_mqtt_pub, t_ingest_rx, t_db_ack) "
+                         "VALUES (%s, %s, %s, 10, false, false, %s, %s, %s, %s, %s, %s)", (ts(t0), m["node_id"], seq, seq * 16384, t0, t0 + 0.5, t0 + 0.6, now - 59.0, now - 58.9))
     monkeypatch.setenv("EHG_TS_DSN", dsn)
     return msgs
 

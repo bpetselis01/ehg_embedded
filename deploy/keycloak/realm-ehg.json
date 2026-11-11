@@ -438,45 +438,13 @@
     {
       "name": "gateway:enrol",
       "protocol": "openid-connect",
-      "description": "allows POST /enroll on the enrolment API",
+      "description": "marks a phone token as an enrolment request (the enrolment API was removed on 2026-11-11)",
       "attributes": {
         "include.in.token.scope": "true"
       }
     }
   ],
   "clients": [
-    {
-      "clientId": "triage-ui",
-      "name": "Triage page",
-      "publicClient": true,
-      "standardFlowEnabled": true,
-      "implicitFlowEnabled": false,
-      "directAccessGrantsEnabled": false,
-      "serviceAccountsEnabled": false,
-      "redirectUris": [
-        "https://${EHG_DOMAIN}/*"
-      ],
-      "webOrigins": [
-        "https://${EHG_DOMAIN}"
-      ],
-      "attributes": {
-        "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "https://${EHG_DOMAIN}/*"
-      },
-      "protocolMappers": [
-        {
-          "name": "audience-triage-api",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-audience-mapper",
-          "consentRequired": false,
-          "config": {
-            "included.client.audience": "triage-api",
-            "id.token.claim": "false",
-            "access.token.claim": "true"
-          }
-        }
-      ]
-    },
     {
       "clientId": "ios-gateway",
       "name": "iPhone gateway",
@@ -494,17 +462,6 @@
       ],
       "protocolMappers": [
         {
-          "name": "audience-enroll-api",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-audience-mapper",
-          "consentRequired": false,
-          "config": {
-            "included.client.audience": "enroll-api",
-            "id.token.claim": "false",
-            "access.token.claim": "true"
-          }
-        },
-        {
           "name": "gateway-id-from-username",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-usermodel-attribute-mapper",
@@ -520,20 +477,6 @@
           }
         }
       ]
-    },
-    {
-      "clientId": "triage-api",
-      "name": "Triage API (resource server)",
-      "bearerOnly": true,
-      "publicClient": false,
-      "secret": "${TRIAGE_API_CLIENT_SECRET}"
-    },
-    {
-      "clientId": "enroll-api",
-      "name": "Enrolment API (resource server)",
-      "bearerOnly": true,
-      "publicClient": false,
-      "secret": "${ENROLL_API_CLIENT_SECRET}"
     },
     {
       "clientId": "fhir-sync",

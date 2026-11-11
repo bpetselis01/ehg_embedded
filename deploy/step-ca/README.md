@@ -1,5 +1,7 @@
 # deploy/step-ca: the private CA for gateway certificates
 
+**11 Nov 2026:** the enrolment API (`backend/enroll/`), `deploy/crl-sync.sh` and the check scripts named below were removed ([reuse ledger](../../docs/licences.md#reuse-ledger)). Certificates are now issued by an administrator with the `step` CLI against this CA. The notes below record what was verified on 2026-11-04 with the removed code and are kept as history.
+
 [`templates/ehg-gateway.tpl`](templates/ehg-gateway.tpl) is the leaf template the enrolment API relies on: the certificate carries the common name, the `digitalSignature` key usage and the **client-authentication usage only** (no server auth, no CA flag).
 The 7-day lifetime is requested by the API (`notAfter`) and capped in the provisioner's claims (`maxTLSCertDuration`, `defaultTLSCertDuration`), and the API **re-checks** every certificate it gets back (`backend/enroll/csr.py`), so a wrong template shows up as a refused enrolment, not as a wrong certificate in a phone.
 

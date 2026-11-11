@@ -24,7 +24,7 @@ cd "$REPO"
 DEV_ID="${DEV_ID:-1050208294}"
 STATE="$REPO/.run-state"
 DRY=""
-RUNS="default measured faults built-in simulate status fhir passkey button tls iphone platform triage"
+RUNS="default measured faults built-in simulate status fhir passkey button tls iphone"
 LISTED="cloud keycloak hapi-fhir observability oracle"
 RECORD=data/converted/tpehgdb/tpehg1007.npz
 FAULTS="--faults drop=0.05,burst=3,corrupt=0.01,disc=120,seed=3"
@@ -59,10 +59,6 @@ spec() {
 		          NOTE="MQTT over TLS 1.3 with client certificates; no Mac hardware run yet" ;;
 		iphone)   FW="--pairing-button flash"; BACK="tls-lan"; LAUNCH=iphone
 		          NOTE="iPhone app replaces the Mac gateway; foreground, Wi-Fi" ;;
-		platform) BACK=platform
-		          NOTE="NATS + TimescaleDB beside InfluxDB; parity not proven" ;;
-		triage)   BACK=platform; LAUNCH=triage
-		          NOTE="pipeline-health page on 127.0.0.1:8780; never run against real servers" ;;
 		cloud)    STATUS="Planned"; FW=""; BACK=none; LAUNCH=none
 		          NOTE="hosted InfluxDB and Grafana; not built yet, needs accounts" ;;
 		keycloak|hapi-fhir|observability|oracle)
@@ -117,7 +113,7 @@ choose_from_menu() {
 check_tools() {
 	[ -z "$DRY" ] || return 0
 	case "$LAUNCH" in
-		demo|iphone|triage)
+		demo|iphone)
 			nrfutil device list 2>/dev/null | grep -q "$DEV_ID" || { echo "The board ($DEV_ID) is not connected. Plug in the DK and try again."; exit 1; } ;;
 	esac
 	docker info >/dev/null 2>&1 || { echo "Docker is not running. Open Docker Desktop, wait until it is ready, and try again."; exit 1; }
@@ -151,23 +147,19 @@ flash_firmware() {
 
 start_backend() {
 	[ "$BACK" != none ] || return 0
-	platform="docker compose --profile platform -f backend/docker-compose.yml -f backend/docker-compose.platform.yml"
 	tls="docker compose -f backend/docker-compose.yml -f backend/docker-compose.cloud.yml"
 	case "$BACK" in
 		base)     compose="docker compose -f backend/docker-compose.yml" ;;
 		tls)      compose="$tls" ;;
 		tls-lan)  compose="env MQTT_BIND=0.0.0.0 $tls" ;;
-		platform) compose="$platform" ;;
 	esac
-	if [ "$(state backend)" = platform ] && [ "$BACK" != platform ]; then step $platform stop; fi
 	step $compose up -d
-	if [ "$BACK" = platform ]; then step $compose stop ingest; fi
 	[ -n "$DRY" ] || set_state backend "$BACK"
 }
 
 check_outbox() {
 	[ -z "$DRY" ] || return 0
-	case "$LAUNCH" in demo|simulate|triage) ;; *) return 0 ;; esac
+	case "$LAUNCH" in demo|simulate) ;; *) return 0 ;; esac
 	case "$GW" in *--no-outbox*) return 0 ;; esac
 	[ -f gateway/outbox.db ] || return 0
 	code=0
@@ -216,10 +208,6 @@ launch() {
 		iphone)
 			echo "Open the EHG Gateway app on the iPhone and start it. Steps: docs/ios-gateway.md. Press Button 2 to pair for the first time."
 			step uv run python tools/feed.py "$RECORD" ;;
-		triage)
-			start_demo
-			step env AUTH_MODE=dev "EHG_TRIAGE_DSN=host=localhost port=5433 dbname=ehg user=ehg_triage password=local-only-change-me" \
-				NATS_URL=nats://localhost:4222 uv run python -m backend.triage.stream ;;
 		none) ;;
 	esac
 }

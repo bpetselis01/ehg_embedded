@@ -1,5 +1,7 @@
 # 0013. Keycloak for people and services, step-ca for device certificates
 
+**Superseded 11 Nov 2026.** The enrolment API was removed; the `step` CLI with step-ca covers this. See the [reuse ledger](../licences.md#reuse-ledger). The record below is kept as written.
+
 **Date:** 2026-11-03
 
 ## Status

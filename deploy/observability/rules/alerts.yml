@@ -1,51 +1,13 @@
 # PURPOSE: Alert rules for the cloud core. Messages carry NO sensitive content: a rule name, a number and a pointer to docs/dr.md.
-# INPUT: the recording rules of slo.yml and raw metrics of the services, node-exporter's textfile (ehg_disk_*) and the backup script.
+# INPUT: the recording rule of slo.yml, up{} from the scrape jobs, node-exporter's textfile (ehg_disk_*) and the backup script.
 # OUTPUT: alerts sent to Alertmanager (deploy/observability/alertmanager.yml). Severity "page" is for things that stop data being kept; "ticket" for things to look at within a day.
 # HOW: Every alert has a `for` period so a single bad scrape does not fire it. A source that stops reporting is an alert of its own (absent()), because silence must never read as "fine".
 # STATUS: every alert is exercised by promtool unit tests (deploy/observability/tests/rules_test.yml): fires after its `for`, stays quiet when healthy.
 # ROLE IN THESIS: Failure detection for the drills in docs/dr.md.
-# BEFORE -> AFTER: Before: nothing watched the VM. After: 15 alerts.
+# BEFORE -> AFTER: Before: nothing watched the VM. After: 4 alerts (11 pipeline alerts were removed on 2026-11-11 with the services whose metrics they read).
 groups:
   - name: ehg_alerts
     rules:
-      - alert: EhgDeliveryBelowObjective
-        expr: ehg:delivery_ratio:5m < 0.99
-        for: 10m
-        labels: {severity: ticket}
-        annotations: {summary: "Fleet packet delivery below 99 % for 10 minutes", detail: "See docs/slo.md"}
-      - alert: EhgLatencyAboveObjective
-        expr: ehg:latency_p95_seconds:5m > 2
-        for: 10m
-        labels: {severity: ticket}
-        annotations: {summary: "Worst-node p95 latency above 2 s for 10 minutes", detail: "See docs/slo.md"}
-      - alert: EhgNoTelemetry
-        expr: absent(ehg_fleet_nodes_reporting) or ehg_fleet_nodes_reporting == 0
-        for: 15m
-        labels: {severity: ticket}
-        annotations: {summary: "No node has reported for 15 minutes (nodes may simply be switched off)", detail: "See docs/dr.md"}
-      - alert: EhgConsumerBacklog
-        expr: ehg:consumer_pending:max > 100
-        for: 5m
-        labels: {severity: page}
-        annotations: {summary: "A bus consumer is more than 100 messages behind for 5 minutes", detail: "See docs/dr.md"}
-      - alert: EhgConsumerLagUnknown
-        expr: ehg_consumer_pending != ehg_consumer_pending
-        for: 5m
-        labels: {severity: page}
-        annotations: {summary: "A bus consumer's backlog cannot be read (NATS may be down)", detail: "See docs/dr.md"}
-      - alert: EhgWriterDegraded
-        expr: ehg_writer_degraded == 1
-        for: 2m
-        labels: {severity: page}
-        annotations: {summary: "The database writer cannot reach PostgreSQL; messages are held by NATS", detail: "See docs/dr.md"}
-      - alert: EhgDeadLetters
-        expr: increase(ehg_triage_dead_letters_total[15m]) > 0
-        labels: {severity: page}
-        annotations: {summary: "A bus message exceeded its delivery attempts", detail: "See docs/dr.md"}
-      - alert: EhgBadMessages
-        expr: increase(ehg_triage_bad_messages_total[15m]) > 0
-        labels: {severity: ticket}
-        annotations: {summary: "Messages were kept under EHG.BAD.* (malformed input)", detail: "See docs/security.md"}
       - alert: EhgTargetDown
         expr: up == 0
         for: 5m
@@ -65,17 +27,3 @@ groups:
         for: 26h
         labels: {severity: page}
         annotations: {summary: "No backup has ever been reported", detail: "See docs/dr.md"}
-      - alert: EhgNatsStorageHigh
-        expr: gnatsd_varz_jetstream_stats_storage / gnatsd_varz_jetstream_config_max_storage > 0.8
-        for: 10m
-        labels: {severity: ticket}
-        annotations: {summary: "JetStream file storage is more than 80 % of its cap (max_file_store in deploy/nats/nats.conf)", detail: "See docs/dr.md"}
-      - alert: EhgNatsSlowConsumers
-        expr: increase(gnatsd_varz_slow_consumers[15m]) > 0
-        labels: {severity: ticket}
-        annotations: {summary: "NATS dropped a slow client in the last 15 minutes", detail: "See docs/dr.md"}
-      - alert: EhgMosquittoDown
-        expr: ehg_mosquitto_up == 0
-        for: 5m
-        labels: {severity: page}
-        annotations: {summary: "The MQTT exporter cannot reach the broker for 5 minutes", detail: "See docs/dr.md"}

@@ -1,5 +1,7 @@
 # 0012. Cloud data platform: Mosquitto, NATS JetStream and PostgreSQL with TimescaleDB
 
+**Superseded 11 Nov 2026.** The MQTT-to-NATS bridge, NATS and the TimescaleDB writer were removed; Telegraf is the standard tool for the broker-to-database step and is not configured here. See the [reuse ledger](../licences.md#reuse-ledger). The record below is kept as written.
+
 **Date:** 2026-11-03
 
 ## Status

@@ -1,11 +1,9 @@
-"""Checks the provisioned Grafana alert rules: same thresholds as the triage rules, the local datasource only, no clinical wording, nothing that Grafana would expand or send elsewhere."""
+"""Checks the provisioned Grafana alert rules: fixed thresholds, the local datasource only, no clinical wording, nothing that Grafana would expand or send elsewhere."""
 
 import re
 from pathlib import Path
 
 import yaml
-
-from backend.triage.rules import Config
 
 ROOT = Path(__file__).parents[1]
 FILE = ROOT / "backend/grafana/provisioning/alerting/ehg-health.yml"
@@ -25,12 +23,12 @@ def test_the_five_rules_exist_and_evaluate_every_10_s():
     assert set(rules()) == {"ehg-node-offline", "ehg-loss-rate", "ehg-latency-p95", "ehg-flatline", "ehg-saturation"}
 
 
-def test_thresholds_equal_the_triage_defaults():
-    r, cfg = rules(), Config()
-    assert threshold(r["ehg-node-offline"]) == cfg.offline_min_s
-    assert threshold(r["ehg-loss-rate"]) == cfg.loss_rate * 100
-    assert threshold(r["ehg-latency-p95"]) == cfg.latency_warn_ms / 1000
-    assert threshold(r["ehg-saturation"]) == cfg.saturation_pct
+def test_thresholds():
+    r = rules()
+    assert threshold(r["ehg-node-offline"]) == 5
+    assert threshold(r["ehg-loss-rate"]) == 1
+    assert threshold(r["ehg-latency-p95"]) == 2
+    assert threshold(r["ehg-saturation"]) == 5
     assert threshold(r["ehg-flatline"]) == 0
 
 

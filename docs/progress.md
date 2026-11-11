@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-11-11: custom-code reduction (build-vs-reuse audit)
+
+- **Removed:** the triage service and page, enrolment API, MQTT-to-NATS bridge, `backend/bus.py`, TimescaleDB writer, Mosquitto exporter, `backend/jwtauth.py`, and code left with no caller. 56 files deleted, 20 of them tests. The `platform` and `triage` runs left `tools/run.sh`. FastAPI, uvicorn and PyJWT left the dependencies. Standard tools are named in the [reuse ledger](licences.md#reuse-ledger); no new configs were written.
+- **`deploy/` trimmed to match:** 15 services plus step-ca in the `enrol` profile. Caddy fronts Keycloak and Grafana only.
+- **Checked:** `uv run pytest -q`: 461 passed, 18 skipped. Before: 915 passed, 20 skipped. `docs/security.md` no longer names the removed tests (edited with Byron's OK; Byron's own uncommitted edit kept). `tools/run.sh --dry-run default` is byte-identical to before. `docker compose config` resolves the trimmed stack.
+- **NOT done / not verified:** the trimmed stack was never started; the trimmed image was not built; the trimmed Keycloak realm was not imported; `shellcheck`, `promtool` and `caddy validate` were not run (not installed).
+- **Consequences:** nothing fills TimescaleDB, so `fhir-sync` has no data until a Telegraf step exists; the iPhone enrolment screen has no server; the revocation list reaches the broker by hand; backups no longer record an audit-chain head; delivery and latency objectives on the VM are gone (H1 and H2 are still measured by `eval/`).
+
 ## 2026-11-11: run selector, signal metrics, Grafana alerts; default run on the real board
 
 - **Added:** `tools/run.sh` (menu of the Thesis A default and every optional run, with status labels; asks before flashing), `backend/signal_metrics/worker.py` (RMS, median frequency, flatline, saturation into `ehg_metric`; not clinical information), five provisioned Grafana alert rules, five dashboard panels. `gateway/outbox` stays on in the default run.

@@ -2,7 +2,7 @@
 # INPUT: log lines pushed to http://loki:3100 by Alloy. OUTPUT: queryable logs for Grafana.
 # HOW: Standard single-binary layout: filesystem storage under /loki, TSDB index (schema v13), the compactor deletes data older than 168 h.
 # STATUS: UNVERIFIED against the pinned Loki version (nobody has started it yet).
-# ROLE IN THESIS: Searchable logs, including the audit log lines of the triage service later (docs/decisions/0016).
+# ROLE IN THESIS: Searchable logs (docs/decisions/0016).
 # BEFORE -> AFTER: Before: logs only in `docker logs`. After: 7 days of logs in Grafana.
 auth_enabled: false
 

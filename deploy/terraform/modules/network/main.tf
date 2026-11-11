@@ -1,7 +1,7 @@
 # PURPOSE: The VM's private network: one VCN, one public subnet, an internet gateway and a security list that opens only what the design needs.
 # INPUT: compartment_ocid, admin_cidr (variables.tf). OUTPUT: subnet_id.
 # HOW: Inbound TCP 22 only from admin_cidr; 80 and 443 (Caddy, the Let's Encrypt challenge and the web pages) and 8883 (MQTT over TLS 1.3 with client certificates) from anywhere.
-#   Everything else inbound is closed (so Postgres 5432, InfluxDB 8086, NATS 4222, the triage API 8780 and the old Grafana 3300 are NOT reachable). ICMP type 3 code 4
+#   Everything else inbound is closed (so Postgres 5432, InfluxDB 8086 and the old Grafana 3300 are NOT reachable). ICMP type 3 code 4
 #   is allowed so path-MTU discovery works. All outbound is allowed. The VM's own firewall (cloud-init) repeats these rules.
 # ROLE IN THESIS: The network boundary of the cloud core (docs/security.md, docs/production-topology.md).
 # BEFORE -> AFTER: Before: no network. After apply: a /16 VCN with a /24 public subnet.
@@ -67,7 +67,7 @@ resource "oci_core_security_list" "ehg" {
   }
 
   ingress_security_rules {
-    description = "HTTPS (Caddy: triage page, Grafana, Keycloak, FHIR)"
+    description = "HTTPS (Caddy: Grafana, Keycloak)"
     protocol    = "6"
     source      = "0.0.0.0/0"
     stateless   = false

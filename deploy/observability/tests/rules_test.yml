@@ -1,149 +1,16 @@
-# PURPOSE: Unit tests of the SLO recording rules and the alert rules, run by promtool (`promtool test rules`): each alert fires when it should, and stays quiet when it should.
+# PURPOSE: Unit tests of the recording rule and the alert rules, run by promtool (`promtool test rules`): each alert fires when it should, and stays quiet when it should.
 # RUN: docker run --rm --entrypoint promtool -v "$PWD/deploy/observability:/o:ro" prom/prometheus:v3.15.1 test rules /o/tests/rules_test.yml   (tests/test_promtool_rules.py does this when Docker is up)
-# HOW: input_series are the metrics the services export (backend/triage/slis.py, the writer, node-exporter's textfile, deploy/backup/backup.sh); `for` periods are crossed on purpose; negative cases assert an EMPTY alert list.
+# HOW: input_series are the metrics the services export (node-exporter's textfile, deploy/backup/backup.sh); `for` periods are crossed on purpose; negative cases assert an EMPTY alert list.
 rule_files:
   - ../rules/slo.yml
   - ../rules/alerts.yml
 evaluation_interval: 30s
 
 tests:
-  - name: delivery below 99 percent for 10 minutes fires; a healthy fleet does not
-    interval: 15s
-    input_series:
-      - {series: 'ehg_fleet_packets_60s{kind="rx"}', values: '90+0x240'}
-      - {series: 'ehg_fleet_packets_60s{kind="missing"}', values: '20+0x240'}
-    alert_rule_test:
-      - eval_time: 5m
-        alertname: EhgDeliveryBelowObjective
-        exp_alerts: []   # below the objective, but not yet for 10 minutes
-      - eval_time: 20m
-        alertname: EhgDeliveryBelowObjective
-        exp_alerts:
-          - exp_labels: {severity: ticket}
-            exp_annotations: {summary: "Fleet packet delivery below 99 % for 10 minutes", detail: "See docs/slo.md"}
-    promql_expr_test:
-      - expr: ehg:delivery_ratio:5m
-        eval_time: 10m
-        exp_samples:
-          - {labels: 'ehg:delivery_ratio:5m', value: 0.8181818181818182}
-
-  - name: a healthy fleet raises nothing and the ratio is 1
-    interval: 15s
-    input_series:
-      - {series: 'ehg_fleet_packets_60s{kind="rx"}', values: '120+0x240'}
-      - {series: 'ehg_fleet_packets_60s{kind="missing"}', values: '0+0x240'}
-      - {series: 'ehg_fleet_nodes_reporting', values: '3+0x240'}
-      - {series: 'ehg_fleet_latency_p95_seconds', values: '0.5+0x240'}
-    alert_rule_test:
-      - {eval_time: 30m, alertname: EhgDeliveryBelowObjective, exp_alerts: []}
-      - {eval_time: 30m, alertname: EhgLatencyAboveObjective, exp_alerts: []}
-      - {eval_time: 30m, alertname: EhgNoTelemetry, exp_alerts: []}
-    promql_expr_test:
-      - {expr: ehg:delivery_ratio:5m, eval_time: 10m, exp_samples: [{labels: 'ehg:delivery_ratio:5m', value: 1}]}
-
-  - name: no packets at all (the ratio is 0/0 = NaN, which is never a breach and never reads as 100 percent)
-    interval: 15s
-    input_series:
-      - {series: 'ehg_fleet_packets_60s{kind="rx"}', values: '0+0x240'}
-      - {series: 'ehg_fleet_packets_60s{kind="missing"}', values: '0+0x240'}
-    alert_rule_test:
-      - {eval_time: 30m, alertname: EhgDeliveryBelowObjective, exp_alerts: []}
-
-  - name: worst-node latency above 2 s for 10 minutes fires
-    interval: 15s
-    input_series:
-      - {series: 'ehg_fleet_latency_p95_seconds', values: '3+0x240'}
-    alert_rule_test:
-      - eval_time: 20m
-        alertname: EhgLatencyAboveObjective
-        exp_alerts:
-          - exp_labels: {severity: ticket}
-            exp_annotations: {summary: "Worst-node p95 latency above 2 s for 10 minutes", detail: "See docs/slo.md"}
-
-  - name: no telemetry fires when the gauge is zero or missing for 15 minutes
-    interval: 15s
-    input_series:
-      - {series: 'ehg_fleet_nodes_reporting', values: '0+0x240'}
-    alert_rule_test:
-      - eval_time: 10m
-        alertname: EhgNoTelemetry
-        exp_alerts: []
-      - eval_time: 20m
-        alertname: EhgNoTelemetry
-        exp_alerts:
-          - exp_labels: {severity: ticket}
-            exp_annotations: {summary: "No node has reported for 15 minutes (nodes may simply be switched off)", detail: "See docs/dr.md"}
-
-  - name: a missing source is an alert of its own
-    interval: 15s
-    input_series:
-      - {series: 'up{job="triage"}', values: '1+0x240'}
-    alert_rule_test:
-      - eval_time: 20m
-        alertname: EhgNoTelemetry
-        exp_alerts:
-          - exp_labels: {severity: ticket}
-            exp_annotations: {summary: "No node has reported for 15 minutes (nodes may simply be switched off)", detail: "See docs/dr.md"}
-
-  - name: consumer backlog over 100 for 5 minutes pages, the max is taken per consumer
-    interval: 15s
-    input_series:
-      - {series: 'ehg_consumer_pending{consumer="ts-writer"}', values: '150+0x240'}
-      - {series: 'ehg_consumer_pending{consumer="triage"}', values: '3+0x240'}
-    alert_rule_test:
-      - eval_time: 3m
-        alertname: EhgConsumerBacklog
-        exp_alerts: []
-      - eval_time: 10m
-        alertname: EhgConsumerBacklog
-        exp_alerts:
-          - exp_labels: {severity: page, consumer: ts-writer}
-            exp_annotations: {summary: "A bus consumer is more than 100 messages behind for 5 minutes", detail: "See docs/dr.md"}
-
-  - name: an unreadable backlog (NaN) pages
-    interval: 15s
-    input_series:
-      - {series: 'ehg_consumer_pending{consumer="ts-writer",job="ts-writer"}', values: 'NaN+0x240'}
-    alert_rule_test:
-      - eval_time: 10m
-        alertname: EhgConsumerLagUnknown
-        exp_alerts:
-          - exp_labels: {severity: page, consumer: ts-writer, job: ts-writer}
-            exp_annotations: {summary: "A bus consumer's backlog cannot be read (NATS may be down)", detail: "See docs/dr.md"}
-
-  - name: a degraded writer pages after 2 minutes
-    interval: 15s
-    input_series:
-      - {series: 'ehg_writer_degraded{job="ts-writer"}', values: '0x4 1+0x120'}
-    alert_rule_test:
-      - eval_time: 2m
-        alertname: EhgWriterDegraded
-        exp_alerts: []
-      - eval_time: 6m
-        alertname: EhgWriterDegraded
-        exp_alerts:
-          - exp_labels: {severity: page, job: ts-writer}
-            exp_annotations: {summary: "The database writer cannot reach PostgreSQL; messages are held by NATS", detail: "See docs/dr.md"}
-
-  - name: a dead letter pages at once; a quiet counter does not
-    interval: 15s
-    input_series:
-      - {series: 'ehg_triage_dead_letters_total{job="triage"}', values: '0x20 1+0x100'}
-      - {series: 'ehg_triage_bad_messages_total{job="triage"}', values: '0+0x120'}
-    alert_rule_test:
-      - eval_time: 10m
-        alertname: EhgDeadLetters
-        exp_alerts:
-          - exp_labels: {severity: page, job: triage}
-            exp_annotations: {summary: "A bus message exceeded its delivery attempts", detail: "See docs/dr.md"}
-      - eval_time: 10m
-        alertname: EhgBadMessages
-        exp_alerts: []
-
   - name: a target down for 5 minutes pages
     interval: 15s
     input_series:
-      - {series: 'up{job="bridge",instance="bridge:9201"}', values: '1x8 0+0x120'}
+      - {series: 'up{job="postgres",instance="postgres-exporter:9187"}', values: '1x8 0+0x120'}
       - {series: 'up{job="loki",instance="loki:3100"}', values: '1+0x128'}
     alert_rule_test:
       - eval_time: 4m
@@ -152,7 +19,7 @@ tests:
       - eval_time: 10m
         alertname: EhgTargetDown
         exp_alerts:
-          - exp_labels: {severity: page, job: bridge, instance: "bridge:9201"}
+          - exp_labels: {severity: page, job: postgres, instance: "postgres-exporter:9187"}
             exp_annotations: {summary: "A scrape target has been down for 5 minutes", detail: "See docs/dr.md"}
 
   - name: a volume below 15 percent free pages after 10 minutes
@@ -199,81 +66,12 @@ tests:
           - exp_labels: {severity: page}
             exp_annotations: {summary: "No backup has ever been reported", detail: "See docs/dr.md"}
 
-  - name: readable backlogs, a healthy writer and a plentiful disk raise nothing
+  - name: a plentiful disk and a target that is up raise nothing
     interval: 15s
     input_series:
-      - {series: 'ehg_consumer_pending{consumer="ts-writer",job="ts-writer"}', values: '3+0x240'}
-      - {series: 'ehg_writer_degraded{job="ts-writer"}', values: '0+0x240'}
       - {series: 'ehg_disk_avail_bytes{mount="/"}', values: '60+0x240'}
       - {series: 'ehg_disk_size_bytes{mount="/"}', values: '100+0x240'}
-      - {series: 'up{job="bridge",instance="bridge:9201"}', values: '1+0x240'}
-      - {series: 'ehg_triage_dead_letters_total{job="triage"}', values: '0+0x240'}
-      - {series: 'ehg_triage_bad_messages_total{job="triage"}', values: '0+0x240'}
+      - {series: 'up{job="postgres",instance="postgres-exporter:9187"}', values: '1+0x240'}
     alert_rule_test:
-      - {eval_time: 30m, alertname: EhgConsumerLagUnknown, exp_alerts: []}
-      - {eval_time: 30m, alertname: EhgConsumerBacklog, exp_alerts: []}
-      - {eval_time: 30m, alertname: EhgWriterDegraded, exp_alerts: []}
       - {eval_time: 30m, alertname: EhgDiskLow, exp_alerts: []}
       - {eval_time: 30m, alertname: EhgTargetDown, exp_alerts: []}
-      - {eval_time: 30m, alertname: EhgDeadLetters, exp_alerts: []}
-      - {eval_time: 30m, alertname: EhgBadMessages, exp_alerts: []}
-
-  - name: bad messages kept under EHG.BAD raise a ticket
-    interval: 15s
-    input_series:
-      - {series: 'ehg_triage_bad_messages_total{job="triage"}', values: '0x20 2+0x100'}
-    alert_rule_test:
-      - eval_time: 10m
-        alertname: EhgBadMessages
-        exp_alerts:
-          - exp_labels: {severity: ticket, job: triage}
-            exp_annotations: {summary: "Messages were kept under EHG.BAD.* (malformed input)", detail: "See docs/security.md"}
-
-  - name: JetStream storage above 80 percent of its cap for 10 minutes raises a ticket; plenty of room does not
-    interval: 15s
-    input_series:
-      - {series: 'gnatsd_varz_jetstream_stats_storage', values: '17+0x240'}
-      - {series: 'gnatsd_varz_jetstream_config_max_storage', values: '20+0x240'}
-    alert_rule_test:
-      - eval_time: 5m
-        alertname: EhgNatsStorageHigh
-        exp_alerts: []
-      - eval_time: 20m
-        alertname: EhgNatsStorageHigh
-        exp_alerts:
-          - exp_labels: {severity: ticket}
-            exp_annotations: {summary: "JetStream file storage is more than 80 % of its cap (max_file_store in deploy/nats/nats.conf)", detail: "See docs/dr.md"}
-
-  - name: JetStream with room to spare is quiet
-    interval: 15s
-    input_series:
-      - {series: 'gnatsd_varz_jetstream_stats_storage', values: '2+0x240'}
-      - {series: 'gnatsd_varz_jetstream_config_max_storage', values: '20+0x240'}
-      - {series: 'gnatsd_varz_slow_consumers', values: '0+0x240'}
-    alert_rule_test:
-      - {eval_time: 30m, alertname: EhgNatsStorageHigh, exp_alerts: []}
-      - {eval_time: 30m, alertname: EhgNatsSlowConsumers, exp_alerts: []}
-
-  - name: a slow client dropped by NATS raises a ticket
-    interval: 15s
-    input_series:
-      - {series: 'gnatsd_varz_slow_consumers', values: '0x20 1+0x100'}
-    alert_rule_test:
-      - eval_time: 10m
-        alertname: EhgNatsSlowConsumers
-        exp_alerts:
-          - exp_labels: {severity: ticket}
-            exp_annotations: {summary: "NATS dropped a slow client in the last 15 minutes", detail: "See docs/dr.md"}
-
-  - name: an exporter that cannot reach the broker pages after 5 minutes; a connected one does not
-    interval: 15s
-    input_series:
-      - {series: 'ehg_mosquitto_up{job="mosquitto"}', values: '1x8 0+0x120'}
-      - {series: 'ehg_mosquitto_up{job="mosquitto2"}', values: '1+0x128'}
-    alert_rule_test:
-      - {eval_time: 1m, alertname: EhgMosquittoDown, exp_alerts: []}
-      - eval_time: 10m
-        alertname: EhgMosquittoDown
-        exp_alerts:
-          - exp_labels: {severity: page, job: mosquitto}
-            exp_annotations: {summary: "The MQTT exporter cannot reach the broker for 5 minutes", detail: "See docs/dr.md"}

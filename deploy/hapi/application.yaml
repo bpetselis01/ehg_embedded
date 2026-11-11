@@ -1,7 +1,7 @@
 # PURPOSE: Configuration of the reference EHR, HAPI FHIR JPA server (image hapiproject/hapi:v7.6.0), as a FHIR R5 server on the private Docker network.
 # INPUT: mounted read-only at /app/config/application.yaml with SPRING_CONFIG_LOCATION=file:///app/config/application.yaml; the database password comes from the environment variable HAPI_DB_PASSWORD
 #   (Spring resolves ${...} from the environment); database `hapi` and role `hapi` are created by deploy/postgres/10-init-databases.sh.
-# OUTPUT: a FHIR R5 endpoint at http://hapi:8080/fhir that only the triage facade (backend/triage/fhir_api.py) and the sync worker (backend/fhir_sync/worker.py) talk to. Caddy does not route it.
+# OUTPUT: a FHIR R5 endpoint at http://hapi:8080/fhir that only the sync worker (backend/fhir_sync/worker.py) talks to. Caddy does not route it.
 # HOW: Key names were read from the starter's own application.yaml at tag image/v7.6.0 (2026-11-04), then reduced to what we need. Differences from the starter's defaults, on purpose:
 #   cors: nothing listed, so a browser cannot call HAPI directly (the default allows every origin with credentials); openapi_enabled false and no `tester` section (no web UI, no Swagger);
 #   delete_expunge_enabled / expunge_enabled false and allow_multiple_delete false (a mass delete of patient-linked data must not be one request away); enforce_referential_integrity_on_write true;
