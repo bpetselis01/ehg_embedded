@@ -14,6 +14,6 @@ jobs:
           fetch-depth: 0  # full history, for the authorship check below
       # Byron is the sole author: no AI co-author trailers or "Generated with" lines in any commit
       - run: "! git log --format=%B | grep -inE 'co-authored-by:.*(claude|anthropic)|generated with \\[?claude'"
-      - uses: astral-sh/setup-uv@v10.3.2  # this action publishes exact tags only, no moving v10
+      - uses: astral-sh/setup-uv@v10.3.3  # this action publishes exact tags only, no moving v10
       - run: uv sync --frozen
       - run: uv run pytest -q
