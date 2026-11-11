@@ -27,7 +27,7 @@ Docker was not running when it was written, and the cloud steps are yours (`terr
 
 | Checked | How |
 |---|---|
-| `terraform fmt` clean; `terraform validate` passes against the real Oracle provider 9.11.0 schema | Terraform 1.14.9 here; `EHG_INTEGRATION=1 uv run pytest tests/test_deploy_assets.py` (needs network for `init`) |
+| `terraform fmt` clean; `terraform validate` passes against the real Oracle provider schema (9.11.0, and 9.12.1 again on 2026-11-11) | Terraform 1.14.9 here; `EHG_INTEGRATION=1 uv run pytest tests/test_deploy_assets.py` (needs network for `init`) |
 | Free-tier numbers (2 OCPU / 12 GB A1, 200 GB volumes, 10 TB egress, 20 GB object storage, idle rule) | Oracle's own "Always Free Resources" page, fetched 2026-11-03 |
 | Every image pinned by version and digest has a `linux/arm64` manifest (Keycloak 26.8.1, HAPI v7.6.0 and the Python base image added and checked 2026-11-04) | Registry HTTP API (Docker was not running) |
 | Compose resolves; a missing secret stops it with the variable's name; only 80/443/8883 are published; host mounts are limited to five read-only paths (no host root, `/run`, Docker data directory or socket); only Caddy and Mosquitto are on a network with a route out; memory limits plus reserved services fit the 9.5 GB ceiling | `docker compose config` (needs no daemon) and the tests |
