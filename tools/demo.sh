@@ -22,6 +22,7 @@
 #   stop the gateway first (it sends STOP), or press Button 1.
 # BEFORE -> AFTER: Before: flashed board, running backend. After: Ctrl-C each window to stop;
 #   then eval/integrity.py and eval/latency.py --since <run length> give the H2/H4 and H1 numbers.
+#   While it runs, eval/run_check.py --watch 30 prints PASS/FAIL against those targets every 30 s.
 # OPTIONS (environment, used by tools/run.sh; no double quotes): GATEWAY_ARGS, extra gateway flags; VIEWER_ENV, variables for the viewer; MOSQ_SUB_ARGS,
 #   replaces mosquitto_sub's "-h localhost"; DEMO_DRY_RUN=1, print "title<TAB>command" per window and open nothing.
 set -e

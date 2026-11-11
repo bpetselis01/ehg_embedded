@@ -192,6 +192,7 @@ Step by step:
 | [`eval/backend_client.py`](../eval/backend_client.py) | shared database queries |
 | [`eval/latency.py`](../eval/latency.py) | H1 numbers and CDF plot |
 | [`eval/integrity.py`](../eval/integrity.py) | H2 delivery and H4 bit-exact numbers |
+| [`eval/run_check.py`](../eval/run_check.py) | live PASS/FAIL check of a running demo against the H1, H2 and H4 targets |
 | `tests/*.py` | automatic checks for the pure-logic parts, and [`test_docs.py`](../tests/test_docs.py): the docs and the two wire-format copies still match the code (`uv run pytest -q`, also on every push: [`.github/workflows/tests.yml`](../.github/workflows/tests.yml)) |
 
 ## The Grafana dashboard ([`ehg-overview.json`](../backend/grafana/dashboards/ehg-overview.json))

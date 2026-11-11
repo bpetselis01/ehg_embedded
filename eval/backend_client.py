@@ -78,10 +78,10 @@ def _influx_frames(node: str, since: str, latest_run: bool = False) -> tuple[int
     frames, record_id, times, previous = {}, None, {}, -1
     for rec in client().query_api().query_stream(q):
         v = rec.values
-        record_id = int(v["record_id"])
         chans = sorted((k for k in v if k[0] == "c" and k[1:].isdigit()), key=lambda k: int(k[1:]))
-        if latest_run and (v["frame_idx"] is None or any(v[k] is None for k in chans)):
+        if v.get("record_id") is None or v.get("frame_idx") is None or any(v[k] is None for k in chans):
             continue  # a live query can see a row whose fields are still being written
+        record_id = int(v["record_id"])
         idx = int(v["frame_idx"])
         if latest_run and idx < previous:  # sorted by time, so a lower number means a new run started
             frames, times = {}, {}
@@ -93,12 +93,16 @@ def _influx_frames(node: str, since: str, latest_run: bool = False) -> tuple[int
     return record_id, frames, times[min(times)]
 
 
+PKT_REQUIRED = ("seq", "n_frames", "t_inject_dev", "t_gw_rx", "t_db_ack")
+
+
 def _influx_pkts(node: str, since: str) -> list[dict]:
     """Packet timing rows of the node in the window, from InfluxDB."""
     q = f'''from(bucket:"{_env()["INFLUX_BUCKET"]}") |> range(start:-{since})
       |> filter(fn:(r) => r._measurement == "ehg_pkt" and r.node_id == "{node}")
       |> pivot(rowKey:["_time"], columnKey:["_field"], valueColumn:"_value")'''
-    return [rec.values for rec in client().query_api().query_stream(q)]
+    rows = (rec.values for rec in client().query_api().query_stream(q))
+    return [v for v in rows if all(v.get(k) is not None for k in PKT_REQUIRED)]  # skip rows still being written
 
 
 # ---------------------------------------------------------------- PostgreSQL / TimescaleDB
