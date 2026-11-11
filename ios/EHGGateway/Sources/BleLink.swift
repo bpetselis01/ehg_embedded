@@ -26,6 +26,9 @@ final class BleLink: NSObject, ObservableObject, CBCentralManagerDelegate, CBPer
     private var running = false
     private var admission = NodeAdmission(allowed: [])
     private var refused = Set<String>()   // log each refusal once
+    private var rxSeen = Set<UUID>()               // got a packet since this connection began
+    private var startTries: [UUID: Int] = [:]       // START re-sends since this connection began
+    private var lastStart: [UUID: Double] = [:]
     private var advertised: [UUID: String] = [:]   // CBPeripheral.name is a name iOS cached (once "Nordic_UART_Service" for our board); the advertisement's name is the truth
 
     private func name(of p: CBPeripheral) -> String? { advertised[p.identifier] ?? p.name }
@@ -44,6 +47,7 @@ final class BleLink: NSObject, ObservableObject, CBCentralManagerDelegate, CBPer
         admission = NodeAdmission(allowed: admission.allowed)   // forget the claims: a re-flashed board may come back with a new identifier
         central?.stopScan()
         peripherals.values.forEach { central.cancelPeripheralConnection($0) }
+        peripherals.removeAll(); control.removeAll()   // discovery skips peripherals it already holds: without this, Stop then Start never reconnects (sessions stay, so the gap tracker survives)
     }
 
     private func scanIfReady() {
@@ -85,7 +89,7 @@ final class BleLink: NSObject, ObservableObject, CBCentralManagerDelegate, CBPer
         if sessions[p.identifier] == nil, let n = name(of: p) { sessions[p.identifier] = makeSession(n) }
     }
 
-    func centralManager(_ c: CBCentralManager, didConnect p: CBPeripheral) { state = "connected to \(name(of: p) ?? "?")"; p.discoverServices([Self.service]) }
+    func centralManager(_ c: CBCentralManager, didConnect p: CBPeripheral) { rxSeen.remove(p.identifier); startTries[p.identifier] = 0; state = "connected to \(name(of: p) ?? "?")"; p.discoverServices([Self.service]) }
 
     func centralManager(_ c: CBCentralManager, didDisconnectPeripheral p: CBPeripheral, error: Error?) {
         onLog("\(name(of: p) ?? "?") disconnected: \(error?.localizedDescription ?? "closed")")
@@ -130,6 +134,7 @@ final class BleLink: NSObject, ObservableObject, CBCentralManagerDelegate, CBPer
 
     func peripheral(_ p: CBPeripheral, didUpdateValueFor ch: CBCharacteristic, error: Error?) {
         guard ch.uuid == Self.data, let v = ch.value, let session = sessions[p.identifier] else { return }
+        rxSeen.insert(p.identifier)
         session.requestResend = { [weak self] start, count in self?.writeResend(p, start, count) }
         session.onBytes([UInt8](v), tRx: Date().timeIntervalSince1970)
     }
@@ -143,7 +148,16 @@ final class BleLink: NSObject, ObservableObject, CBCentralManagerDelegate, CBPer
     }
 
     /// Called once a second by the model so a retry falls due even when no packet arrives.
-    func poll() { let now = Date().timeIntervalSince1970; sessions.values.forEach { $0.poll(at: now) } }
+    func poll() {
+        let now = Date().timeIntervalSince1970; sessions.values.forEach { $0.poll(at: now) }
+        // A board on the serial feed ignores START until the feed has configured it, and the board never says so over Bluetooth:
+        // ask again every 5 s (12 times at most) until the first packet of this connection. Never after that, so a Button 1 stop is not fought.
+        for (id, ctl) in control {
+            guard let p = peripherals[id], p.state == .connected, !rxSeen.contains(id), startTries[id, default: 0] < 12, now - lastStart[id, default: 0] >= 5 else { continue }
+            startTries[id, default: 0] += 1; lastStart[id] = now
+            p.writeValue(Data([0x01]), for: ctl, type: .withResponse)
+        }
+    }
 
     var summaries: [(node: String, received: Int, missing: Int, duplicates: Int, bad: Int)] {
         sessions.values.map { ($0.nodeId, $0.gaps.received, $0.gaps.missing.count, $0.gaps.duplicates, $0.bad) }.sorted { $0.node < $1.node }

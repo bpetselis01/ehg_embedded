@@ -196,6 +196,9 @@ static const struct bt_conn_auth_cb auth_cb = {.passkey_display = passkey_displa
 static void pairing_complete(struct bt_conn *conn, bool bonded)
 {
 	LOG_INF("pairing complete (bonded: %s)", bonded ? "yes" : "no");
+#ifdef CONFIG_EHG_PAIRING_BUTTON
+	window_end_ms = 0; /* one new pairing per Button 2 press */
+#endif
 }
 
 static void pairing_failed(struct bt_conn *conn, enum bt_security_err reason)

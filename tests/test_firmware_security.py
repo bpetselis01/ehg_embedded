@@ -97,6 +97,8 @@ def test_button_pairing_permissions_and_window():
     assert "BT_SECURITY_ERR_PAIR_NOT_ALLOWED" in button and "pairing_window_open()" in button  # no window, no new pairing
     assert "passkey_display" not in button and "BT_CONN_TYPE_LE" in button
     assert "DK_BTN2_MSK" in main and "open_pairing_window()" in main
+    complete = main.split("static void pairing_complete")[1].split("}")[0]
+    assert "window_end_ms = 0" in complete  # one new pairing per button press: the window closes after the first bond
 
 
 def test_build_script_has_a_separate_button_build():
