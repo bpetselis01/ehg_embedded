@@ -5,7 +5,6 @@ import importlib.util
 import re
 from pathlib import Path
 
-import pytest
 
 ROOT = Path(__file__).parents[1]
 DOCKERFILE = ROOT / "backend/platform.Dockerfile"
