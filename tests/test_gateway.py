@@ -144,3 +144,63 @@ def test_only_plain_node_names_are_scanned_for():
     from gateway.gateway import NODE_ID_RE
     assert all(NODE_ID_RE.fullmatch(n) for n in ("EHG-93C0", "EHG-0001", "EHG-lab_1"))
     assert not any(NODE_ID_RE.fullmatch(n) for n in ("EHG-+", "EHG-#", "EHG-a/b", "EHG-a b", "EHG-", "XYZ-1", "EHG-" + "x" * 61))
+
+
+class FakeBleakClient:
+    """Stands in for bleak.BleakClient: records control writes, stays connected."""
+    writes: list[bytes] = []
+
+    def __init__(self, device):
+        self.is_connected, self.mtu_size = True, 247
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        self.is_connected = False
+
+    async def start_notify(self, uuid, callback):
+        return None
+
+    async def write_gatt_char(self, uuid, data, response=False):
+        FakeBleakClient.writes.append(bytes(data))
+
+
+def test_stop_makes_the_gateway_send_stop_to_the_board_before_disconnecting(tmp_path, monkeypatch):
+    import types
+
+    import bleak
+
+    from gateway.gateway import OP_START, OP_STOP, run_ble_node
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(bleak, "BleakClient", FakeBleakClient)
+    FakeBleakClient.writes = []
+
+    async def scenario():
+        stop = asyncio.Event()
+        task = asyncio.create_task(run_ble_node(types.SimpleNamespace(name="EHG-TEST"), lambda *a: None, stop))
+        await asyncio.sleep(0.1)
+        stop.set()
+        await asyncio.wait_for(task, 2)  # well inside the 10 s stats interval: the wait ends on stop, not on its timeout
+
+    asyncio.run(scenario())
+    assert FakeBleakClient.writes == [bytes([OP_START]), bytes([OP_STOP])]
+
+
+def test_ctrl_c_sets_stop_instead_of_cancelling(capsys):
+    import os
+    import signal
+
+    from gateway.gateway import install_stop_signals
+
+    async def scenario():
+        stop = asyncio.Event()
+        install_stop_signals(stop)
+        os.kill(os.getpid(), signal.SIGINT)
+        await asyncio.wait_for(stop.wait(), 1)
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            asyncio.get_running_loop().remove_signal_handler(sig)
+        return stop.is_set()
+
+    assert asyncio.run(scenario()) is True
+    assert "sending STOP" in capsys.readouterr().out

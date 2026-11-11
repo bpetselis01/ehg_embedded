@@ -48,7 +48,9 @@ import argparse
 import asyncio
 import csv
 import json
+import os
 import random
+import signal
 import ssl
 import struct
 import time
@@ -287,10 +289,13 @@ async def run_ble_node(device, publish, stop: asyncio.Event):
                 await protected(node_id, lambda: client.start_notify(DATA_UUID, lambda _, data: node.on_bytes(bytes(data), time.time())))
                 await client.write_gatt_char(CTRL_UUID, bytes([OP_START]), response=True)  # no-op if already running
                 while client.is_connected and not stop.is_set():
-                    await asyncio.sleep(10)
-                    print(node.stats())
+                    try:
+                        await asyncio.wait_for(stop.wait(), 10)
+                    except asyncio.TimeoutError:
+                        print(node.stats())
                 if client.is_connected:
-                    await client.write_gatt_char(CTRL_UUID, bytes([OP_STOP]), response=True)
+                    await asyncio.wait_for(client.write_gatt_char(CTRL_UUID, bytes([OP_STOP]), response=True), 5)
+                    print(f"[{node_id}] sent STOP")
         except Exception as e:  # BLE drops are expected; log and reconnect
             print(f"[{node_id}] {type(e).__name__}: {e}; reconnecting in 2 s")
             if stale_bond(e) and not hinted:  # the connect itself can fail this way, outside protected()
@@ -300,22 +305,38 @@ async def run_ble_node(device, publish, stop: asyncio.Event):
     node.close()
 
 
+def install_stop_signals(stop: asyncio.Event) -> None:
+    """Ctrl-C or SIGTERM sets stop, so each node writes STOP before disconnecting. A cancelled task would skip the write and leave
+    the board sampling, and it then refuses the next feeder's CONFIG. A second signal quits at once (the outbox is SQLite WAL)."""
+    def on_signal():
+        if stop.is_set():
+            os._exit(130)
+        print("stopping: sending STOP to each board (Ctrl-C again to quit at once)", flush=True)
+        stop.set()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, on_signal)
+
+
 async def ble_main(args, publish):
     """Scan for up to --nodes boards named EHG-*, then run one run_ble_node per board in parallel."""
     from bleak import BleakScanner
 
+    stop = asyncio.Event()
+    install_stop_signals(stop)
     print(f"scanning for up to {args.nodes} node(s) named {NAME_PREFIX}* ...")
     found = {}
     async with BleakScanner() as scanner:
         deadline = time.time() + args.scan_s
-        while time.time() < deadline and len(found) < args.nodes:
+        while time.time() < deadline and len(found) < args.nodes and not stop.is_set():
             for d, _ in scanner.discovered_devices_and_advertisement_data.values():
                 if d.name and NODE_ID_RE.fullmatch(d.name):
                     found.setdefault(d.name, d)
             await asyncio.sleep(0.5)
+    if stop.is_set():
+        return
     if not found:
         raise SystemExit("no EHG nodes found - is the DK flashed and advertising?")
-    stop = asyncio.Event()
     await asyncio.gather(*(run_ble_node(d, publish, stop) for d in list(found.values())[:args.nodes]))
 
 

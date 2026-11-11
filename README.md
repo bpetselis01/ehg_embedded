@@ -106,9 +106,12 @@ uv run python viewer/server.py                # http://localhost:8765
 uv run python eval/latency.py --node EHG-93C0 --since 1h
 uv run python eval/integrity.py --node EHG-93C0 --since 1h
 uv run python tools/fhir_export.py --node EHG-93C0 --since 10m -o window.json   # FHIR R5 export
+uv run python eval/run_check.py --watch 30     # live PASS/FAIL beside a running demo: arriving, delivery, bit-exact, p95, outbox
 
 # tests (also run on every push: .github/workflows/tests.yml)
 uv run pytest -q
+# the default run on the real board, 5 min, judged by eval/run_check.py (Terminal.app only; CI skips it)
+EHG_HIL=1 uv run pytest -m hardware -s
 ```
 
 The DK serial port is VCOM0 (`/dev/cu.usbmodem0010502082941`, 460800 baud). It carries the recording in (from `tools/feed.py`) and the board's log out, so `feed.py` prints the log: link parameters and, every 10 s, `sent / resent / ring_overflow / starved / max_inject_late`. Only one program can open the port.

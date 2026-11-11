@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-11-11: hardware test and live check of the default run; gateway STOP fixed
+
+- **Bug fixed:** Ctrl-C on the gateway never sent STOP (the `stop` event was never set; the task was cancelled inside its 10 s sleep), so the board kept sampling and refused the next feeder's CONFIG. Ctrl-C and SIGTERM now set `stop`, and the node writes STOP before disconnecting. Tested offline (`tests/test_gateway.py`) and on the board.
+- **Added:** `eval/run_check.py` (live `--watch 30` or `--once`: arriving, delivery > 99 %, bit-exact, p95 < 2 s, outbox not growing) and `tests/test_hardware_default_run.py` (`EHG_HIL=1 uv run pytest -m hardware -s`, Terminal.app only, CI skips it). The eval queries skip half-written rows, so `eval/integrity.py` and `eval/latency.py` work mid-run.
+- **Board result (firmware rebuilt and flashed from 16ff49b plus these changes):** the hardware test passed in 7 min: 600 packets, 6052 frames, delivery 100.00 %, bit-exact 0, p95 476 ms, outbox 0, viewer and Grafana up, STOP sent, no process left. Then the 7-window `tools/demo.sh` for 4 min: every 30 s line PASS (p95 467 to 473 ms); mid-run `integrity.py` 2170/2170, 0 mismatches; `latency.py` p95 478 ms. The demo's feeder started straight after the test's STOP, with no Button 1.
+- **Not verified:** the optional runs; signalling only the `uv run` process does not reach Python (uv does not forward it), so stop scripts must signal the process group, as the test does. A Ctrl-C typed in a window is fine.
+
 ## 2026-11-11: custom-code reduction (build-vs-reuse audit)
 
 - **Removed:** the triage service and page, enrolment API, MQTT-to-NATS bridge, `backend/bus.py`, TimescaleDB writer, Mosquitto exporter, `backend/jwtauth.py`, and code left with no caller. 56 files deleted, 20 of them tests. The `platform` and `triage` runs left `tools/run.sh`. FastAPI, uvicorn and PyJWT left the dependencies. Standard tools are named in the [reuse ledger](licences.md#reuse-ledger); no new configs were written.

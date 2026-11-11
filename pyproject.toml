@@ -33,3 +33,4 @@ dev = [
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+markers = ["hardware: needs the DK, Bluetooth and the local backend; run with EHG_HIL=1 in Terminal.app"]

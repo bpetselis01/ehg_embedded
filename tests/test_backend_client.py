@@ -117,3 +117,26 @@ def test_integrity_reconcile_gives_the_same_answer_from_the_sql_store(loaded):
             source[m["frame_idx"] + i] = f
     r = reconcile(frames, source, 40)
     assert r["delivered"] == 30 and r["mismatches"] == [] and r["missing_ranges"] == [(20, 29)] and r["delivery_pct"] == 75.0
+
+
+def _fake_influx(monkeypatch, rows):
+    recs = [SimpleNamespace(values=v) for v in rows]
+    monkeypatch.setattr(bc, "client", lambda: SimpleNamespace(query_api=lambda: SimpleNamespace(query_stream=lambda q: iter(recs))))
+    monkeypatch.setattr(bc, "_env_cache", {"INFLUX_BUCKET": "ehg", "INFLUX_TOKEN": "t", "INFLUX_ORG": "o"})
+
+
+def test_a_half_written_frame_row_is_skipped_not_a_crash(monkeypatch):
+    """Register item 6: a query during a run can see a row InfluxDB is still filling in."""
+    _fake_influx(monkeypatch, [
+        {"record_id": "0", "frame_idx": 5, "c0": 1, "c1": 2, "c2": 3, "_time": 1},
+        {"record_id": "0", "frame_idx": 6, "c0": 4, "c1": None, "c2": 6, "_time": 2},
+        {"record_id": None, "frame_idx": None, "c0": 7, "c1": 8, "c2": 9, "_time": 3},
+    ])
+    record_id, frames, _ = bc.query_frames("EHG-93C0", "2m", backend="influx")
+    assert record_id == 0 and frames == {5: [1, 2, 3]}
+
+
+def test_a_half_written_packet_row_is_dropped(monkeypatch):
+    full = {"seq": 1, "n_frames": 10, "t_inject_dev": 16384, "t_gw_rx": 10.5, "t_db_ack": 10.6}
+    _fake_influx(monkeypatch, [full, {**full, "seq": 2, "t_db_ack": None}, {**full, "seq": 3, "t_gw_rx": None}])
+    assert [p["seq"] for p in bc.query_pkts("EHG-93C0", "2m", backend="influx")] == [1]

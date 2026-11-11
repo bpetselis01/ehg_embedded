@@ -20,6 +20,16 @@ import uuid
 import pytest
 
 
+def pytest_collection_modifyitems(config, items):
+    """Hardware tests (marker `hardware`) need the DK, Bluetooth (Terminal.app) and the local backend: run only with EHG_HIL=1."""
+    if os.environ.get("EHG_HIL") == "1":
+        return
+    skip = pytest.mark.skip(reason="needs the board: EHG_HIL=1 uv run pytest -m hardware -s, in Terminal.app")
+    for item in items:
+        if "hardware" in item.keywords:
+            item.add_marker(skip)
+
+
 def _pg_bin(name: str) -> str | None:
     """Path of a PostgreSQL program, looking in PATH and in Homebrew's directory."""
     return shutil.which(name) or (f"/opt/homebrew/bin/{name}" if os.path.exists(f"/opt/homebrew/bin/{name}") else None)
