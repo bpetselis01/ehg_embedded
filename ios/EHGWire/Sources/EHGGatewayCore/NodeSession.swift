@@ -1,11 +1,4 @@
-// PURPOSE: Everything the gateway does for ONE board, in the order gateway/gateway.py:Node.on_bytes does it: decode, count a bad packet, teach the clock, track gaps, ask the board for missing packets again at the right time,
-//   build the JSON and hand it to the outbox. A port; change them together.
-// INPUT: onBytes(bytes, tRx) for each notification from the data characteristic; poll(at:) from a 1 s timer so a retry falls due even when no packet arrives; requestResend is set by the Bluetooth layer to write the RESEND command.
-// OUTPUT: outbox.add(...) per good packet on topic ehg/<node>/pkt; requestResend(start, count) calls; counters for the status screen (received, missing, duplicates, streams, bad).
-// HOW: no Bluetooth and no network in here, so it is tested with `swift test`. A bad packet is dropped, never stored; the next packet then shows the gap and the scheduler asks again (up to 5 times, 1 s apart).
-// STATUS: tested with fakes. The Bluetooth and MQTT adapters that drive it are in the app target and have never run on a phone.
-// ROLE IN THESIS: The phone's counterpart of Node (H1, H2).
-// BEFORE -> AFTER: Before: pieces only. After: the whole per-node pipeline.
+// Everything the gateway does for ONE board, in the order gateway/gateway.py:Node.on_bytes does it: decode, count a bad packet, teach the clock, track gaps, ask the board for missing packets again at the right time, build the JSON and hand it to the outbox.
 import EHGWire
 import Foundation
 

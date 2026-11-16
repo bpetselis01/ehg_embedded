@@ -1,5 +1,6 @@
 """Checks deploy/backup/backup.sh and restore_drill.sh against two throwaway local PostgreSQL clusters (no Docker): a real dump, a real restore on a CLEAN second server, the checksum guard,
-the never-overwrite rule, rotation that touches only its own directories, and that a failed backup does NOT refresh the freshness metric. NOT covered: TimescaleDB, restic, a Docker target (see docs/dr.md)."""
+the never-overwrite rule, rotation that touches only its own directories, and that a failed backup does NOT refresh the freshness metric. NOT covered: TimescaleDB, restic, a Docker target.
+"""
 
 import os
 import re

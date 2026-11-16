@@ -1,5 +1,4 @@
-// PURPOSE: Decode every golden vector from tests/fixtures/packet_vectors.json (generated from gateway/packet.py) and demand identical values, a byte-identical re-encode, and the same refusal reason for each bad packet.
-// INPUT: the JSON file, found relative to this source file. OUTPUT: pass/fail. Run: cd ios/EHGWire && swift test   (command line only: no Xcode project, simulator or phone).
+// Decode every golden vector from tests/fixtures/packet_vectors.json (generated from gateway/packet.py) and demand identical values, a byte-identical re-encode, and the same refusal reason for each bad packet.
 import XCTest
 @testable import EHGWire
 

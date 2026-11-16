@@ -1,5 +1,6 @@
 """Guards the third copy of the wire format (Swift, ios/EHGWire): the golden vectors are exactly what gateway/packet.py produces today, every vector parses the way the file says, the Swift constants and field offsets match the Python ones,
-and (opt-in, EHG_INTEGRATION=1, needs the Swift toolchain) `swift test` itself passes. Nothing here touches Xcode, a simulator or a phone."""
+and (opt-in, EHG_INTEGRATION=1, needs the Swift toolchain) `swift test` itself passes. Nothing here touches Xcode, a simulator or a phone.
+"""
 
 import json
 import os

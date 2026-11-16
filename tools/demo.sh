@@ -1,30 +1,9 @@
 #!/bin/sh
 # Start the whole pipeline for a live demo, with one window per hop so packets can be watched moving.
 #   tools/demo.sh                                       normal run (TPEHG tpehg1007)
-#   tools/demo.sh --faults drop=0.05,burst=3,disc=60    same, with injected link faults (docs/fault-injection.md)
-#   tools/demo.sh --built-in                            board flashed with a built-in recording (build.sh flash --record ...):
+#   tools/demo.sh --faults drop=0.05,burst=3,disc=60    same, with injected link faults
+#   tools/demo.sh --built-in                            board flashed with a built-in recording (build.sh flash --record...):
 #                                                       window 1 only sends clock pings (feed.py --sync-only)
-#
-# PURPOSE: One command for a demo instead of 6 terminals started in the right order.
-# INPUT: a flashed DK on USB (firmware/build.sh flash), the backend up (cd backend && docker compose up -d),
-#   mosquitto_sub (brew install mosquitto). Extra arguments go to tools/feed.py (e.g. --faults ...).
-# OUTPUT: 7 Terminal.app windows tiled 4 x 2 in pipeline order, plus 2 browser tabs:
-#   1 BOARD + FEEDER  board log every 10 s (sent / resent / starved ...)
-#   2 BLUETOOTH       each packet the gateway receives, e.g. "254,2540,0,1792465051.533023,82" (seq,frame_idx,flags,t_rx,bytes)
-#   3 GATEWAY         link status every 10 s, e.g. "[EHG-93C0] rx=300 missing=0 dup=0 streams=1 bad=0"
-#   4 MQTT            each message the broker passes on, e.g. 'ehg/EHG-93C0/pkt {"node_id": "EHG-93C0", "seq": 300, ...'
-#   5 DATABASE        each packet stored, e.g. "seq 340  10 frames  stored after 457 ms (radio+batching 452, ...)"
-#   6 VIEWER SERVER   serves http://localhost:8765 (live raw traces); Grafana http://localhost:3300/d/ehg-overview (user admin, GRAFANA_ADMIN_PASSWORD in backend/.env)
-#   7 METRICS         RMS, median frequency, flatline and saturation per channel, every 30 s
-# HOW: Terminal.app windows because only Terminal.app has macOS Bluetooth permission for the gateway.
-#   Order matters: the feeder must have sent CONFIG before the gateway's START, so it starts first.
-#   Restarting only the feeder mid-session fails (the board refuses a new CONFIG while sampling):
-#   stop the gateway first (it sends STOP), or press Button 1.
-# BEFORE -> AFTER: Before: flashed board, running backend. After: Ctrl-C each window to stop;
-#   then eval/integrity.py and eval/latency.py --since <run length> give the H2/H4 and H1 numbers.
-#   While it runs, eval/run_check.py --watch 30 prints PASS/FAIL against those targets every 30 s.
-# OPTIONS (environment, used by tools/run.sh; no double quotes): GATEWAY_ARGS, extra gateway flags; VIEWER_ENV, variables for the viewer; MOSQ_SUB_ARGS,
-#   replaces mosquitto_sub's "-h localhost"; DEMO_DRY_RUN=1, print "title<TAB>command" per window and open nothing.
 set -e
 REPO="$(cd "$(dirname "$0")/.." && pwd -P)"
 [ -n "${DEMO_DRY_RUN:-}" ] || docker info >/dev/null 2>&1 || { echo "Docker is not running: open Docker Desktop, then: cd backend && docker compose up -d"; exit 1; }

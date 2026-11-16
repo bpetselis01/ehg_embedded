@@ -1,7 +1,4 @@
-# PURPOSE: The message interfaces of the pipeline in AsyncAPI 3.0: the two MQTT topics gateways publish to. The NATS subjects and the OpenAPI documents were removed on 2026-11-11 with the bridge, the triage service and the enrolment API.
-# INPUT/OUTPUT: none (documentation). No test checks this file since tests/test_api_docs.py was removed on 2026-11-11; keep it in step with gateway/gateway.py by hand.
-# HOW: Payload field meanings, units and the `replayed` rule are in docs/interface-spec.md section 4. The sample array holds raw ADC counts (int16 or 24-bit), unscaled, so the chain stays bit-exact (H2/H4).
-# NOT DESCRIBED: the BLE GATT wire format (docs/interface-spec.md section 3, tests/fixtures/packet_vectors.json), MQTT over WebSocket on 443 (planned, not built).
+# The message interfaces of the pipeline in AsyncAPI 3.0: the two MQTT topics gateways publish to.
 asyncapi: 3.0.0
 info:
   title: EHG telemetry message interfaces

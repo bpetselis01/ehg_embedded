@@ -30,4 +30,4 @@ An enterprise chain ends in an EHR. No hospital EHR is available, and mock clini
 - The EHR panel shows real stored data, so the demo cannot show clinical context that does not exist.
 - FHIR structure is tested in CI; conformance beyond that is only claimed for what the optional HL7 validator run actually covers.
 
-**Sources:** [hardening prompt](../claude-code-prompt-thesis-b-hardening.md) §2, §4b, §6 (FHIR), §9 Unit 9; [`tools/fhir_export.py`](../../tools/fhir_export.py). HAPI R5 support is unverified until Unit 9.
+**Sources:** hardening prompt §2, §4b, §6 (FHIR), §9 Unit 9; [`tools/fhir_export.py`](../../tools/fhir_export.py). HAPI R5 support is unverified until Unit 9.

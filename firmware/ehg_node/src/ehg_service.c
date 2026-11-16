@@ -1,37 +1,5 @@
-/*
- * ehg_service.c - packs frames into numbered packets, sends them over Bluetooth, re-sends lost ones.
- *
- * PURPOSE: Frames -> numbered radio packets -> laptop. Re-sends any packet the laptop says it missed.
- * INPUT: frames from the queue replay_ring (replay.c).
- *   Commands the laptop (gateway/gateway.py) writes: 01 START, 02 STOP, 03 RESEND <seq> <count>.
- *   e.g. frame from the queue: {tick=98304, frame_idx=0, s={1093, 171, -748}}
- *   e.g. command bytes (hex):  01                    START
- *                              02                    STOP
- *                              03 05 00 00 00 02 00  RESEND seq 5 (4 bytes), count 2 (2 bytes) = 5 and 6
- *   Anything else -> error "not supported"; RESEND not exactly 7 bytes -> error "invalid length".
- * OUTPUT: 1 packet per Bluetooth message (layout: ehg_packet.h). Re-sent copies have flags bit0 = 1.
- *   e.g. 1st packet after START, 82 bytes (real tpehg1007 frames 0-9; checked with gateway/packet.py):
- *     header  02 | 03 | 14 00 | 00 00 00 00 | 00 00 00 00 | 00 80 01 00 | 0a | 00 | 00 00
- *             ver  n_ch fs=20  seq=0         frame_idx=0   t_inject=98304 10fr flags record_id=0
- *     samples 45 04 ab 00 14 fd | 79 04 b4 00 ea fc | ... (10 frames x 3 ch x 2 bytes)
- *             1093  171   -748  | 1145  180   -790  | ...
- *     crc     78 bb  (CRC-16 of the 80 bytes before it; recomputed when a resend sets the flag)
- *   e.g. the same header re-sent for seq 5: 02 03 14 00 05 00 00 00 32 00 00 00 00 c0 02 00 0a 01 00 00 ... de ff
- *     (frame_idx 50, t_inject 180224, flags 01 = re-sent)
- * HOW:
- *   1. Sets up a Bluetooth "service" with 2 slots: data (board -> laptop, pushed = "notify")
- *      and control (laptop -> board commands).
- *   2. tx_thread collects 10 frames (CONFIG_EHG_FRAMES_PER_PACKET), adds the 20-byte header, the CRC and the
- *      next packet number (seq), keeps a copy in history, sends.
- *   3. RESEND: finds the copy in history, sends it again with the "re-sent" flag.
- *   If the radio is busy, sending waits instead of dropping. The wait backs up into replay_ring,
- *   where any overflow is counted. So nothing is lost silently.
- * ROLE IN THESIS: Gantt 1c/1d. Batching = latency vs efficiency trade-off (H1).
- *   Numbering + history + resend = loss recovery (H2). Counters in the log show where loss happened.
- * BEFORE -> AFTER: Frames from replay.c. Connection from main.c. Packets -> gateway/gateway.py
- *   (decoded by gateway/packet.py), which sends RESEND back.
- * SEE: docs/firmware.md (overview + glossary), docs/interface-spec.md 3 (byte layout, commands).
-  */
+/* ehg_service.c - packs frames into numbered packets, sends them over Bluetooth, re-sends lost ones.
+ */
 #include "ehg_service.h"
 
 #include <string.h>
@@ -53,7 +21,7 @@ static struct bt_uuid_128 svc_uuid = BT_UUID_INIT_128(EHG_UUID_BASE(1));
 static struct bt_uuid_128 data_uuid = BT_UUID_INIT_128(EHG_UUID_BASE(2));
 static struct bt_uuid_128 ctrl_uuid = BT_UUID_INIT_128(EHG_UUID_BASE(3));
 
-/* A resend request from the laptop: "send packets seq .. seq+count-1 again". */
+/* A resend request from the laptop: "send packets seq.. seq+count-1 again". */
 struct resend_req {
 	uint32_t seq;
 	uint16_t count;

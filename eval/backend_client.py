@@ -1,17 +1,4 @@
-"""Shared database queries for the evaluation scripts, for either store: InfluxDB 2.7 (the reference, default) or PostgreSQL/TimescaleDB.
-
-PURPOSE: One place that pulls stored EHG data back out of the database, with the SAME return shapes from both stores so that eval/integrity.py, eval/latency.py and
-  tools/fhir_export.py give the same answers from either (the parity proof, eval/parity.py, decision 0007).
-INPUT: node id (e.g. EHG-93C0), `since` window (e.g. 10m, 2h, 7d). Backend: set_backend("influx" | "timescale"), the --backend flag of the scripts, or the environment variable EHG_BACKEND.
-  influx: credentials from backend/.env (read when first needed, not at import). timescale: EHG_TS_DSN, a libpq connection string (e.g. "host=localhost dbname=ehg user=ehg").
-OUTPUT: query_frames(node, since) -> (record_id, {frame_idx: [ch1, ch2, ch3]} raw ADC numbers, time of the first frame).
-  e.g. (0, {0: [1093, 171, -748], 1: [1145, 180, -790], ...}, datetime(2026, 10, 6, 2, 31, 8, 18676, tzinfo=utc)); no rows -> exits with "no ehg_raw data for EHG-93C0 in last 10m"
-  query_pkts(node, since) -> list of dicts, 1 per packet: node_id, seq, n_frames, retrans, replayed, t_inject_dev, t_inject_host, t_gw_rx, t_mqtt_pub, t_ingest_rx, t_db_ack, _time
-  (the influx backend adds Influx's own result/table/_start/_stop/_measurement keys); no rows -> [].
-HOW: influx: Flux queries, pivoted so each row is one moment with all fields side by side. timescale: plain SQL on ehg_raw (one row per frame and channel) and ehg_pkt.
-ROLE IN THESIS: Read-back half of the pipeline. query_frames is also the proposed classifier hook (docs/interface-spec.md 5).
-BEFORE -> AFTER: Before: only InfluxDB, and importing this file failed without backend/.env. After: both stores, chosen by a flag, importable anywhere; default behaviour unchanged.
-"""
+"""Shared database queries for the evaluation scripts, for either store: InfluxDB 2.7 (the reference, default) or PostgreSQL/TimescaleDB."""
 
 import os
 import re

@@ -1,6 +1,4 @@
-# PURPOSE: Unit tests of the recording rule and the alert rules, run by promtool (`promtool test rules`): each alert fires when it should, and stays quiet when it should.
 # RUN: docker run --rm --entrypoint promtool -v "$PWD/deploy/observability:/o:ro" prom/prometheus:v3.15.1 test rules /o/tests/rules_test.yml   (tests/test_promtool_rules.py does this when Docker is up)
-# HOW: input_series are the metrics the services export (node-exporter's textfile, deploy/backup/backup.sh); `for` periods are crossed on purpose; negative cases assert an EMPTY alert list.
 rule_files:
   - ../rules/slo.yml
   - ../rules/alerts.yml

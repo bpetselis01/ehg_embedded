@@ -1,6 +1,4 @@
-// PURPOSE: Reads the notAfter date out of a DER X.509 certificate. iOS has no public call for it (SecCertificateCopyValues is macOS only), and the app shows "certificate expires" and the gateway must renew before then.
-// INPUT: the certificate's DER bytes. OUTPUT: the expiry Date, or nil if the structure is not what X.509 says (a malformed certificate is never trusted with a guess).
-// HOW: walks the ASN.1 tag-length-value structure: Certificate -> TBSCertificate -> [optional version] serial, signature, issuer, validity -> second time value. Accepts UTCTime (YYMMDDHHMMSSZ) and GeneralizedTime.
+// Reads the notAfter date out of a DER X.509 certificate.
 import Foundation
 
 public func certificateNotAfter(der: Data) -> Date? {

@@ -1,6 +1,7 @@
 """Checks tools/fhir_export.py: the FHIR R5 SampledData keeps the raw counts unchanged
-(bit-exact, H4), marks missing frames as "E" (H2), and its origin/factor give the same mV
-as convert.py's formula."""
+, marks missing frames as "E", and its origin/factor give the same mV
+as convert.py's formula.
+"""
 
 from datetime import datetime, timezone
 

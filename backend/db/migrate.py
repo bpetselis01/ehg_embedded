@@ -4,17 +4,8 @@
   uv run python -m backend.db.migrate upgrade 0001         # only the plain-PostgreSQL schema
   uv run python -m backend.db.migrate downgrade 0001       # one step back; "base" removes everything
 
-PURPOSE: One command that brings the enterprise store's schema to a known revision, the same way on the laptop, in CI and on the VM.
-INPUT: command (upgrade | downgrade | current), an optional revision (default head / required for downgrade), and the environment variable EHG_DB_URL
-  (SQLAlchemy URL, e.g. postgresql+psycopg://ehg:SECRET@localhost:5432/ehg) or --url.
-OUTPUT: Alembic's own lines ("Running upgrade  -> 0001, ..."), then the current revision. Exit status 0 only if the database is at the requested revision. A failure leaves the
-  failed revision unapplied (each revision runs in its own transaction), never half-applied.
-  e.g. `current` prints "0003 (head)" or "0002" or "(no revision: empty database)".
-HOW: Builds an Alembic Config in code (no alembic.ini) pointing at backend/db/migrations.
   MIGRATION POLICY: until the first real deployment nothing has applied these revisions, so they were edited in place while the schema was being designed (0002 gained gateway_cert and ca_revoked_at that way).
   From the first deployment on, an applied revision is FROZEN: every change is a NEW revision. An automated review asked for exactly this.
-ROLE IN THESIS: The migration step of the restore drill and of the cloud deployment (docs/decisions/0017).
-BEFORE -> AFTER: Before: no schema. After: tables from revisions 0001 and 0002, hypertables and roll-ups from 0003.
 """
 
 import argparse

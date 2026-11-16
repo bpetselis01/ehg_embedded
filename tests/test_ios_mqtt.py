@@ -1,6 +1,7 @@
 """The iPhone gateway's MQTT client against a REAL Mosquitto (the repository's TLS config and ACL): TLS 1.3 with a client certificate, QoS 1 through the outbox, replay of messages written before the link existed,
 the ACL still applying, and the last will firing on an unclean drop. The Swift side is ios/EHGWire/Tests/EHGGatewayCoreTests/MQTTIntegrationTests.swift; this file starts the broker, builds the PKCS#12 identity, runs `swift test`
-and then checks what the broker actually delivered. Needs EHG_INTEGRATION=1, mosquitto, OpenSSL 3 and the Swift toolchain (command line)."""
+and then checks what the broker actually delivered. Needs EHG_INTEGRATION=1, mosquitto, OpenSSL 3 and the Swift toolchain (command line).
+"""
 
 import json
 import os

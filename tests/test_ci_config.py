@@ -1,5 +1,6 @@
 """Checks the CI and supply-chain files (Unit 14): workflows are valid YAML, use only the pinned actions the repository already uses, run on Linux with read-only permissions and no pull_request_target,
-Dependabot covers the ecosystems that are pinned, and every Dockerfile base image has an explicit tag. Structural only; the workflows have never run on GitHub."""
+Dependabot covers the ecosystems that are pinned, and every Dockerfile base image has an explicit tag. Structural only; the workflows have never run on GitHub.
+"""
 
 import re
 from pathlib import Path

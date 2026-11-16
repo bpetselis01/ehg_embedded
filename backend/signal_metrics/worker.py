@@ -1,19 +1,6 @@
 """Signal descriptors per channel for the Grafana dashboard: RMS, median frequency, flatline and saturation.
 
   uv run python -m backend.signal_metrics.worker --node EHG-93C0
-
-PURPOSE: Fills the Thesis A dashboard metrics from what the pipeline stored. These are descriptive statistics of the signal, not clinical information.
-INPUT: stored frames of one node (eval/backend_client.py:query_frames), every --interval seconds.
-  e.g. {0: [1093, 171, -748], 1: [1145, 180, -790], ...} at 20 Hz, 1200 frames per window
-OUTPUT: InfluxDB measurement ehg_metric, tags node_id and channel, 1 point per channel per window, stamped with the time of the window's last frame.
-  fields frames_present (int); and only when the window is at least 95 % complete: rms (float, raw ADC units), median_freq_hz (float, absent for a constant channel),
-  flatline (bool), saturated_pct (float).
-  e.g. ehg_metric,node_id=EHG-93C0,channel=c0 frames_present=1200i,rms=412.7,median_freq_hz=0.45,flatline=false,saturated_pct=0 1791243128018676224
-HOW: Windows are 60 s with 30 s overlap, aligned to frame numbers, and end 8 s before the newest frame so re-sent packets have arrived. Rewriting a window therefore replaces the same point.
-  Up to 5 % of missing frames are filled by linear interpolation. An FFT keeps 0.08 to 4 Hz, which is zero-phase. RMS is taken on the band-limited signal. Median frequency is where cumulative
-  in-band power reaches half. Flatline and saturation use the last 10 s: flatline = zero variance on a channel, saturation = share of samples at the int16 rails. Window and band are the settings Thesis A reports for the lab's pipeline.
-ROLE IN THESIS: The signal-quality, RMS and median-frequency metrics promised for Grafana in Thesis A section 8.5. It runs beside the data path, so ingest and the H1/H2/H4 numbers are unaffected.
-BEFORE -> AFTER: Before: frames stored by backend/ingest/ingest.py. After: ehg_metric, read by backend/grafana/dashboards/ehg-overview.json and the alert rules.
 """
 
 import argparse

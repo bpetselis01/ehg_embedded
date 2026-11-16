@@ -1,41 +1,9 @@
-/*
- * replay.c - the sensor stand-in: takes frames the laptop streams in over the serial port and
- * releases them at the recording's real speed (report 8.2, digital injection, Sensor-in-the-Loop [60]).
+/* replay.c - the sensor stand-in: takes frames the laptop streams in over the serial port and
+ * releases them at the recording's real speed.
  *
  * MODES (chosen at build time): serial feed (default, below) or built-in recording
  *   (firmware/build.sh --record <npz>, CONFIG_EHG_BAKED_RECORD: replay_data.h compiled in, no laptop needed;
  *   take_frame() reads the array, CONFIG/DATA/FAULT are refused, SYNC still answered).
- * PURPOSE: Releases 1 frame (1 sample per channel) at the recording's own rate, e.g. 20 per second
- *   for TPEHG, as if a real sensor were measuring. The laptop only fills a queue ahead of time;
- *   the board's own timer decides when each frame is "sampled".
- * INPUT: messages from tools/feed.py on uart0 (the J-Link VCOM, shared with the log), each COBS-encoded,
- *   ended by 0x00, decoded = type | payload | CRC-16 (docs/interface-spec.md 3b):
- *   e.g. CONFIG 10 | 03 14 00 00 00 10 2a 9c    = 3 ch, 20 Hz, record_id 0, 16-bit, feeder session 0x9c2a
- *        DATA   11 | 00 00 00 00 02 | 45 04 ...  = frames from frame_idx 0, 2 frames, samples 1093 171 -748 ...
- *        SYNC   12 | 07 00 00 00                 = clock ping 7 (answered at once with @SYNC 7 <tick>)
- *        FAULT  13 | seed u32, 4 x u16           = fault injection settings (ehg_service_set_faults)
- *   Plus START / STOP, which ehg_service.c (BLE) and main.c (button) pass on as replay_start() / replay_stop().
- * OUTPUT: frames {tick, frame_idx, samples} into the queue replay_ring (struct in ehg_packet.h).
- *   tick = board clock (32768 ticks/s) when the frame was released = t_inject (start of H1 timing).
- *   e.g. START at tick 98304 (3 s after boot), then 1 frame every 1638.4 ticks (50 ms):
- *     {tick=98304, frame_idx=0, s={1093, 171, -748}, start=1}
- *     {tick=99942, frame_idx=1, s={1145, 180, -790}}
- *   Lines for the laptop (through the log, so they never split a log line):
- *   e.g. [00:00:01.200,000] <inf> replay: @HELLO EHG-93C0 3 20 0 #xxxx  (CONFIG accepted)
- *        [00:00:02.000,000] <inf> replay: @LVL 40 #xxxx                  (frames queued, once a second)
- *        [00:00:02.500,000] <inf> replay: @SYNC 7 81920 #xxxx            (board tick when ping 7 arrived)
- *   "#xxxx" = CRC-16 of the text between "@" and " #", so a damaged line is ignored (at_line).
- *        [00:00:03.000,000] <inf> replay: replay start: record 0, 3 ch @ 20 Hz, from frame 0
- * HOW: A parser thread turns serial bytes into messages and puts DATA frames in feed_q.
- *   The replay thread waits for START, then loops: work out when frame n is due -> sleep until then
- *   -> stamp the clock -> take the frame numbered start_idx + n from feed_q -> put it in replay_ring.
- *   Frame not there yet (laptop fell behind) -> counted as starved, that frame number is skipped.
- *   Frame older than due -> thrown away, counted as late. replay_ring full -> counted as overflow.
- *   Due time = start + n / fs, worked out fresh for every frame. A repeating 50 ms timer would
- *   round to whole ticks (1638.4 -> 1638) and drift to 20.005 Hz; this way the rate stays exact.
- * ROLE IN THESIS: Gantt 1a/1b. Start of every latency measurement (H1) and the known source for
- *   loss + bit-exact checks (H2/H4).
- * BEFORE -> AFTER: Before: tools/feed.py (from data/converted/). After: replay_ring -> ehg_service.c.
  */
 #include "replay.h"
 

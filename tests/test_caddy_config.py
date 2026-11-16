@@ -1,5 +1,6 @@
 """Checks the Caddyfile (Unit 11): the route list is exactly the designed one, nothing internal is proxied, every response gets the security headers, bodies are size-limited, and the file does not weaken TLS.
-Structural (text) checks always run; `caddy validate` runs only where the caddy binary exists."""
+Structural (text) checks always run; `caddy validate` runs only where the caddy binary exists.
+"""
 
 import os
 import re

@@ -1,6 +1,4 @@
-# PURPOSE: Weekly update pull requests for everything that is pinned: Python packages (uv.lock), GitHub Actions, the Dockerfiles' base images and the Terraform provider.
-# HOW: Dependabot opens PRs; nothing is merged automatically. Container images in the compose files are pinned by digest by hand (docs/supply-chain.md), which Dependabot's docker ecosystem does not read from compose files.
-# STATUS: UNVERIFIED: written from Dependabot's documented format; the repository has never been pushed, so it has not run.
+# Weekly update pull requests for everything that is pinned: Python packages (uv.lock), GitHub Actions, the Dockerfiles' base images and the Terraform provider.
 version: 2
 updates:
   - package-ecosystem: "uv"

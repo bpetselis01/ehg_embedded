@@ -1,15 +1,4 @@
-"""Writes the Mosquitto ACL that pins every gateway to the nodes it serves.
-
-PURPOSE: Closes the "a gateway can publish packets for ANY node id" gap of backend/mosquitto/acl (`topic write ehg/+/pkt`). Here each gateway may write only `ehg/<node>/pkt` for ITS nodes, plus its own status topic.
-INPUT: --gateways FILE, a JSON object {"ehg-gw-01": ["EHG-93C0"], "ehg-gw-02": []}, OR --dsn <libpq string> to read the registry (registry.node.assigned_gateway, revoked gateways left out).
-  --out FILE (default backend/mosquitto/acl.generated). e.g. uv run python tools/gen_acl.py --gateways deploy/acl/gateways.json --out /opt/ehg/etc/acl
-OUTPUT: the ACL text (service identities ehg-bridge, ehg-ingest, ehg-viewer, ehg-exporter unchanged, then one stanza per gateway) and, on stdout, "changed" or "unchanged". Exit 1 and no file written on a bad id.
-HOW: Ids must be plain ids (letters, digits, _ and -, at most 64), so no `+`, `#`, `/` or space can widen a grant; a wildcard in the data would otherwise grant more than the registry says. A gateway with no nodes gets its status topic only (it cannot publish packets
-  until a node is assigned to it). The file is rewritten IN PLACE and only when the content changed, because a single-file bind mount follows the inode (a replaced file would leave the broker reading the old one); then send Mosquitto SIGHUP (deploy/crl-sync.sh does the same for the CRL).
-  Output is deterministic (sorted) so a diff shows exactly what changed.
-KNOWN LIMIT: Nothing assigns a node to a gateway yet (the registry column is there, the triage/enrolment code never sets it), so for now the JSON file is the source of truth. A new node means a new line in that file and a re-run.
-ROLE IN THESIS: Least privilege on the gateway-to-broker boundary (docs/decisions/0008, docs/security.md). BEFORE -> AFTER: Before: any enrolled gateway could write packets under any node name. After: only its own.
-"""
+"""Writes the Mosquitto ACL that pins every gateway to the nodes it serves."""
 
 import argparse
 import json

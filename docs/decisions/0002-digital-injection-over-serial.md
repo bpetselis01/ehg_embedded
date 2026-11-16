@@ -29,4 +29,4 @@ Rejected: laptop-paced release (USB jitter would enter the "sensor"); native USB
 - The feeder owns the serial port, so it also prints the board log; machine lines carry a CRC because the VCOM loses a few bytes.
 - The board needs the laptop connected by USB to run. [0003](0003-built-in-recording-build-time-option.md) adds a stand-alone option.
 
-**Sources:** [plans/realistic-injection-plan.md](../plans/realistic-injection-plan.md) (Decisions, Research basis); [progress.md](../progress.md) 2026-10-20 engineering notes; [interface-spec.md](../interface-spec.md) §3b.
+**Sources:** plans/realistic-injection-plan.md (Decisions, Research basis); progress.md 2026-10-20 engineering notes; interface-spec.md §3b.

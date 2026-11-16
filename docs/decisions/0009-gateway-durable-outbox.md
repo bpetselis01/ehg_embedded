@@ -36,4 +36,4 @@ Over a cellular link, outages are expected, not exceptional.
 - Left-over rows from an earlier (even simulated) run are replayed at the next start, marked `replayed`, with their old timestamps.
 - An outbox protects against broker outages and restarts, not against a long outage while the iOS app is not running.
 
-**Sources:** [hardening prompt](../claude-code-prompt-thesis-b-hardening.md) §2 (row on store and forward), §9 Unit 3, Unit 15b; [`gateway/gateway.py`](../../gateway/gateway.py); [decision 0004](0004-end-to-end-loss-recovery.md).
+**Sources:** hardening prompt §2 (row on store and forward), §9 Unit 3, Unit 15b; [`gateway/gateway.py`](../../gateway/gateway.py); [decision 0004](0004-end-to-end-loss-recovery.md).

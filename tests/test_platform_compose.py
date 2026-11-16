@@ -131,7 +131,7 @@ def test_every_module_the_services_import_is_in_the_image_or_installed_into_it()
 
 
 def test_the_build_context_excludes_secrets_and_keys_but_not_what_the_image_copies():
-    """The build context is the repository root; a .dockerignore keeps keys, secrets and local data out, and must not exclude anything the Dockerfile COPYs."""
+    """The build context is the repository root; a.dockerignore keeps keys, secrets and local data out, and must not exclude anything the Dockerfile COPYs."""
     import fnmatch
     ignore = [l.strip() for l in (ROOT / ".dockerignore").read_text().splitlines() if l.strip() and not l.startswith("#")]
     for must in (".git", "data", "**/*.key", "**/*.pem", "**/.env", "backend/pki", "deploy/secrets", ".venv"):

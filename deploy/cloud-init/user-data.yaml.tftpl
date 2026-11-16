@@ -1,18 +1,4 @@
 #cloud-config
-# PURPOSE: First-boot setup of the EHG cloud VM (Ubuntu 24.04, arm64): hardened SSH, automatic security updates, a host firewall that repeats the cloud
-#   security list, the 150 GB data volume, Docker, a non-root service user, and the repository at a pinned tag.
-# INPUT: Terraform fills four values: admin_cidr, domain_name, repo_url, repo_tag (deploy/terraform/main.tf). NO secret is in this file.
-#   e.g. admin_cidr = 203.0.113.7/32, domain_name = ehg-demo.duckdns.org, repo_url = git@github.com:OWNER/REPO.git, repo_tag = v0.1.0
-#   A PRIVATE repository is cloned over SSH with a read-only deploy key that you place by hand (/opt/ehg/secrets/deploy_key) plus a known_hosts file; the git
-#   settings for that are written to /opt/ehg/.gitconfig below. No key is ever part of this file.
-# OUTPUT: a VM with /srv/ehg-data mounted, Docker running with its data there and its logs in the journal, /opt/ehg/repo checked out, and a status file
-#   /opt/ehg/state/first-boot.status that says what worked. The stack starts only once the age key is copied to /opt/ehg/secrets/age.key (by hand).
-# HOW: cloud-init writes the config files, then runs /usr/local/sbin/ehg-first-boot.sh once. Docker is installed AFTER the volume is mounted, so its
-#   data never lands on the small boot disk. Everything is idempotent: re-running the script changes nothing that is already right.
-#   Only the four named dollar-brace placeholders are Terraform's; the script uses plain $name shell variables on purpose.
-# STATUS: UNVERIFIED on a real VM (no cloud account yet): the block-device path /dev/oracleoci/oraclevdb, the Docker packages and the timings are expectations.
-# ROLE IN THESIS: Makes the VM rebuildable from code (docs/decisions/0010, 0017); the restore drill (Unit 12) starts from this.
-# BEFORE -> AFTER: Before: a blank Ubuntu image. After first boot: ready for deploy/update.sh and the compose stack.
 package_update: true
 package_upgrade: true
 

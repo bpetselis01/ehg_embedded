@@ -1,5 +1,4 @@
-# PURPOSE: Declares which provider this module uses and the minimum Terraform, so the module stands on its own (tflint: terraform_required_providers / terraform_required_version).
-# The root (../../versions.tf) pins the exact provider version; a module only names the source and the oldest version it needs.
+# Declares which provider this module uses and the minimum Terraform, so the module stands on its own (tflint: terraform_required_providers / terraform_required_version).
 terraform {
   required_version = ">= 1.6"
 

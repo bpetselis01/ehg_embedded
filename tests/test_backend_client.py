@@ -1,5 +1,6 @@
 """Checks eval/backend_client.py: importable without backend/.env, the same return shapes from InfluxDB and from PostgreSQL, a bad backend or window is an error not a default,
-and the SQL store returns exactly what the writer stored (so integrity/latency/FHIR give the same answers from either store)."""
+and the SQL store returns exactly what the writer stored (so integrity/latency/FHIR give the same answers from either store).
+"""
 
 import sys
 from datetime import timedelta, timezone

@@ -1,5 +1,6 @@
 """Checks gateway/tracking.py: gap detection, resend filling a gap, duplicates,
-node restart detection (H2), and the clock map's min-offset and counter roll-over (H1)."""
+node restart detection, and the clock map's min-offset and counter roll-over.
+"""
 
 from gateway.tracking import ClockMap, GapTracker
 

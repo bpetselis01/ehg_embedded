@@ -1,6 +1,7 @@
 """Checks the docs and the duplicated facts still match the code, so stale documentation fails the
 test suite instead of misleading a reader: the 2 copies of the wire format (ehg_packet.h, packet.py),
-the Bluetooth IDs and commands, links between docs, the file index, the serial baud rate and --help."""
+the Bluetooth IDs and commands, links between docs, the file index, the serial baud rate and --help.
+"""
 
 import re
 import subprocess

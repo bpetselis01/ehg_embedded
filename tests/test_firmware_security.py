@@ -1,5 +1,6 @@
 """Static guard for Unit 13 (LESC pairing, own signing key). The firmware itself is only tested on the board, so this keeps the pieces that can silently rot:
-the default build stays open and key-free, the secure overlay keeps every protection, and no private key is ever tracked by git."""
+the default build stays open and key-free, the secure overlay keeps every protection, and no private key is ever tracked by git.
+"""
 
 import re
 import subprocess

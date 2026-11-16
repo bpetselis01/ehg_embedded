@@ -1,10 +1,4 @@
-# PURPOSE: Everything you must set before `terraform plan`. No secret is ever a variable default or lives in git.
-# INPUT: values from terraform.tfvars (gitignored; copy terraform.tfvars.example) or TF_VAR_* environment variables.
-#   e.g. region = "ap-sydney-1", admin_cidr = "203.0.113.7/32" (your own public address, not 0.0.0.0/0)
-# OUTPUT: none (declarations only).
-# HOW: The OCI API key itself is NOT a variable: the provider reads your ~/.oci/config profile (config_file_profile), which stays on your Mac.
-# ROLE IN THESIS: The knobs of the Oracle deployment runbook (the deployment runbook, Unit 5).
-# BEFORE -> AFTER: Before: nothing. After: main.tf wires these into the four modules.
+# Everything you must set before `terraform plan`.
 variable "region" {
   description = "Home region identifier, e.g. ap-sydney-1 or ap-melbourne-1. Always Free compute must be in the home region, which cannot be changed later."
   type        = string

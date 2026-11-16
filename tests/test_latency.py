@@ -1,6 +1,7 @@
 """Checks eval/latency.py: the drift fit recovers a clock running 50 ppm slow over 6 h, the
 batching wait is counted as latency rather than hidden in the clock offset, and serial clock pings
-recover the true offset that the BLE envelope fit misses by the minimum link delay (H1)."""
+recover the true offset that the BLE envelope fit misses by the minimum link delay.
+"""
 
 import numpy as np
 

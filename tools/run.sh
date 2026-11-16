@@ -4,19 +4,6 @@
 #   tools/run.sh default          start a run by name, skipping the menu
 #   tools/run.sh --list           every run and its status
 #   tools/run.sh --dry-run NAME   print the commands of a run; touches nothing
-#
-# PURPOSE: One place to start either the Thesis A default or an optional run that may still be in development.
-# INPUT: the name of a run. A flashed-or-flashable DK on USB and a running Docker Desktop, for the runs that use them.
-#   e.g. tools/run.sh measured
-# OUTPUT: the board reflashed if you agree, the right backend containers, then the demo windows (tools/demo.sh).
-#   .run-state (gitignored) remembers the last firmware and backend this script set up.
-#   e.g. firmware=flash
-#        backend=base
-# HOW: spec() is the table of runs. Each run is a status, build.sh arguments, a backend and a launcher. run() applies them in order.
-#   Firmware only goes through firmware/build.sh, and always after asking. Docker is never started or restarted from here,
-#   containers are only started and stopped, and backend/.env is never written, so the InfluxDB volume and its token stay matched.
-# ROLE IN THESIS: Separates the Thesis A MVP from later additions (docs/decisions/0007-enterprise-evolution-keep-influx-as-reference.md).
-# BEFORE -> AFTER: Before: several build, compose and gateway commands to remember. After: one menu with honest status labels.
 set -e
 REPO="$(cd "$(dirname "$0")/.." && pwd -P)"
 cd "$REPO"

@@ -25,4 +25,4 @@ exact) and InfluxDB. Conversion to millivolts, (value − baseline) ÷ gain, hap
 - Dashboards show ADC units, not mV (labelled as such).
 - 24-bit sources cost 3 bytes per sample instead of 2 (fewer frames per packet).
 
-**Sources:** [design spec](../design/codebase-design.md) assumption A4; [interface-spec.md](../interface-spec.md) §3; commit `0d0ae1d` (24-bit option).
+**Sources:** design spec assumption A4; interface-spec.md §3; commit `0d0ae1d` (24-bit option).

@@ -1,4 +1,4 @@
-// PURPOSE: Entry point of the iPhone gateway app (docs/ios-gateway.md).
+// Entry point of the iPhone gateway app.
 import SwiftUI
 
 @main

@@ -184,7 +184,7 @@ final class NodeSessionTests: XCTestCase {
 }
 
 final class CertificateTests: XCTestCase {
-    // `openssl req -x509 ... -not_after 20271231235959Z` (generated 2026-11-04, throwaway key)
+    // `openssl req -x509... -not_after 20271231235959Z` (generated 2026-11-04, throwaway key)
     private let pem = """
 -----BEGIN CERTIFICATE-----
 MIIBezCCASGgAwIBAgIUDbBDu/1x9f4iYaMGX1b7FzIbsVAwCgYIKoZIzj0EAwIw

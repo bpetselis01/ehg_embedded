@@ -17,7 +17,7 @@ Byron has an iPhone, a Mac with Xcode and a free Apple account (Personal Team), 
   the same JSON on `ehg/<node>/pkt` at QoS 1, a durable outbox ([decision 0009](0009-gateway-durable-outbox.md)), a Last Will status topic. MQTT uses CocoaMQTT (MIT).
 - The Python gateway stays the reference implementation.
 - The Swift decoder is the **third copy of the wire format**. It is guarded by golden test vectors generated from `gateway/packet.py` and a static drift test, and
-  [interface-spec.md](../interface-spec.md) will say "change all copies together".
+  interface-spec.md will say "change all copies together".
 - **Gate (15a):** before the app core, a spike must show Background Modes and state restoration work on a free team, an EC or RSA client identity can be presented for TLS, a 30-minute locked-screen run survives,
   and the carrier lets 8883 through (or the 443 route works). If not, stop and ask Byron which compromise to accept; do not hack around iOS limits.
 - Certificate enrolment uses the Keycloak device grant and a key pair generated in the Keychain ([decision 0013](0013-keycloak-and-certificate-lifecycle.md)). Over-the-air firmware update through the app (15d) is Tier C.
@@ -30,4 +30,4 @@ Byron has an iPhone, a Mac with Xcode and a free Apple account (Personal Team), 
 - Free-team capabilities, CocoaMQTT client-identity support and locked-screen behaviour are all **unverified** and answered with evidence in `docs/ios-gateway-feasibility.md`.
 - H1-cellular measured on the phone is not an LTE-M or NB-IoT measurement and must not be described as one.
 
-**Sources:** [hardening prompt](../claude-code-prompt-thesis-b-hardening.md) §3 (decision 5), §5, §9 Unit 15; [decision 0004](0004-end-to-end-loss-recovery.md). Apple and library facts are from the prompt and unverified until the spike.
+**Sources:** hardening prompt §3 (decision 5), §5, §9 Unit 15; [decision 0004](0004-end-to-end-loss-recovery.md). Apple and library facts are from the prompt and unverified until the spike.

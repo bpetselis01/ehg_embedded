@@ -1,6 +1,7 @@
 """Runs the promtool unit tests of the SLO and alert rules (deploy/observability/tests/rules_test.yml) in the pinned Prometheus image.
 
-Only with EHG_INTEGRATION=1 and a running Docker daemon (it never starts one). The file also has a plain check that every alert has a test, so a new alert cannot be added untested."""
+Only with EHG_INTEGRATION=1 and a running Docker daemon (it never starts one). The file also has a plain check that every alert has a test, so a new alert cannot be added untested.
+"""
 
 import os
 import re

@@ -1,19 +1,5 @@
-/*
- * ehg_packet.h - byte layout of 1 radio packet. Copy of gateway/packet.py: change both together.
- *
- * PURPOSE: So board and laptop agree on what every byte means.
- * LAYOUT: 20-byte header, then the samples, frame by frame.
- *   header = version, n_ch, fs_hz, seq, frame_idx, t_inject, n_frames, flags, record_id
- *     seq = packet number, t_inject = board clock tick when the packet's 1st frame was sampled
- *   samples = 2 bytes each (default), or 3 bytes when flags bit1 is set (24-bit option)
- *   then a 2-byte CRC-16 of everything before it (v2)
- *   e.g. 3 channels x 10 frames = 20 + 60 + 2 = 82 bytes (24-bit: 112)
- *   Numbers go low byte first ("little-endian"). Full table: docs/interface-spec.md 3.
- * ROLE IN THESIS: The contract the whole pipeline shares. seq -> losses countable (H2);
- *   t_inject -> latency measurable (H1); raw samples -> bit-for-bit comparison (H2/H4).
- * BEFORE -> AFTER: replay.c fills struct ehg_frame (1 instant of samples) -> ehg_service.c builds
- *   struct ehg_pkt_hdr + samples, sends over Bluetooth -> gateway/packet.py decodes it.
-  */
+/* ehg_packet.h - byte layout of 1 radio packet. Copy of gateway/packet.py: change both together.
+ */
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>

@@ -26,4 +26,4 @@ Latency is per sample, from its sampling instant, so the batching wait counts.
 - Built-in boards need `feed.py --sync-only` during a run to keep this accuracy ([0003](0003-built-in-recording-build-time-option.md)).
 - Remaining caveat: `t_db_ack` comes from the Docker VM clock (see [troubleshooting](../troubleshooting.md)).
 
-**Sources:** [plans/realistic-injection-plan.md](../plans/realistic-injection-plan.md) (Research basis: latency start point); [progress.md](../progress.md) 2026-10-20 and 2026-10-22.
+**Sources:** plans/realistic-injection-plan.md (Research basis: latency start point); progress.md 2026-10-20 and 2026-10-22.

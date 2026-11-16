@@ -1,10 +1,4 @@
-# PURPOSE: Two out-of-band safety nets that do not depend on the VM being alive: a "VM down" alarm and a cost guard.
-# INPUT: tenancy_ocid, compartment_ocid, instance_id, notification_email. OUTPUT: topic_id.
-# HOW: The alarm fires when the VM's CPU metric stops arriving for 5 minutes (absent()), and emails through an OCI Notifications topic. This needs the Oracle
-#   Cloud Agent's monitoring plugin on the VM: UNVERIFIED until the first boot. The budget is 1 USD a month on the compartment with an email alert as soon as ANY
-#   cost is forecast or actual, so an accidental paid resource shows up at once (the account stays Always Free only). Messages carry no data from the pipeline.
-# ROLE IN THESIS: The "operator is told when the box is gone" requirement (docs/decisions/0016-observability-and-slos.md).
-# BEFORE -> AFTER: Before: no alerts. After apply: one email subscription to confirm (click the link Oracle sends), one alarm, one budget.
+# Two out-of-band safety nets that do not depend on the VM being alive: a "VM down" alarm and a cost guard.
 resource "oci_ons_notification_topic" "alerts" {
   compartment_id = var.compartment_ocid
   name           = "ehg-alerts"

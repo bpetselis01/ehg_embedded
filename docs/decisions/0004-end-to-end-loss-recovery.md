@@ -28,4 +28,4 @@ deliver a message twice. Fault-injection runs also corrupt packets on purpose.
 - Losses that cannot be recovered (copy already overwritten) are counted (`resend_miss`) and still identified by seq.
 - The wire format has two copies (C and Python); [`tests/test_docs.py`](../../tests/test_docs.py) checks they agree.
 
-**Sources:** [design spec](../design/codebase-design.md) §3, §5; [plans/realistic-injection-plan.md](../plans/realistic-injection-plan.md) (Corruption); [progress.md](../progress.md) 2026-10-20.
+**Sources:** design spec §3, §5; plans/realistic-injection-plan.md (Corruption); progress.md 2026-10-20.

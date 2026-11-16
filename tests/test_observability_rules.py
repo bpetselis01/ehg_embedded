@@ -1,5 +1,6 @@
 """Checks the Prometheus rule files, since promtool is not installed here: structure, that every metric a rule uses is defined somewhere in this repository (so a renamed metric cannot silently blind an alert),
-that every recording rule an alert uses exists, that alerts hold no sensitive content, and that Prometheus is actually pointed at the rules and at Alertmanager. It does NOT evaluate the expressions."""
+that every recording rule an alert uses exists, that alerts hold no sensitive content, and that Prometheus is actually pointed at the rules and at Alertmanager. It does NOT evaluate the expressions.
+"""
 
 import re
 from pathlib import Path

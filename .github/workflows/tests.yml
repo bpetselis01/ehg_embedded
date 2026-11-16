@@ -1,6 +1,4 @@
-# PURPOSE: Runs the test suite on every push and pull request, so code and docs that drift apart
-# (tests/test_docs.py) are caught before they are merged. No hardware, data download or Docker needed:
-# tests that need data/raw skip themselves.
+# Runs the test suite on every push and pull request, so code and docs that drift apart (tests/test_docs.py) are caught before they are merged.
 name: tests
 
 on: [push, pull_request]
@@ -12,7 +10,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # full history, for the authorship check below
-      # Byron is the sole author: no AI co-author trailers or "Generated with" lines in any commit
+      # No AI co-author trailers or "Generated with" lines in any commit
       - run: "! git log --format=%B | grep -inE 'co-authored-by:.*(claude|anthropic)|generated with \\[?claude'"
       - uses: astral-sh/setup-uv@v10.3.3  # this action publishes exact tags only, no moving v10
       - run: uv sync --frozen

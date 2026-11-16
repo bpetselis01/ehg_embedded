@@ -7,7 +7,7 @@
 #   options: --out DIR (default backend/pki, gitignored)  --host NAME-or-IP (init)  --days N (client, default 30)
 #
 # PURPOSE: Gives the "cloud profile" broker (backend/mosquitto/mosquitto.tls.conf) real certificates, so MQTT can be tested with TLS 1.3 and
-#   client certificates on this computer and later on the cloud VM (docs/decisions/0008-mqtt-mtls-and-topic-acls.md).
+#   client certificates on this computer and later on the cloud VM.
 # INPUT: a sub-command, and OpenSSL 3 (brew install openssl@3; macOS /usr/bin/openssl is LibreSSL and is refused).
 #   e.g. tools/pki.sh init --host localhost
 # OUTPUT: files under --out (every private key has mode 600; keys are never printed):
@@ -20,8 +20,6 @@
 #   e.g. `tools/pki.sh init --host localhost` ends with a table: "ehg-gw-01     Dec  3 08:15:41 2026 GMT" (30 days after a run on 3 Nov 2026)
 # HOW: Plain openssl commands. The intermediate runs `openssl ca` so serial numbers and revocations are recorded in index.txt.
 #   A client certificate has no SANs: the broker reads the CN. init refuses to run twice so it can never overwrite a key.
-# ROLE IN THESIS: The security hop between gateway and broker (docs/security.md). Short-lived gateway certificates, enrolment and
-#   the CA service come later (decision 0013); this script is the bootstrap path.
 # BEFORE -> AFTER: Before: nothing, the local broker is anonymous on 1883. After: gateway/gateway.py --mqtt-tls, backend/ingest/ingest.py
 #   and viewer/server.py present these files; tests/test_mqtt_tls_config.py checks them.
 set -eu

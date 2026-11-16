@@ -1,10 +1,4 @@
-// PURPOSE: What the phone needs to get its own client certificate without a laptop: (1) the Keycloak DEVICE grant (the phone shows a code, you approve it in any browser), (2) a PKCS#10 certificate request built and signed in Swift, (3) the call
-//   to the enrolment API (backend/enroll). The same steps renew the certificate: run them again before it expires (the 7-day lifetime is chosen by the server).
-// INPUT: the Keycloak realm URL (https://<host>/auth/realms/ehg), the public client id `ios-gateway`, the enrolment URL (https://<host>/enroll-api/enroll). OUTPUT: the certificate PEM for the key the phone made.
-// HOW: the device flow is plain HTTPS (RFC 8628) through an injectable `fetch`, so it is tested with a fake server: authorization_pending keeps polling, slow_down lengthens the interval, expired_token and access_denied stop. The CSR carries only the common
-//   name (= the Keycloak user name, which the server takes as the gateway id) and a P-256 key; the server vets it again (backend/enroll/csr.py) and the certificate it returns is client-authentication only. The private key never leaves the phone.
-// STATUS: the CSR is verified by the repository's own Python validator (tests/test_ios_csr.py); the device flow by a fake server. NOT run against a real Keycloak from Swift, and the Keychain storage in the app has never run on a phone.
-// ROLE IN THESIS: Removes the manual .p12 step of the phone gateway (docs/decisions/0013).
+// What the phone needs to get its own client certificate without a laptop: (1) the Keycloak DEVICE grant (the phone shows a code, you approve it in any browser), (2) a PKCS#10 certificate request built and signed in Swift, (3) the call to the enrolment API (backend/enroll).
 import Foundation
 import Security
 

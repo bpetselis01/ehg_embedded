@@ -32,4 +32,4 @@ Keycloak issues tokens, not X.509 client certificates, but the broker's credenti
 - Hash-chained audit rows relay authentication events; this is tamper-evident, not write-once ([decision 0011](0011-triage-service-pipeline-health-not-clinical.md)).
 - Whether step-ca can consume Keycloak tokens directly (a simpler route) is open and decided in Unit 7.
 
-**Sources:** [hardening prompt](../claude-code-prompt-thesis-b-hardening.md) §5d, §7 (identity design, certificate lifecycle), §9 Unit 7. Keycloak, step-ca and Mosquitto behaviour is from the prompt and unverified until Unit 7.
+**Sources:** hardening prompt §5d, §7 (identity design, certificate lifecycle), §9 Unit 7. Keycloak, step-ca and Mosquitto behaviour is from the prompt and unverified until Unit 7.

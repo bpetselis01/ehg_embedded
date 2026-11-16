@@ -22,15 +22,8 @@
 #   flags per file, with file paths swapped from ~/thesisb to the real folder so VS Code
 #   (.vscode/settings.json) matches the files you open and stops showing false red errors.
 # Use "pristine" after changing settings or board, or when the build behaves oddly.
-# Nordic's build breaks on folder names with spaces ("2026 Term 3/Thesis B"), so everything
+# Nordic's build breaks on folder names with spaces, so everything
 # is built through a space-free shortcut: ~/thesisb -> this repo.
-#
-# PURPOSE: 1 command to compile the board's program and copy it onto the board.
-# HOW: Makes the ~/thesisb shortcut if missing, runs Nordic's
-#   build tool (west) through Nordic's toolchain launcher, and optionally flashes the board.
-# ROLE IN THESIS: Makes firmware builds repeatable from the README.
-# BEFORE -> AFTER: Needs the source (+ a converted .npz for --record). Makes ehg_node/build/; with "flash",
-#   programs the nRF52840 DK. Prints which mode it built. SEE: docs/firmware.md
 set -e
 REPO="$(cd "$(dirname "$0")/.." && pwd -P)"   # -P: real folder, even if run via ~/thesisb
 LINK="$HOME/thesisb"

@@ -1,12 +1,4 @@
-// PURPOSE: Ties the Bluetooth link, the per-node sessions, the outbox and the MQTT client together and publishes the numbers the screen shows. Also holds the settings and the client identity.
-// INPUT: settings (broker host, gateway id = the certificate's CN) and a client certificate in PKCS#12 form (made by tools/pki.sh and `openssl pkcs12 -export`, then imported through the Files picker; kept in the Keychain).
-//   There is no in-app enrolment yet: the Keycloak device-grant flow of docs/decisions/0013 is not implemented, and neither is the certificate renewal.
-// OUTPUT: @Published status for ContentView; a log (exportable) with every line that matters. The online/offline status topic ehg/_gw/<id>/status is retained "online" on connect, "offline" as the last will.
-// HOW: the CA that signed the broker certificate is bundled as ca-chain.crt (copy backend/pki/ca-chain.crt into Sources before building: it is public, the keys are not). The outbox lives in Application Support with file protection
-//   "complete until first user authentication". A 1 s timer polls the sessions for due retries and refreshes the status.
-// STATUS: COMPILES for the simulator; never run on a phone (no Bluetooth in the simulator, no Apple ID here).
-// ROLE IN THESIS: The iOS gateway of the topology (Unit 15).
-// BEFORE -> AFTER: Before: package and tests only. After: an app that wires them.
+// Ties the Bluetooth link, the per-node sessions, the outbox and the MQTT client together and publishes the numbers the screen shows.
 import CoreBluetooth
 import EHGGatewayCore
 import Foundation

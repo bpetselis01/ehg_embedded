@@ -1,24 +1,4 @@
-"""EHG wire format v2 (v1 + CRC-16 trailer). Mirror of firmware/ehg_node/src/ehg_packet.h. Change both together.
-
-PURPOSE: Radio packet bytes <-> named Python values.
-INPUT: parse(bytes): one BLE packet, little-endian. 20-byte header, then n_frames x n_ch samples:
-    int16 (default), or 3-byte signed when flags bit1 (FLAG_24BIT) is set, then a 2-byte CRC-16.
-    e.g. 3 ch x 10 frames = 20 + 60 + 2 = 82 bytes (24-bit: 20 + 90 + 2 = 112).
-    e.g. 02 03 14 00 00 00 00 00 00 00 00 00 00 80 01 00 0a 00 00 00 45 04 ab 00 14 fd 79 04 ... 78 bb
-OUTPUT: Packet(version, n_ch, fs_hz, seq, frame_idx, t_inject, n_frames, flags, record_id,
-    samples=[[ch1, ch2, ch3], ...]). pack() does the reverse.
-    e.g. Packet(version=2, n_ch=3, fs_hz=20, seq=0, frame_idx=0, t_inject=98304, n_frames=10,
-                flags=0, record_id=0, samples=[[1093, 171, -748], [1145, 180, -790], ...])
-    e.g. bad input -> ValueError("packet too short: 10 bytes") / ("expected 82 bytes, got 81") / ("crc mismatch")
-  Field meanings, byte offsets: docs/interface-spec.md 3.
-HOW: `struct` reads fixed-size numbers at fixed byte positions. Format "<BBHIIIBBH" = header fields
-  in order (B 1 byte, H 2, I 4, < little-endian). Samples after it are 2-byte signed ("h"), or 3-byte.
-ROLE IN THESIS: Laptop copy of the shared packet contract. Checks length + version + CRC, so a damaged
-  packet is rejected, not silently stored (H2/H4).
-BEFORE -> AFTER: Bytes from the board (layout: firmware/ehg_node/src/ehg_packet.h) or the simulator
-  in gateway/gateway.py. parse() used by gateway.py:Node.on_bytes; pack() by the simulator and
-  tests/test_packet.py.
-"""
+"""EHG wire format v2 (v1 + CRC-16 trailer). Mirror of firmware/ehg_node/src/ehg_packet.h. Change both together."""
 
 import binascii
 import struct
@@ -33,7 +13,7 @@ CRC = struct.Struct("<H")  # trailer: CRC-16/CCITT-FALSE of everything before it
 
 
 def crc16(b: bytes) -> int:
-    """CRC-16/CCITT-FALSE, same as Zephyr crc16_itu_t(0xFFFF, ...) in the firmware."""
+    """CRC-16/CCITT-FALSE, same as Zephyr crc16_itu_t(0xFFFF,...) in the firmware."""
     return binascii.crc_hqx(b, 0xFFFF)
 
 

@@ -1,5 +1,6 @@
 """Checks the Keycloak realm file (decision 0013): valid JSON, no secrets or users, the two remaining clients are configured the safe way (device grant for the phone, no implicit flow, secrets only as placeholders),
-the roles exist, and TOTP is wired to the staff roles. Structural only: it was never imported into a real Keycloak."""
+the roles exist, and TOTP is wired to the staff roles. Structural only: it was never imported into a real Keycloak.
+"""
 
 import json
 import re

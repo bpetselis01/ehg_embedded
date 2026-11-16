@@ -1,5 +1,6 @@
 """The secret-scan allowlist must stay narrow. gitleaks combines `paths` and `regexes` with OR unless condition = "AND", which made a first version skip EVERY finding in the allowed file and the
-fake key everywhere (a security review caught it; checked with throwaway trees on gitleaks 8.30.1, 2026-11-04). With "secret"/"match" targets even AND did not narrow it; "line" did."""
+fake key everywhere (a security review caught it; checked with throwaway trees on gitleaks 8.30.1, 2026-11-04). With "secret"/"match" targets even AND did not narrow it; "line" did.
+"""
 
 import tomllib
 from pathlib import Path

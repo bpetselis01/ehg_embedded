@@ -16,7 +16,6 @@
 #   docker compose up -d; wait until the services are healthy; on timeout or error check out the previous commit and bring it up again.
 #   `sops` is NOT installed by cloud-init (no distribution package): install it by hand and check its checksum (the deployment runbook, Unit 5). This script says so if it is missing.
 # STATUS: UNVERIFIED on a real VM. --dry-run and the argument checks are tested (tests/test_deploy_assets.py).
-# ROLE IN THESIS: The update path of the cloud core (docs/decisions/0017-backup-dr-and-design-only-ha.md); never needs cloud credentials.
 # BEFORE -> AFTER: Before: the VM runs release A. After: it runs release B and is healthy, or it runs A again and you are told why B failed.
 set -eu
 

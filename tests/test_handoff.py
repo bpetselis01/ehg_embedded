@@ -1,5 +1,6 @@
-"""Checks the session-limit resume pin, docs/handoff.md, stays usable: when the file exists it has every heading
-the resume protocol reads and its 'Resume from' names a real unit (Unit 0..17) or 'Plan complete'."""
+"""Checks the session-limit resume pin, stays usable: when the file exists it has every heading
+the resume protocol reads and its 'Resume from' names a real unit (Unit 0..17) or 'Plan complete'.
+"""
 
 import re
 from pathlib import Path

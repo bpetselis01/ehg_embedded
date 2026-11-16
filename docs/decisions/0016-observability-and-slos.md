@@ -28,4 +28,4 @@ A cloud chain that nobody watches fails silently, which the project rules out. T
 - The triage worker's latency is an approximation; the authoritative H1 figure still comes from `eval/latency.py`, and cross-host clock offset must be measured (Unit 16).
 - Each SLO is reported as measured, inferred or not verified.
 
-**Sources:** [hardening prompt](../claude-code-prompt-thesis-b-hardening.md) §5b, §5d, §9 Units 12 and 16; [decision 0004](0004-end-to-end-loss-recovery.md) (the H2 bound).
+**Sources:** hardening prompt §5b, §5d, §9 Units 12 and 16; [decision 0004](0004-end-to-end-loss-recovery.md) (the H2 bound).

@@ -1,11 +1,4 @@
-# PURPOSE: The one VM (Ampere A1, 2 OCPU, 12 GB, arm64, Ubuntu 24.04) plus a 150 GB data volume.
-# INPUT: compartment_ocid, availability_domain, subnet_id, ssh_public_key, user_data (the rendered cloud-init text).
-# OUTPUT: instance_id, public_ip.
-# HOW: 50 GB boot volume + 150 GB block volume = 200 GB, the whole Always Free storage allowance. The block volume is attached paravirtualised at
-#   /dev/oracleoci/oraclevdb; cloud-init formats and mounts it at /srv/ehg-data and moves Docker's data there (UNVERIFIED until the first real boot).
-#   A newer Ubuntu image appearing later must not replace the VM, so changes to the image id are ignored.
-# ROLE IN THESIS: The cloud core host (docs/decisions/0010). Sized to the Always Free limits checked on 2026-11-03; it can be reclaimed, so it must be rebuildable.
-# BEFORE -> AFTER: Before: nothing. After apply: a VM that runs cloud-init on first boot.
+# The one VM (Ampere A1, 2 OCPU, 12 GB, arm64, Ubuntu 24.04) plus a 150 GB data volume.
 data "oci_core_images" "ubuntu" {
   compartment_id           = var.compartment_ocid
   operating_system         = "Canonical Ubuntu"

@@ -38,4 +38,4 @@ for a laptop on a bench and wrong for a broker on a public address: anyone could
 - A gateway can still publish for any node id (`ehg/+/pkt`) with the hand-written ACL. **Closed 2026-11-04 as an option:** `tools/gen_acl.py` writes an ACL with one `ehg/<node>/pkt` line per assigned node (proved against a real Mosquitto); the cloud compose file uses it when `EHG_ACL_FILE` points at the result. Not the default, because nothing assigns nodes to gateways yet (a new node needs a line in `deploy/acl/gateways.json`).
 - Secrets (private keys) live in `backend/pki/`, which is gitignored in the unit that creates it.
 
-**Sources:** [hardening prompt](../claude-code-prompt-thesis-b-hardening.md) §4, §7 ("Verified technical notes" and reference config); [decision 0004](0004-end-to-end-loss-recovery.md) (QoS 1 and persistent sessions). External Mosquitto and paho facts are from the prompt and are unverified until Unit 2.
+**Sources:** hardening prompt §4, §7 ("Verified technical notes" and reference config); [decision 0004](0004-end-to-end-loss-recovery.md) (QoS 1 and persistent sessions). External Mosquitto and paho facts are from the prompt and are unverified until Unit 2.

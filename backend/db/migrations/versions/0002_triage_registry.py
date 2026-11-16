@@ -1,16 +1,4 @@
-"""Triage and registry schemas: alerts, their history, the hash-chained audit log, and the device/subject registry (plain PostgreSQL).
-
-PURPOSE: The relational half of the enterprise store (decisions 0011, 0013): operator alerts with a lifecycle, a tamper-EVIDENT audit trail, and who/what is enrolled. Plain PostgreSQL only,
-  so it is tested on any PostgreSQL 14+ (the TimescaleDB features are revision 0003).
-INPUT: a database at revision 0001, and the login roles ehg_triage, ehg_enroll and ehg_fhir (created by deploy/postgres/10-init-databases.sh; the migration FAILS if either does not exist, rather than skipping the grants).
-  ehg_fhir is the FHIR sync worker's own login: read-only on the registry and the stored frames.
-  ehg_enroll is the enrolment API's own login: gateways and certificates (registry) and the audit log, and NOTHING else (no alerts, no telemetry).
-OUTPUT: schema triage: alerts (one ACTIVE alert per node+rule, enforced by a partial unique index), alert_events, audit_log. Schema registry: gateway, gateway_cert (EVERY certificate issued, so a revocation can reach them all), node, subject (a pseudonymous research label, no personal data).
-  audit_log: id, ts, actor, role, action, target, detail_json, prev_hash, hash; triggers raise an error on UPDATE, DELETE and TRUNCATE. ehg_triage may INSERT and SELECT audit_log, and nothing else on it.
-HOW: This is tamper-EVIDENT, not write-once: a database superuser can still rewrite the table, so the chain head hash is shipped off the VM with the backups (decision 0017) and `python -m backend.triage.audit --verify` recomputes the chain.
-ROLE IN THESIS: Alert management, audit and the registry behind the triage page and the enrolment API.
-BEFORE -> AFTER: Before: only time-series tables. After: alerts, audit and registry tables.
-"""
+"""Triage and registry schemas: alerts, their history, the hash-chained audit log, and the device/subject registry (plain PostgreSQL)."""
 
 from alembic import op
 

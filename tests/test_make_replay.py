@@ -1,5 +1,6 @@
 """Checks tools/make_replay.py writes every sample (including the int16 extremes) into
-the generated firmware header unchanged."""
+the generated firmware header unchanged.
+"""
 
 import re
 

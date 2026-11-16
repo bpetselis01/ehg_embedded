@@ -34,4 +34,4 @@ Oracle's own "Always Free Resources" page (fetched through a summarising tool, s
 - The home region is permanent. An Australian region is chosen so any later real-data work has fewer cross-border questions (see `docs/regulatory.md`, written in Unit 17).
 - I never create or query cloud resources or ask for credentials; Byron runs `terraform apply`.
 
-**Sources:** [hardening prompt](../claude-code-prompt-thesis-b-hardening.md) §3, §5, §5b. Oracle's limits, the June 2026 allowance cut and the idle rule come from that prompt and are unverified until Unit 4.
+**Sources:** hardening prompt §3, §5, §5b. Oracle's limits, the June 2026 allowance cut and the idle rule come from that prompt and are unverified until Unit 4.

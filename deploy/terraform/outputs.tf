@@ -1,9 +1,4 @@
-# PURPOSE: The few values you need after `terraform apply`.
-# INPUT: the modules. OUTPUT: shown by `terraform output`.
-#   e.g. public_ip = "152.67.1.2", ssh_command = "ssh ubuntu@152.67.1.2"
-# HOW: Plain pass-through of module outputs.
-# ROLE IN THESIS: Feeds the runbook: point the DNS name at public_ip, then SSH in to copy the age key.
-# BEFORE -> AFTER: Before: nothing. After apply: these are printed.
+# The few values you need after `terraform apply`.
 output "public_ip" {
   description = "Public address of the VM. Point your DNS name at it."
   value       = module.compute.public_ip

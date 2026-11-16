@@ -1,6 +1,4 @@
-// PURPOSE: The status screen: is the phone connected to the board and to the cloud, how many packets arrived, what is missing, what is waiting on the phone, when the last PUBACK came, how long the certificate and the 7-day signature last,
-//   and a button to export the log. Plain SwiftUI, no state of its own.
-// STATUS: COMPILES for the simulator; the layout has been looked at only in the simulator.
+// The status screen: is the phone connected to the board and to the cloud, how many packets arrived, what is missing, what is waiting on the phone, when the last PUBACK came, how long the certificate and the 7-day signature last, and a button to export the log.
 import SwiftUI
 import UniformTypeIdentifiers
 

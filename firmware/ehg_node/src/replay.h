@@ -1,13 +1,5 @@
-/*
- * replay.h - what other files may call in replay.c (the fake sensor).
- *
- * PURPOSE: The list of replay.c functions other files can use: start/stop, read counters.
- * HOW: Declarations only. The code is in replay.c.
- * ROLE IN THESIS: "Digital injection" = playing a stored real EHG recording as if a sensor were
- *   measuring it live, so every result can be checked against a known answer.
- * BEFORE -> AFTER: Used by ehg_service.c (start/stop on laptop command, read frames from
- *   replay_ring, read counters for the log).
-  */
+/* replay.h - what other files may call in replay.c (the fake sensor).
+ */
 #pragma once
 #include <zephyr/kernel.h>
 
@@ -32,7 +24,7 @@ uint32_t replay_late(void);
 /* Serial messages rejected (bad COBS/CRC/length) or that did not fit the queue. */
 uint32_t replay_rx_bad(void);
 
-/* Worst lateness of any frame vs its exact due time, in clock ticks (timing jitter, Gantt 1d). */
+/* Worst lateness of any frame vs its exact due time, in clock ticks. */
 uint32_t replay_max_late_ticks(void);
 
 /* Record settings from the laptop's CONFIG (0 before it). */

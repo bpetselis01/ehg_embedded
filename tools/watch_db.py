@@ -1,18 +1,6 @@
 """Live view of packets landing in InfluxDB, for demos (the last hop of the pipeline).
 
 Usage: uv run python tools/watch_db.py [--node EHG-93C0]
-
-PURPOSE: Shows each packet once the database has stored it, with how long it took end to end.
-INPUT: ehg_pkt rows in InfluxDB (written by backend/ingest/ingest.py), polled every second via
-  eval/backend_client.py. Login from backend/.env.
-OUTPUT: 1 line per stored packet, oldest first, e.g.
-    seq    412  10 frames  stored after    476 ms (radio+batching 462, mqtt 3, ingest->db 9)
-    seq    398  10 frames  stored after   7213 ms (radio+batching 7190, mqtt 4, ingest->db 12)  RE-SENT
-  "stored after" = DB acknowledged - frame 0 sampled on the board (live clock mapping, so rough;
-  eval/latency.py gives the exact H1 numbers). RE-SENT = recovered by the gateway's resend request.
-HOW: Every second, read the last 2 minutes of ehg_pkt and print rows acknowledged since the last poll.
-ROLE IN THESIS: Demo aid only; not a measurement.
-BEFORE -> AFTER: Before: backend running, gateway publishing. After: your screen.
 """
 
 import argparse

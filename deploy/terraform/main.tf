@@ -1,10 +1,4 @@
-# PURPOSE: One Oracle Always Free VM (Ampere A1, 2 OCPU / 12 GB) with its network, a data volume, a backup bucket, a "VM down" alarm and a cost guard.
-# INPUT: variables.tf. The cloud-init template deploy/cloud-init/user-data.yaml.tftpl becomes the VM's first-boot script.
-# OUTPUT: outputs.tf (public IP, SSH command, bucket). Nothing here is created until YOU run `terraform apply` after reading the plan.
-# HOW: network (VCN, subnet, security list) -> compute (VM + 150 GB block volume) -> storage (bucket) -> monitoring (alarm, budget).
-#   Sizes follow the Always Free limits checked on 2026-11-03: 2 OCPU + 12 GB for A1, 200 GB boot + block combined (50 + 150), 20 GB object storage.
-# ROLE IN THESIS: The cloud core of the production chain (docs/production-topology.md), written as code so it can be rebuilt (docs/decisions/0017).
-# BEFORE -> AFTER: Before: no cloud resources. After `terraform apply` (by Byron only): a VM that runs cloud-init and waits for the age key.
+# One Oracle Always Free VM (Ampere A1, 2 OCPU / 12 GB) with its network, a data volume, a backup bucket, a "VM down" alarm and a cost guard.
 provider "oci" {
   region              = var.region
   config_file_profile = var.config_file_profile

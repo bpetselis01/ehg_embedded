@@ -1,14 +1,6 @@
 """Writes the per-record signal metadata the FHIR sync worker needs, so the worker can run where the converted recordings are not.
 
 Usage: uv run python tools/export_record_meta.py [--converted-dir data/converted/tpehgdb] [-o deploy/fhir/records.json]
-
-PURPOSE: The sync worker (backend/fhir_sync/worker.py) turns raw ADC counts into FHIR SampledData and needs each record's sampling rate, gain, baseline and channel names. Those live in the converted .npz files, which are
-  large, gitignored and not on the cloud VM. This copies ONLY the four small header fields per record into one JSON file that is committed (deploy/fhir/records.json).
-INPUT: data/converted/<db>/manifest.json and the .npz files it names (README step 0 makes them). e.g. record 0 = tpehg1007: fs 20.0, gain [13107, 13107, 13107], baseline [0, 0, 0], channels ["1", "2", "3"].
-OUTPUT: a JSON object {"<record_id>": {"record": "tpehg1007", "fs": 20.0, "gain": [...], "baseline": [...], "channels": [...]}}. No samples and nothing about a person: these are the public PhysioNet record headers.
-HOW: reads the arrays with numpy only (no wfdb). --check compares the file with what the data would produce and exits 1 on a difference (tests/test_fhir_sync.py skips that when the data is absent).
-ROLE IN THESIS: Lets the live write-back to the reference EHR run on the VM (docs/production-topology.md, hop 6b).
-BEFORE -> AFTER: Before: the worker needed data/converted next to it. After: it reads this small file.
 """
 
 import argparse

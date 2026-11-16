@@ -3,7 +3,7 @@
 # INPUT: PostgreSQL connection through the standard PG* variables (PGHOST, PGPORT, PGUSER, PGPASSWORD) or --pg-prefix "docker exec -i -u postgres ehg-postgres-1" to run the PostgreSQL programs inside the container (plain `docker exec`, NOT `docker compose exec`: compose reads and interpolates the whole compose file for every subcommand and stops with "required variable is missing" unless the decrypted secrets are passed too; `-i` is needed for the restore, `-u postgres` because root has no database role).
 #   Options: --out DIR (where backups go, default /srv/ehg-data/backups), --databases "ehg hapi keycloak", --keep N (local copies kept, default 7), --extra PATH (repeatable: more files for restic only, e.g. /opt/ehg/etc),
 #   --metrics-dir DIR (default /var/lib/ehg-metrics), --dry-run (print the plan, change nothing).
-#   Restic: RESTIC_REPOSITORY and RESTIC_PASSWORD_FILE (the key is NOT on the VM: it is held by Byron; losing it loses the backups).
+#   Restic: RESTIC_REPOSITORY and RESTIC_PASSWORD_FILE (the key is NOT on the VM: it is held offline by the operator; losing it loses the backups).
 #   e.g. backup.sh --out /srv/ehg-data/backups --pg-prefix "docker exec -i -u postgres ehg-postgres-1" --dry-run
 # OUTPUT: DIR/ehg-backup-<UTC timestamp>/ with roles.sql, <db>.dump, SHA256SUMS; the Prometheus file <metrics-dir>/backup.prom (ehg_backup_last_success_timestamp_seconds, ehg_backup_size_bytes) written ONLY after
 #   everything succeeded, so a failed run leaves the old timestamp and the BackupStale alert fires. Exit status 0 only on full success.
@@ -11,8 +11,7 @@
 #   A TimescaleDB database restores with timescaledb_pre_restore()/post_restore() (restore_drill.sh does this). NOT covered, on purpose and stated in docs/dr.md: Keycloak's own database is covered but not its
 #   realm export, point-in-time recovery (pgBackRest was not built; decision 0017 notes this). Declared RPO is about 24 h, which a nightly run meets.
 # STATUS: the dump, checksum, rotation and metrics logic is tested against a throwaway local PostgreSQL (tests/test_backup_scripts.py). NEVER run against the VM, the TimescaleDB image, or a real restic repository (restic is not installed here).
-# ROLE IN THESIS: Disaster recovery of docs/production-topology.md; the restore is proven by restore_drill.sh.
-# BEFORE -> AFTER: Before: nothing was backed up. After: a nightly job (cron/systemd timer, set up by hand: see docs/dr.md) and a freshness metric.
+# BEFORE -> AFTER: Before: nothing was backed up. After: a nightly job and a freshness metric.
 set -eu
 
 OUT=/srv/ehg-data/backups

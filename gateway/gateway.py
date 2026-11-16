@@ -3,45 +3,11 @@
   uv run python -m gateway.gateway                 # connect to 1 BLE node named EHG-*, publish to localhost MQTT
   uv run python -m gateway.gateway --nodes 2       # up to 2 nodes
   uv run python -m gateway.gateway --no-mqtt       # print instead of publishing
-  uv run python -m gateway.gateway --simulate 3    # 3 software nodes, no BLE (backend tests, H3 load)
+  uv run python -m gateway.gateway --simulate 3    # 3 software nodes, no BLE
   uv run python -m gateway.gateway --simulate 1 --mqtt-tls --ca backend/pki/ca-chain.crt \\
       --cert backend/pki/clients/ehg-gw-01.crt --key backend/pki/clients/ehg-gw-01.key   # cloud profile: TLS 1.3 + client cert, port 8883
   uv run python -m gateway.gateway --gateway-id ehg-gw-01   # + retained online/offline status. The outbox (gateway/outbox.db) is on by default:
   uv run python -m gateway.gateway --no-outbox     # old behaviour, in-memory queue only. One gateway process per outbox file (--outbox PATH)
-
-PURPOSE: Laptop-side bridge. Packets from the board (Bluetooth) -> database side (MQTT).
-INPUT: 1 BLE notification per packet = bytes in the wire format (header + int16 samples + CRC;
-  docs/interface-spec.md 3, code gateway/packet.py). --simulate builds the same bytes from
-  data/converted/tpehgdb/tpehg1007.npz (--sim-record).
-  e.g. 82 bytes: 02 03 14 00 00 00 00 00 00 00 00 00 00 80 01 00 0a 00 00 00 | 45 04 ab 00 14 fd ... | 78 bb
-       = header (seq 0, frame_idx 0, t_inject 98304, 10 frames) | samples 1093 171 -748 ... | CRC
-       (byte-by-byte breakdown: firmware/ehg_node/src/ehg_service.c header)
-OUTPUT:
-  MQTT topic ehg/<node>/pkt, QoS 1, 1 JSON per packet (docs/interface-spec.md 4):
-    {node_id, seq, frame_idx, t_inject, t_inject_host, n_ch, fs_hz, record_id, flags,
-     samples [[ch1, ch2, ch3], ...], t_gw_rx, t_mqtt_pub}
-    e.g. topic ehg/EHG-93C0/pkt, the packet above (made with Node.on_bytes):
-      {"node_id": "EHG-93C0", "seq": 0, "frame_idx": 0, "t_inject": 98304,
-       "t_inject_host": 1791243068.0186763, "n_ch": 3, "fs_hz": 20, "record_id": 0, "flags": 0,
-       "samples": [[1093, 171, -748], [1145, 180, -790], ... 10 frames ..., [748, -101, -897]],
-       "t_gw_rx": 1791243068.468658, "t_mqtt_pub": 1791243068.46912}
-  gateway/logs/<node>.csv, 1 line per packet: seq, frame_idx, flags, t_gw_rx, bytes
-    (splits loss into radio vs host stack, report 6.8/6.10)
-    e.g. seq,frame_idx,flags,t_gw_rx,bytes
-         0,0,0,1791243068.468658,82
-  RESEND to the board when a gap shows: e.g. seq 3 arrives after 0 -> bytes 03 01 00 00 00 02 00
-    (resend seq 1, count 2). --no-mqtt prints instead: EHG-93C0 seq=0 frame=0 first=[1093, 171, -748]
-HOW: Scan for "EHG-*", connect, subscribe to the data slot, send START. Per packet: decode (CRC
-  checked), write CSV line, update loss tracker + clock map, ask board to re-send gaps (again after 1 s,
-  up to 5 times, if the re-sent copy is lost too), publish JSON. One tracker per board for the whole
-  run, so a reconnect recovers what the board made while the link was down.
-  MQTT = post office: publishers drop messages on a topic, subscribers receive.
-  QoS 1 = post office keeps a message until delivery confirmed.
-ROLE IN THESIS: Gateway box in report Fig. 10 (Gantt Phase 2). Adds t_gw_rx and t_mqtt_pub (H1 stage
-  timing), drives loss recovery (H2), handles several nodes (H3).
-BEFORE -> AFTER: Before: firmware/ehg_node/src/ehg_service.c (or the simulator). Decodes with
-  gateway/packet.py, tracks with gateway/tracking.py. After: Mosquitto broker (backend/), read by
-  backend/ingest/ingest.py (stores to InfluxDB) and viewer/server.py (live plot).
 """
 
 import argparse

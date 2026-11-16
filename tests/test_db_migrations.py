@@ -1,5 +1,6 @@
 """Checks the Alembic migrations on a throwaway PostgreSQL: 0001 and 0002 build the tables with the right keys, go back to nothing, 0003 (TimescaleDB) fails LOUDLY on a server
-without the extension and leaves the database at 0002, and migrate.py refuses to guess. The TimescaleDB revision itself is tested only where the extension exists."""
+without the extension and leaves the database at 0002, and migrate.py refuses to guess. The TimescaleDB revision itself is tested only where the extension exists.
+"""
 
 import pytest
 

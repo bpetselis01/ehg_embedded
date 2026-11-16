@@ -1,10 +1,10 @@
 # Licence register
 
-Every component the enterprise-style evolution ([production-topology.md](production-topology.md)) uses or considers, with its licence, edition and
+Every component the enterprise-style evolution (production-topology.md) uses or considers, with its licence, edition and
 why it is acceptable. Written 2026-11-03 as part of Unit 1.
 
 **How to read the Status column.** *Confirmed locally* means I read the licence text or installed package metadata on this machine on 2026-11-03.
-*UNVERIFIED* means the licence comes from the planning prompt ([claude-code-prompt-thesis-b-hardening.md](claude-code-prompt-thesis-b-hardening.md) §5c) and nothing in this repository or on this machine confirms it.
+*UNVERIFIED* means the licence comes from the planning prompt (claude-code-prompt-thesis-b-hardening.md §5c) and nothing in this repository or on this machine confirms it.
 Each UNVERIFIED row is checked in the unit that first uses the component, and this file is updated then. Images are to be pinned by version (and by digest where practical) when they enter a compose file.
 
 **This repository's own licence is still pending** (awaiting the supervisor; see the [README](../README.md)). This register does not decide it; [what the dependencies allow](#which-licence-this-repository-could-take) is below.
@@ -93,7 +93,7 @@ Each is pinned by version and digest; **all have a `linux/arm64` manifest** (che
 
 What this repository builds itself, and what existing tool could have done the job instead. Written 2026-11-11 after a build-versus-reuse audit.
 **Verdict:** *Custom justified* = no existing tool does this job. *Reuse possible* = a tool exists, and the custom code is small or needed for a measurement. *Should have reused* = a tool exists and the custom code adds little.
-**Status:** *Measured* = the thesis results (H1 to H4) were taken on it. *Run* = started locally, no thesis result depends on it. *Written* = code and unit tests only, never run as a service ([production-topology.md](production-topology.md)).
+**Status:** *Measured* = the thesis results (H1 to H4) were taken on it. *Run* = started locally, no thesis result depends on it. *Written* = code and unit tests only, never run as a service (production-topology.md).
 Line counts are approximate (2026-11-11).
 
 | Component | What it does | Lines | Verdict | Existing alternative | Status |

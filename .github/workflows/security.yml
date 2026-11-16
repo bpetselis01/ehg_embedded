@@ -1,6 +1,4 @@
-# PURPOSE: Checks that guard the deployment code on every push and pull request: shell scripts are linted, and the pin/secret/exposure tests of the deployment files run on their own so a failure
-#   points at the right place. Linux runners only (never macOS: 10x minutes on a private repository). Only actions already used in tests.yml are used, at the same pinned versions.
-# NOT here, on purpose: Trivy, Syft, cosign, gitleaks, CodeQL. Their action/tool versions could not be verified from here and the repository is private (no CodeQL); docs/supply-chain.md says how to run them locally.
+# Checks that guard the deployment code on every push and pull request: shell scripts are linted, and the pin/secret/exposure tests of the deployment files run on their own so a failure points at the right place.
 name: security
 
 on: [push, pull_request]
@@ -29,7 +27,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # the whole history: a key that was committed and deleted is still a leaked key
-      # pinned by digest (gitleaks 8.30.1); the allowlist is .gitleaks.toml (two exact look-alikes, guarded by tests/test_gitleaks_config.py)
+      # pinned by digest (gitleaks 8.30.1); the allowlist is.gitleaks.toml (two exact look-alikes, guarded by tests/test_gitleaks_config.py)
       - run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f git /repo --no-banner --redact --config /repo/.gitleaks.toml
   hadolint:
     runs-on: ubuntu-latest

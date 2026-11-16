@@ -1,5 +1,6 @@
 """Checks tools/gen_acl.py: the ACL it writes is least privilege per gateway, refuses ids that could widen a grant, and rewrites the file in place only when it changed.
-The real-broker proof (a gateway cannot publish for another gateway's node) is in tests/test_mqtt_tls_config.py (needs EHG_INTEGRATION=1 and mosquitto)."""
+The real-broker proof (a gateway cannot publish for another gateway's node) is in tests/test_mqtt_tls_config.py (needs EHG_INTEGRATION=1 and mosquitto).
+"""
 
 import json
 import os

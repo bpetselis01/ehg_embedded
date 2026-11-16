@@ -2,7 +2,8 @@
 the cloud-init template renders to valid YAML in the right order, the compose file is pinned, hardened, budgeted and exposes only 80/443/8883, update.sh refuses
 unsafe input and has a dry run, and no secret-looking text or state file can reach git.
 
-Opt-in (EHG_INTEGRATION=1, needs network): `terraform init` + `terraform validate` against the real Oracle provider schema, and shellcheck."""
+Opt-in (EHG_INTEGRATION=1, needs network): `terraform init` + `terraform validate` against the real Oracle provider schema, and shellcheck.
+"""
 
 import json
 import os
@@ -56,7 +57,7 @@ def test_terraform_is_formatted():
 @pytest.mark.skipif(not INTEGRATION, reason="terraform init downloads the Oracle provider (network): set EHG_INTEGRATION=1")
 def test_terraform_validates_against_the_real_provider_schema(tmp_path):
     work = tmp_path / "deploy"
-    shutil.copytree(DEPLOY, work, ignore=shutil.ignore_patterns(".terraform", "*.tfstate*"))  # validate a copy: init writes .terraform/ and a lock file
+    shutil.copytree(DEPLOY, work, ignore=shutil.ignore_patterns(".terraform", "*.tfstate*"))  # validate a copy: init writes.terraform/ and a lock file
     env = {**os.environ, "TF_IN_AUTOMATION": "1"}
     init = subprocess.run(["terraform", "init", "-backend=false", "-input=false", "-no-color"], cwd=work / "terraform", capture_output=True, text=True, env=env)
     assert init.returncode == 0, init.stdout + init.stderr
@@ -324,7 +325,7 @@ def test_only_80_443_8883_are_published_and_nothing_dangerous_is_mounted():
     assert not re.search(r"intermediate|root\.key|ca\.key", COMPOSE.read_text())
 
 
-# The only host paths a container may see. NOT allowed, with the reason: "/" , "/run", "/var/run" and "/var/lib/docker" or Docker's data-root (they reach
+# The only host paths a container may see. NOT allowed, with the reason: "/", "/run", "/var/run" and "/var/lib/docker" or Docker's data-root (they reach
 # the Docker socket or every container's environment, which holds the database passwords), "/etc" and "/root" (credentials), "/srv/ehg-data" (all volumes).
 ALLOWED_HOST_MOUNTS = {"/proc", "/sys", "/var/log/journal", "/etc/machine-id", "/var/lib/ehg-metrics"}
 

@@ -1,11 +1,4 @@
-// PURPOSE: The Bluetooth side of the gateway: finds boards named EHG-*, connects, subscribes to the data characteristic, starts sampling, passes every notification to the node's session, and writes RESEND commands.
-//   The CoreBluetooth counterpart of run_ble_node() in gateway/gateway.py.
-// INPUT: a factory for NodeSessions (so the app owns the outbox). OUTPUT: callbacks for the status screen. State restoration is on (restore identifier), so iOS can relaunch the app and hand back the connection.
-// HOW: scan for the EHG service UUID, connect, discover, setNotifyValue, write OP_START (0x01). RESEND = 0x03 + seq (UInt32 LE) + count (UInt16 LE), written without response. On disconnect it reconnects after 2 s; the NodeSession is kept, so
-//   its gap tracker still knows the last seq and the board's history fills the outage. A secure board (pairing) shows the system passkey dialog on the first protected access; there is no pairing code here on purpose (CoreBluetooth cannot pair itself).
-// STATUS: COMPILES for the simulator. NEVER RUN: the simulator has no Bluetooth and no phone was used, so scanning, notification rate, background behaviour and state restoration are all UNVERIFIED (the 15a feasibility spike).
-// ROLE IN THESIS: Hop 3 of the topology (board -> phone).
-// BEFORE -> AFTER: Before: only the Mac could be the gateway. After: a phone can, once the spike has been run.
+// The Bluetooth side of the gateway: finds boards named EHG-*, connects, subscribes to the data characteristic, starts sampling, passes every notification to the node's session, and writes RESEND commands.
 import CoreBluetooth
 import EHGGatewayCore
 import Foundation

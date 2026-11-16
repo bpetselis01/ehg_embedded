@@ -31,4 +31,4 @@ diagnostic or predictive claim could also change how the software is regulated (
 - Dropping vital-sign rules keeps the work inside this thesis's scope and avoids implying an unvalidated alerting claim.
 - A future clinical analysis layer would need its own safety case; this decision gives it a clean seam but builds nothing for it.
 
-**Sources:** [hardening prompt](../claude-code-prompt-thesis-b-hardening.md) §3 (decision 4), §6, §8; [decision 0004](0004-end-to-end-loss-recovery.md) (the loss bound the rules reuse).
+**Sources:** hardening prompt §3 (decision 4), §6, §8; [decision 0004](0004-end-to-end-loss-recovery.md) (the loss bound the rules reuse).

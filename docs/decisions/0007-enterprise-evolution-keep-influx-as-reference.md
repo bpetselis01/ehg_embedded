@@ -32,4 +32,4 @@ Changing the storage or transport under the recorded results would make them imp
 - The default developer experience is unchanged, and the test suite must keep passing without Docker, hardware, network or Xcode.
 - Every claim in the thesis about the enterprise chain must say whether a hop is built, partly built or design-only.
 
-**Sources:** [hardening prompt](../claude-code-prompt-thesis-b-hardening.md) §1 (invariants 3 and 4), §3, §4b; [decision 0006](0006-local-mosquitto-influx27-grafana.md); [progress.md](../progress.md) 2026-10-20.
+**Sources:** hardening prompt §1 (invariants 3 and 4), §3, §4b; [decision 0006](0006-local-mosquitto-influx27-grafana.md); progress.md 2026-10-20.

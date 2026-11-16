@@ -43,4 +43,4 @@ time series plus relational data (registry, alerts, audit). It must fit beside t
 - arm64 availability of the non-HA `timescale/timescaledb` image is unconfirmed; the HA image is preferred until checked (Unit 4).
 - Compression and retention protect the 200 GB disk; growth is documented rather than assumed.
 
-**Sources:** [hardening prompt](../claude-code-prompt-thesis-b-hardening.md) §2, §5, §5b, §6 (time-series schema), §9 Unit 6; [decision 0006](0006-local-mosquitto-influx27-grafana.md). Licence and image facts are unverified until the units that use them.
+**Sources:** hardening prompt §2, §5, §5b, §6 (time-series schema), §9 Unit 6; [decision 0006](0006-local-mosquitto-influx27-grafana.md). Licence and image facts are unverified until the units that use them.

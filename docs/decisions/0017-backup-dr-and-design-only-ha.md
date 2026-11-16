@@ -31,4 +31,4 @@ pgBackRest was **not built**: it cannot be checked with the TimescaleDB image he
 - The drill runs on a different machine class than production, so the RTO is only an indication of the VM's recovery time, stated with that caveat.
 - The 20 GB object-storage cap and the 24-hour interval limit what can be backed up; the NATS snapshot and retention settings are sized to fit.
 
-**Sources:** [hardening prompt](../claude-code-prompt-thesis-b-hardening.md) §4b (design-only list), §5, §9 Unit 12; [decision 0010](0010-oracle-always-free-cloud-target.md); [decision 0012](0012-timescaledb-nats-data-platform.md).
+**Sources:** hardening prompt §4b (design-only list), §5, §9 Unit 12; [decision 0010](0010-oracle-always-free-cloud-target.md); [decision 0012](0012-timescaledb-nats-data-platform.md).

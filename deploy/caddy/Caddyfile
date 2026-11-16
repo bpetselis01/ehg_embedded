@@ -9,7 +9,6 @@
 #   LIMIT, said plainly: stock Caddy has NO rate-limit directive (that needs a third-party plugin, which is unverified here and not used). Keycloak has its own brute-force protection.
 #   TLS certificates are only obtained when the name really points at the VM and ports 80/443 are reachable.
 # STATUS: UNVERIFIED: never run on the VM. tests/test_caddy_config.py checks the structure and runs `caddy validate` when the binary exists.
-# ROLE IN THESIS: The only web entry of the cloud core (docs/production-topology.md, docs/security.md).
 # BEFORE -> AFTER: Before: a one-line placeholder. After: the real route list, headers and limits.
 {$EHG_DOMAIN} {
 	encode zstd gzip

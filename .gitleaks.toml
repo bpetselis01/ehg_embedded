@@ -1,7 +1,4 @@
-# PURPOSE: Tells gitleaks about the two strings in this repository that look like secrets and are not.
-# 1. the documented DEV-MODE tokens (dev-viewer, dev-operator, dev-admin): fixed, passwordless, loopback-only, shown in docs on purpose (backend/jwtauth.py refuses them off loopback);
-# 2. the fake access key in tests/test_deploy_assets.py, which exists to prove that the repository's own secret scan catches that pattern.
-# Nothing else is allowed: a real key anywhere else still fails the scan.
+# Tells gitleaks about the two strings in this repository that look like secrets and are not.
 [extend]
 useDefault = true
 

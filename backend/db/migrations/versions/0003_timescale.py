@@ -1,15 +1,4 @@
-"""TimescaleDB: hypertables, compression, retention and the health roll-ups (needs the timescaledb extension; fails loudly without it).
-
-PURPOSE: Turn the plain tables of 0001 into time-series tables: chunks of one day, compression after one day, retention (default 90 days, EHG_RETENTION_DAYS), and hourly and daily
-  roll-ups of ehg_health for the 7-day sparklines and the 24 h / 7 d / 30 d / 90 d ranges (docs/decisions/0012-timescaledb-nats-data-platform.md).
-INPUT: a database migrated to 0002 on a server with the timescaledb extension (the Community edition: compression and continuous aggregates need it, see docs/licences.md).
-OUTPUT: hypertables ehg_raw, ehg_pkt, ehg_health; policies; continuous aggregates ehg_health_hourly and ehg_health_daily (columns bucket, node, delivery_pct, p95_latency_ms, rx, missing, score).
-HOW: CREATE EXTENSION raises an error if TimescaleDB is not installed, which is the point: no silent half-migration. Continuous aggregates cannot be created inside a transaction,
-  so they use autocommit_block. STATUS: UNVERIFIED, never run against a TimescaleDB (none was available; Docker was not running). tests/test_db_migrations.py runs it only when
-  the extension is available. Downgrade removes the policies and aggregates but leaves the tables as ordinary hypertables (TimescaleDB cannot turn a hypertable back into a table).
-ROLE IN THESIS: The long-term, compressed store and the data behind the triage page's trends.
-BEFORE -> AFTER: Before: plain tables. After: hypertables with compression and roll-ups.
-"""
+"""TimescaleDB: hypertables, compression, retention and the health roll-ups (needs the timescaledb extension; fails loudly without it)."""
 
 import os
 

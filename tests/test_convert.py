@@ -1,8 +1,9 @@
-"""Checks tools/convert.py: numbers kept exactly (the bit-exact starting point for H2/H4),
+"""Checks tools/convert.py: numbers kept exactly,
 record_id tied to record names (stable when files are added/removed), skipped duplicate
 folders, and no silent wrap-around when values don't fit 16 bits.
 Uses tiny synthetic WFDB records, so it runs without the datasets; one extra check uses
-real TPEHG data when it is downloaded."""
+real TPEHG data when it is downloaded.
+"""
 
 import json
 import os

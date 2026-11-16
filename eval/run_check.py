@@ -2,19 +2,6 @@
 
 Usage: uv run python eval/run_check.py --watch 30            (one line every 30 s until Ctrl-C)
        uv run python eval/run_check.py --once --window 5m    (exit 0 if every check passes, 1 if not)
-
-PURPOSE: Answer "is this run healthy right now?" with the thesis targets, instead of watching seven windows.
-INPUT: the node's latest run in InfluxDB (eval/backend_client.py, latest_run so two runs never mix), the source recording named
-  by its record_id (data/converted/<db>/manifest.json), and the gateway outbox (gateway/outbox.db, opened read-only).
-OUTPUT: one line per evaluation, e.g.
-    12:04:30  PASS  arriving 0.4 s | delivery 100.00 % | bit-exact 0 | p95 471 ms | outbox 0
-    12:05:00  FAIL  delivery 97.20 % (missing 1203..1240) | ...
-HOW: evaluate() is pure: frames, source, packets, outbox counts and the time in, a list of Check out. The checks reuse
-  eval/integrity.py:reconcile (H2 delivery, H4 bit-exact) and eval/latency.py:per_sample_latencies (H1, BLE-envelope offset,
-  which reads low by up to one connection interval: fine for a 2 s threshold, eval/latency.py gives the exact number).
-  Live, the newest 10 s of frames are not judged yet: they may still be in flight or waiting for a resend.
-ROLE IN THESIS: The live monitor, and the assertion of tests/test_hardware_default_run.py. Writes nothing.
-BEFORE -> AFTER: Before: a run feeding InfluxDB. After: a PASS/FAIL line per check. Tested by tests/test_run_check.py.
 """
 
 import argparse

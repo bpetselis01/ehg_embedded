@@ -30,4 +30,4 @@ Rejected: both modes in one image with the feeder taking over at run time (more 
 - The built-in image is larger (377 KB, 79 % of the slot, vs 167 KB streamed), and flash limits its length.
 - Both modes gave 100 % delivery and 0 mismatches on the DK (2026-10-22).
 
-**Sources:** [plans/baked-or-streamed-plan.md](../plans/baked-or-streamed-plan.md) (Decisions); [progress.md](../progress.md) 2026-10-22.
+**Sources:** plans/baked-or-streamed-plan.md (Decisions); progress.md 2026-10-22.

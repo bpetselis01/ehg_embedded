@@ -1,6 +1,7 @@
 """Checks backend/fhir_sync/worker.py against a FAKE FHIR server that implements the conditional-create / conditional-update rules of a transaction Bundle.
 What this proves: idempotence (restart, repeat, two workers), complete-chunk-only sending, late frames replace rather than duplicate, consent is required, server failures are
-not silent and are retried. What it does NOT prove: that a real HAPI server accepts the resources (that is tests/test_hapi_integration.py, which needs Docker)."""
+not silent and are retried. What it does NOT prove: that a real HAPI server accepts the resources (that is tests/test_hapi_integration.py, which needs Docker).
+"""
 
 import json
 from datetime import datetime, timezone
@@ -187,7 +188,7 @@ def test_resources_validate_as_fhir_r5_models():
     assert sd.data == "1 E 5" and sd.dimensions == 1 and float(sd.interval) == 50.0
 
 
-# ---- running as a service: metadata from the small JSON file instead of the .npz recordings
+# ---- running as a service: metadata from the small JSON file instead of the.npz recordings
 
 def test_load_records_gives_what_bundle_needs(tmp_path):
     import json

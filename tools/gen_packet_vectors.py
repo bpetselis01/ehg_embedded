@@ -2,17 +2,6 @@
 
 Usage: uv run python tools/gen_packet_vectors.py          # rewrite tests/fixtures/packet_vectors.json
        uv run python tools/gen_packet_vectors.py --check  # exit 1 if the file is not what gateway/packet.py produces now
-
-PURPOSE: The wire format has three copies (firmware/ehg_node/src/ehg_packet.h, gateway/packet.py, ios/EHGWire/Sources/EHGWire/Packet.swift). gateway/packet.py is the reference; its output is frozen here as JSON, and the Swift test suite
-  must decode every vector to exactly the same values and refuse every bad one with the same reason (decision 0015).
-INPUT: gateway/packet.py and gateway/tracking.py only. No hardware, no network.
-OUTPUT: tests/fixtures/packet_vectors.json: {"valid": [{"name", "hex", "packet": {version, n_ch, fs_hz, seq, frame_idx, t_inject, n_frames, flags, record_id, samples}}], "invalid": [{"name", "hex", "error": kind}]}
-  with kind one of too_short, unknown_version, wrong_length, crc_mismatch (the order Python checks them in, which the other copies must follow).
-  e.g. {"name": "default_3ch_10frames_16bit", "hex": "0203 1400 ...", "packet": {"version": 2, "n_ch": 3, "fs_hz": 20, ...}}
-  plus "tracking": {"gap": [{"name", "seqs", "returns" (what observe() returned for each), "final": {last, missing, received, duplicates, streams}}], "resend": [{"name", "steps": [[time, seq or null]], "requests": [[[start, count]]] per step}], "clock": [{"name", "updates": [[ticks, host_seconds]], "offset", "queries": [{"ticks", "host"}]}]}
-HOW: Deterministic: fixed field values and a fixed pseudo-random sample sequence (a small linear generator, not random), so --check is stable. Extremes (-32768, 32767, 24-bit limits) and the flag bits are included on purpose.
-ROLE IN THESIS: Keeps H2/H4 (bit-exact samples, damaged packets rejected) true on the phone as well as on the Mac.
-BEFORE -> AFTER: Before: two copies guarded by tests/test_docs.py only for the C/Python constants. After: a third copy (Swift) guarded by shared vectors.
 """
 
 import json

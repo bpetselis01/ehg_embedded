@@ -6,9 +6,8 @@
 # OUTPUT: prints each step, then "RESTORE DRILL OK in N s" and writes the same line to the result file. Exit status 1 on ANY failure (checksum mismatch, a database that already exists, a failed restore).
 #   The audit-chain check that used to follow the restore was removed on 2026-11-11 with the triage service that wrote the chain.
 # HOW: REFUSES to run when a target database of the same name already exists (it never overwrites): run it on a fresh server, never on the VM's live database. Roles are applied from roles.sql (errors for roles that already exist, such as the superuser, are expected and ignored).
-#   When the TimescaleDB extension is present in a dump, timescaledb_pre_restore() is called before pg_restore and timescaledb_post_restore() after (RUN once on 2026-11-04 against the real timescale/timescaledb-ha image, see docs/progress.md).
+#   When the TimescaleDB extension is present in a dump, timescaledb_pre_restore() is called before pg_restore and timescaledb_post_restore() after.
 # STATUS: tested against a throwaway local PostgreSQL (tests/test_backup_scripts.py). The Timescale branch and a Docker target ran once for real (2026-11-04); the restic restore path was never run.
-# ROLE IN THESIS: The timed restore drill of decision 0017. An untested backup is not counted as a backup.
 # BEFORE -> AFTER: Before: nothing showed a backup could be used. After: a script that does it and says how long it took.
 set -eu
 

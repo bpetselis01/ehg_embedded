@@ -1,11 +1,4 @@
-# PURPOSE: Pipeline-health alerts shown on the EHG overview dashboard. They describe the data path and the signal channels, never a person.
-# INPUT: InfluxDB measurements ehg_pkt (backend/ingest/ingest.py) and ehg_metric (backend/signal_metrics/worker.py).
-# OUTPUT: 5 rules, 1 alert instance per node (or per node and channel), evaluated every 10 s.
-#   e.g. "Node offline" firing for node_id=EHG-93C0 once its newest packet is more than 5 s old.
-# HOW: Thresholds equal backend/triage/rules.py Config. Each rule is a Flux query (A), its last value (B) and a threshold (C).
-#   No contact point is configured, so nothing leaves this computer.
-# ROLE IN THESIS: The alerts promised for Grafana in Thesis A section 8.5. Latency here is operational; eval/latency.py stays the authority for H1.
-# BEFORE -> AFTER: Before: only dashboard panels. After: Grafana loads these rules at start-up and the Alert list panel shows what is firing.
+# Pipeline-health alerts shown on the EHG overview dashboard.
 apiVersion: 1
 groups:
   - orgId: 1

@@ -1,6 +1,7 @@
 """Opt-in check against a REAL HAPI FHIR R5 server (needs Docker; set EHG_INTEGRATION=1). Never run in the default suite and NEVER run so far (Docker was not available when it was written).
 It starts hapiproject/hapi:v7.6.0 with the in-memory H2 default database on a free loopback port, so it needs neither PostgreSQL nor our application.yaml, and proves two things the fake cannot:
-the server accepts our transaction (conditional create + conditional update, SampledData with "E" values), and sending the same transaction twice leaves ONE Device and ONE Observation."""
+the server accepts our transaction (conditional create + conditional update, SampledData with "E" values), and sending the same transaction twice leaves ONE Device and ONE Observation.
+"""
 
 import os
 import shutil

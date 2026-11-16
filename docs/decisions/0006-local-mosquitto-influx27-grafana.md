@@ -25,4 +25,4 @@ decisions outside the thesis's control.
 - Latency includes no internet hop, so H1 measures a local backend; a cloud backend would add its own delay.
 - Docker Desktop on the development Mac is slow to start containers ([troubleshooting](../troubleshooting.md)).
 
-**Sources:** [design spec](../design/codebase-design.md) assumptions A2, A3, §4; [README](../../README.md) step 2.
+**Sources:** design spec assumptions A2, A3, §4; [README](../../README.md) step 2.

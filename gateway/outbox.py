@@ -1,25 +1,4 @@
-"""Durable store-and-forward queue for the gateway's MQTT messages (decision 0009).
-
-PURPOSE: Keeps every packet on disk until the broker confirms it, so a broker outage or a gateway restart loses nothing.
-INPUT: add(node_id, seq, t_inject, topic, payload) once per packet, payload = the packet's JSON WITHOUT t_mqtt_pub;
-  set_connected(True/False) from the MQTT client's connect/disconnect callbacks; acked(token) from its PUBACK callback.
-  e.g. add("EHG-93C0", 40, 655360, "ehg/EHG-93C0/pkt", '{"node_id": "EHG-93C0", "seq": 40, ..., "t_gw_rx": 1791243068.46}')
-OUTPUT: transport.send(topic, payload) calls, oldest first, at most max_inflight unacknowledged at once. The payload sent is the stored
-  JSON plus `"replayed": true` (only when the message did not go out the moment it was added) and a fresh `"t_mqtt_pub": <now>`.
-  e.g. live:    ... "t_gw_rx": 1791243068.46, "t_mqtt_pub": 1791243068.47}
-       replayed: ... "t_gw_rx": 1791243068.46, "replayed": true, "t_mqtt_pub": 1791243131.9}   (original receive time kept)
-  The file (SQLite, WAL, mode 0600): table outbox(id, node_id, seq, t_inject, topic, payload, created, attempts). attempts counts RE-sends only.
-HOW: add() writes the row FIRST, then sends if connected. A row is deleted only when its PUBACK arrives (acked). On disconnect nothing is
-  deleted: the unacknowledged rows are simply sent again after the next connect (a duplicate is harmless, ingest keys on node, seq, t_inject).
-  A restart finds the leftover rows and sends them before anything new. If the file grows past max_bytes the OLDEST rows are deleted and
-  logged loudly; if the disk write fails the message is still sent (just not durable) and the error is counted and logged.
-  One lock guards everything because add() runs in the BLE/asyncio thread while the callbacks run in paho's thread.
-ROLE IN THESIS: Gateway resilience beyond the board's 256-packet history (H2): an outage longer than about two minutes is recovered from
-  disk instead of being lost, and replayed rows are marked so H1 can exclude them (eval/latency.py --exclude-replayed).
-BEFORE -> AFTER: Before: gateway/gateway.py handed each JSON to paho's in-memory queue. After (the default since Checkpoint 2; --no-outbox
-  restores the old path): it hands it here, and this module hands it to paho when the link is up. Only one process may own a file (a lock file
-  next to it), so two gateways started from the same folder cannot share one by accident.
-"""
+"""Durable store-and-forward queue for the gateway's MQTT messages (decision 0009)."""
 
 import fcntl
 import os

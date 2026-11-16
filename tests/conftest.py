@@ -1,14 +1,4 @@
-"""Shared pytest fixtures: a throwaway local PostgreSQL (no Docker) for the tests that need real SQL.
-
-PURPOSE: Run the writer, migration, audit and registry tests against a real PostgreSQL when `initdb` and `pg_ctl` are installed (Homebrew: postgresql@14 or later), and skip them otherwise,
-  as CI without a database does. TimescaleDB is NOT available this way: its tests are separate and run only when the extension exists.
-INPUT: the PostgreSQL programs on PATH (or in /opt/homebrew/bin).
-OUTPUT: fixture `pg_server` (one cluster for the whole test session, TCP on 127.0.0.1, trust authentication, removed afterwards) and `pg_url` (a fresh empty database per test, as a
-  SQLAlchemy URL for psycopg 3; `pg_url.replace("+psycopg", "")` is the libpq form).
-HOW: initdb into a short /tmp directory, pg_ctl on a free port, CREATE DATABASE per test. Nothing outside that directory is touched.
-ROLE IN THESIS: Real-SQL tests without making Docker a requirement.
-BEFORE -> AFTER: Before: SQL could only be tested with Docker. After: with a local PostgreSQL it can.
-"""
+"""Shared pytest fixtures: a throwaway local PostgreSQL (no Docker) for the tests that need real SQL."""
 
 import os
 import shutil

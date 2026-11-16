@@ -1,5 +1,6 @@
 """Checks tools/feed.py: messages survive the 0x00-delimited COBS framing, carry a CRC, frames keep
-their numbering across the record loop, and only "@" lines are taken as board messages."""
+their numbering across the record loop, and only "@" lines are taken as board messages.
+"""
 
 import struct
 

@@ -4,14 +4,14 @@
 Makes no diagnostic or predictive claims. The replayed data are public, de-identified PhysioNet records.
 
 **Status of this document (2026-11-03, after Unit 2).** It starts the threat model and the controls table of the enterprise-style evolution
-([production-topology.md](production-topology.md)). Only the **gateway to broker** boundary is analysed so far, because it is the only one with new code.
+(production-topology.md). Only the **gateway to broker** boundary is analysed so far, because it is the only one with new code.
 Each later unit adds its boundary and updates the Status column. Nothing here says "secure" or "compliant": a control is *Implemented*, an *Optional flag*, *Planned* or a *Documented gap*.
 
 ## Controls
 
 | Control | Where | Status |
 |---|---|---|
-| Wire CRC-16 + sequence number + RESEND | BLE link ([interface-spec.md](interface-spec.md) §3) | Implemented (existing) |
+| Wire CRC-16 + sequence number + RESEND | BLE link (interface-spec.md §3) | Implemented (existing) |
 | MQTT over TLS 1.3 with client certificates, one identity per component, topic ACLs | `backend/mosquitto/mosquitto.tls.conf`, `acl`, `docker-compose.cloud.yml` | **Implemented as an optional cloud profile, tested against a real Mosquitto 2.1.2** (Unit 2). The default local stack stays anonymous on 1883 |
 | Client side of the above | `gateway --mqtt-tls`; `MQTT_*` variables for ingest and the viewer | Implemented (Unit 2); half-set TLS configuration refuses to start instead of falling back to plain MQTT |
 | Private CA bootstrap (root, intermediate, broker and client certificates, CRL) | `tools/pki.sh` | Implemented (Unit 2). Client certificates last 30 days by default |

@@ -1,19 +1,4 @@
-"""FHIR sync worker: copies stored EHG windows into a FHIR R5 server (HAPI) as Device + Observation(SampledData), once per window, only with active consent.
-
-PURPOSE: The live "write-back to the EHR" hop of the topology (docs/production-topology.md, hop 6b). The server is a self-hosted HAPI FHIR used as a REFERENCE EHR: no hospital system is involved.
-INPUT: the stored frames of each node (eval/backend_client.py:query_frames, the TimescaleDB store); the registry (consent); FHIR_BASE_URL (e.g. http://hapi:8080/fhir); EHG_DB_DSN; --interval seconds.
-  e.g. node EHG-1, subject tpehg1007 with consent_status 'active', frames 0..1399 of record 0 at 20 Hz, chunk size 600.
-OUTPUT: one FHIR transaction per COMPLETE chunk of `chunk_frames` frames (frames i with i // chunk_frames == k). The chunk is built by tools/fhir_export.py:bundle() unchanged (raw counts, "E" for a frame that never arrived), then:
-    Device       POST ... If-None-Exist identifier=urn:thesisb:ehg/node-id|EHG-1   (created once, never duplicated)
-    Observation  PUT Observation?identifier=urn:thesisb:ehg/obs-key|EHG-1/s1/0/1   (conditional update: created the first time, replaced if a late frame changed the chunk)
-  e.g. the example gives chunks 0 and 1 (frames 0..599, 600..1199); frames 1200..1399 stay pending until a frame of chunk 3 arrives.
-HOW: A chunk counts as complete once a frame of a LATER chunk exists, because frames arrive in order (recovered gaps can still change it, and the conditional PUT then replaces the earlier version, never adds a second).
-  Idempotent by construction: re-running the worker, restarting it, or running two copies sends the same conditional requests, and the server keeps one Device and one Observation per chunk. A fingerprint per chunk avoids resending unchanged data.
-  Consent: a node is exported ONLY when consent_ok(node) is True. A node with no subject (None) or without active consent (False) is skipped and counted; nothing about it is sent. Withdrawing consent stops FURTHER exports; it does not delete what was already sent (documented in docs/security.md).
-  A failure of the FHIR server raises FhirError for that chunk, the worker logs it, leaves the chunk unsent and retries on the next round: it never drops data silently and never blocks the pipeline (this worker is not on the H1 path).
-ROLE IN THESIS: Interoperability at the clinical boundary, live instead of by hand (tools/fhir_export.py is still the offline route). A research demonstration, not a clinical integration.
-BEFORE -> AFTER: Before: FHIR output only when someone ran tools/fhir_export.py. After: the reference EHR fills itself, with consent enforced.
-"""
+"""FHIR sync worker: copies stored EHG windows into a FHIR R5 server (HAPI) as Device + Observation(SampledData), once per window, only with active consent."""
 
 import argparse
 import copy
@@ -76,7 +61,7 @@ class FhirClient:
 
 class Worker:
     """frames_for(node) -> (record_id, {frame: [counts]}, time of the first frame) or None; meta_for(record_id) -> the record's fs/gain/baseline/channels;
-    consent_ok(node) -> True / False / None (registry semantics); client has .send(transaction).
+    consent_ok(node) -> True / False / None (registry semantics); client has.send(transaction).
     since_for(node) -> when the node's current subject was assigned (earlier frames belong to someone else and are never sent); subject_for(node) -> that subject's id.
     consent_ok, since_for and subject_for are asked AGAIN right before every transaction, so a withdrawal or a reassignment that happens while a round is running stops the very next send."""
 

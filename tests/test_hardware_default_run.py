@@ -1,20 +1,8 @@
-"""The Thesis A default run on the real board, end to end, judged by eval/run_check.py.
+"""The default run on the real board, end to end, judged by eval/run_check.py.
 
 Run (Terminal.app only: macOS gives Bluetooth to Terminal, and kills other processes that touch it):
     EHG_HIL=1 uv run pytest -m hardware -s
     EHG_HIL=1 EHG_HIL_SECONDS=60 uv run pytest -m hardware -s     (shorter run)
-
-PURPOSE: Show that the default run still works on hardware after a change, with one command and a pass/fail answer.
-INPUT: the DK on USB, flashed with the default firmware (tools/run.sh default asks to flash; this test never flashes),
-  Docker Desktop already running, data/converted/tpehgdb/tpehg1007.npz.
-OUTPUT: PASS, or the failing checks and the log folder gateway/logs/hil-<UTC time>/ (one log per process).
-HOW: The commands are the ones tools/demo.sh opens windows for (DEMO_DRY_RUN=1), so this cannot drift from the presented run.
-  Feeder first, until the board accepts CONFIG; then gateway, viewer and metrics, each in its own process group. After
-  EHG_HIL_SECONDS (300) the feeder stops, the outbox drains, and the whole run is evaluated with no settle margin.
-  Teardown: Ctrl-C to the gateway (it sends STOP, so the board is idle for the next run), then the rest.
-  Never flashes, never starts or restarts Docker Desktop, never writes backend/.env, never deletes the outbox.
-ROLE IN THESIS: The repeatable hardware check of the default run. GitHub CI skips it (no board); the parse of demo.sh
-  below is tested offline there.
 """
 
 import fcntl
@@ -41,7 +29,7 @@ KEEP = {"1": ("feeder", "tools/feed.py"), "3": ("gateway", "-m gateway.gateway")
 
 
 def parse_demo_windows(dry_run_stderr: str) -> dict[str, str]:
-    """name -> command for the processes the default run needs, from DEMO_DRY_RUN=1 tools/demo.sh ("N TITLE: ...<TAB>command")."""
+    """name -> command for the processes the default run needs, from DEMO_DRY_RUN=1 tools/demo.sh ("N TITLE:...<TAB>command")."""
     out = {}
     for row in dry_run_stderr.splitlines():
         title, _, command = row.partition("\t")

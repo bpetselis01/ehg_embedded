@@ -1,5 +1,4 @@
 #!/bin/sh
-# PURPOSE: Makes the ECDSA P-256 key that signs firmware for the secure build (firmware/build.sh --secure). The key never goes in the repository.
 # USAGE: EHG_MCUBOOT_KEY=$HOME/.ehg-keys/mcuboot-p256.pem firmware/gen_signing_key.sh
 # WARNING: BACK THE KEY UP (password manager or an encrypted disk image). Lose it and no firmware update (OTA) can be accepted by a board whose bootloader holds its public half.
 #   A board running a bootloader built with this key refuses images signed with the default development key, and the other way round: changing keys means reflashing the bootloader over the DK's J-Link.

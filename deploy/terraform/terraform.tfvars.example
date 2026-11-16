@@ -1,6 +1,4 @@
-# PURPOSE: Template for terraform.tfvars (gitignored). Replace every REPLACE_* value; nothing in this file is a secret.
-# HOW: cp terraform.tfvars.example terraform.tfvars, edit, then `terraform plan` and read it before `terraform apply`.
-# BEFORE -> AFTER: Before: placeholders. After: your own values (kept on your Mac).
+# Template for terraform.tfvars (gitignored).
 region              = "ap-sydney-1"
 tenancy_ocid        = "ocid1.tenancy.oc1..REPLACE_ME"
 compartment_ocid    = "ocid1.tenancy.oc1..REPLACE_ME" # the tenancy OCID uses the root compartment

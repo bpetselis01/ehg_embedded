@@ -1,26 +1,8 @@
 """Bake one converted recording into the firmware as a C header.
 
 Usage: uv run python tools/make_replay.py data/converted/tpehgdb/tpehg1007.npz [--seconds 120] [--bits 24] [--record-id N]
-Normally run for you by `firmware/build.sh flash --record <npz>` (the built-in mode, docs/firmware.md).
+Normally run for you by `firmware/build.sh flash --record <npz>`.
 record_id = that record's id in the DB's manifest.json (looked up automatically). Backend uses it to find the source for H2/H4.
-
-PURPOSE: Puts 1 recording inside the firmware so the board can "play" it as a fake sensor with no laptop
-  feeding it (stand-alone runs). The other mode, tools/feed.py, streams it over serial instead.
-INPUT: data/converted/<db>/<record>.npz from tools/convert.py (arrays: docs/data/tpehgdb.md)
-  uses `samples` int16 [n_frames, n_ch] and `fs`; record_id from the manifest.json next to it.
-  e.g. tpehg1007.npz: samples int16 (35180, 3), first rows [[1093, 171, -748], [1145, 180, -790]];
-       fs 20.0; --record-id 0
-OUTPUT: firmware/ehg_node/src/replay_data.h (generated C text, not committed):
-    #define REPLAY_N_CH 3 / REPLAY_N_FRAMES 35180 / REPLAY_FS_HZ 20 / REPLAY_RECORD_ID 0 / REPLAY_SAMPLE_BITS 16
-    static const int16_t replay_samples[] = { 1093, 171, -748,  1145, 180, -790, ... }  (1 line per frame)
-    --bits 24 (default for int32 records): int32_t array; firmware then sends 3-byte samples.
-HOW: np.load the .npz, optionally cut to --seconds (flash is small: 16 ch x 200 Hz fits ~2 min),
-  print numbers as C. fs must be a whole number (firmware scheduler).
-ROLE IN THESIS: Dataset -> hardware bridge for digital injection (report 8.2). record_id baked in
-  rides in every packet, so results trace back to the source.
-BEFORE -> AFTER: Before: tools/convert.py output. After: firmware/ehg_node/src/replay_data.h,
-  compiled by firmware/build.sh --record (CONFIG_EHG_BAKED_RECORD=y), read by firmware/ehg_node/src/replay.c.
-  Tested by tests/test_make_replay.py.
 """
 
 import argparse

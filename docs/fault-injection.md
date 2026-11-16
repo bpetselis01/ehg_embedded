@@ -1,7 +1,7 @@
 # Fault injection: testing the pipeline under realistic link problems
 
 What real telemonitoring links do to data, how this pipeline imitates it on purpose, and how to measure the
-real numbers to plug in. Design and sources: [plans/realistic-injection-plan.md](plans/realistic-injection-plan.md).
+real numbers to plug in. Design and sources: plans/realistic-injection-plan.md.
 
 ## What a real BLE link does (and doesn't)
 

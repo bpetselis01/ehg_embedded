@@ -1,13 +1,4 @@
-// PURPOSE: Durable store-and-forward queue for the phone's MQTT messages. A port of gateway/outbox.py: every message is written to disk first and deleted only when the broker's PUBACK arrives, so a signal loss, a broker outage
-//   or the app being killed loses nothing (the board's own history covers only about two minutes).
-// INPUT: add(nodeId, seq, tInject, topic, payload) per packet (payload = the JSON without t_mqtt_pub); setConnected(true/false) from the MQTT client; acked(token) from its PUBACK callback.
-// OUTPUT: transport.send(topic, payload) -> token calls, oldest first, at most maxInflight unacknowledged. The payload sent is the stored JSON plus "replayed": true (only when it did not go out the moment it was added) and a fresh
-//   "t_mqtt_pub": now. Over the size cap the OLDEST rows are deleted and the loss is reported through `log`.
-// HOW: SQLite (WAL) in a file whose protection class is "complete until first user authentication" on iOS, so a locked phone can still append to it. One recursive lock guards everything (BLE callbacks and the MQTT queue call in from
-//   different threads). No file lock: an iOS app is one process. A duplicate after a lost PUBACK is harmless (the cloud keys on node, seq, t_inject).
-// STATUS: tested with `swift test` against a recording transport. Never run on a phone.
-// ROLE IN THESIS: Gateway resilience beyond the board's 256-packet history (H2).
-// BEFORE -> AFTER: Before: the Python outbox only. After: the same behaviour on the phone.
+// Durable store-and-forward queue for the phone's MQTT messages.
 import Foundation
 import SQLite3
 

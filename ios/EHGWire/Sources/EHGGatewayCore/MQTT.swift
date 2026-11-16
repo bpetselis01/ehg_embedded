@@ -1,12 +1,4 @@
-// PURPOSE: A small MQTT 3.1.1 client for the phone: TLS 1.3 with a client certificate (mTLS), persistent session, QoS 1 publishes, last will, keep-alive and reconnect with backoff. Written on Network.framework
-//   instead of a third-party library because the plan's own concern was that popular clients cannot present an EC client identity; this takes a SecIdentity directly.
-// INPUT: host, port, client id (= the certificate's CN: the broker uses it as the user name), the client SecIdentity, the CA certificates to trust, an optional last will. start() / stop(); send(topic, payload) -> token.
-// OUTPUT: callbacks onConnected(), onDisconnected(), onPuback(token). `send` returns the MQTT packet id as the token the outbox waits for, or nil when not connected. publishRetained() is for the online/offline status topic.
-// HOW: only what the gateway uses is implemented: CONNECT (with will), CONNACK, PUBLISH QoS 1 (out), PUBACK (in), PINGREQ/PINGRESP, DISCONNECT. The server certificate is validated against the given anchors ONLY (not the system store) and
-//   the host name; TLS below 1.3 is refused. Reconnect waits 1 s doubling to 60 s with jitter. Everything runs on one serial queue.
-// STATUS: tested against a real Mosquitto 2.1.2 with the repository's TLS config and ACL (tests/test_ios_mqtt.py). Never run on a phone, so cellular behaviour, background suspension and Keychain handling are NOT verified.
-// ROLE IN THESIS: Hop 4 of the topology (phone -> cloud) for the iOS gateway.
-// BEFORE -> AFTER: Before: the outbox had no transport. After: it has a TLS client.
+// A small MQTT 3.1.1 client for the phone: TLS 1.3 with a client certificate (mTLS), persistent session, QoS 1 publishes, last will, keep-alive and reconnect with backoff.
 import Foundation
 import Network
 import Security

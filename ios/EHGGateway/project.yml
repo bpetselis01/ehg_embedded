@@ -1,6 +1,4 @@
-# PURPOSE: Describes the iPhone gateway app for XcodeGen (`xcodegen generate` writes EHGGateway.xcodeproj, which is not committed). Keeps the project reviewable as text and reproducible.
-# INPUT: ../EHGWire (the Swift package: wire format, gateway core, MQTT client). OUTPUT: an iOS 16+ SwiftUI app with the Bluetooth background mode.
-# SIGNING: left to you. Open the generated project, pick your Personal Team under Signing & Capabilities and change the bundle identifier (a free account needs a unique one). The signature lasts 7 days (docs/ios-gateway.md).
+# SIGNING: left to you. Open the generated project, pick your Personal Team under Signing & Capabilities and change the bundle identifier (a free account needs a unique one). The signature lasts 7 days.
 name: EHGGateway
 options:
   bundleIdPrefix: net.thesisb

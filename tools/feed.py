@@ -1,45 +1,6 @@
 """Stream a converted recording into the board over the J-Link serial port (digital injection).
 
 Usage: uv run python tools/feed.py data/converted/tpehgdb/tpehg1007.npz [--port /dev/cu.usbmodem…] [--lead 2]
-
-PURPOSE: The laptop plays the "electrodes": it sends the recording's frames to the board, which
-  releases them on its own timer at the record's rate (firmware/ehg_node/src/replay.c). Replaces
-  compiling the recording into the firmware, so a new record or a 6 h soak needs no rebuild.
-INPUT: data/converted/<db>/<record>.npz (tools/convert.py): `samples` int16/int32 [n_frames, n_ch], `fs`;
-  record_id from the manifest.json next to it.
-  e.g. tpehg1007.npz: samples int16 (35180, 3), rows [[1093, 171, -748], [1145, 180, -790], ...], fs 20.0
-  From the board, text lines on the same port: Zephyr log lines (printed as-is) and "@" lines:
-  e.g. @HELLO EHG-93C0 3 20 0 #xxxx  (board accepted CONFIG: name, n_ch, fs, record_id)
-       @LVL 40 #xxxx                  (frames waiting in the board's buffer, once a second after CONFIG;
-                                       3 s without one = the board was reset, so CONFIG is sent again)
-       @SYNC 7 81920 #xxxx            (board clock tick when clock ping 7 arrived)
-  "#xxxx" = CRC-16 of the text between "@" and " #"; lines that fail it are ignored.
-OUTPUT: binary messages to the board, each COBS-encoded and ended by a 0x00 byte (docs/interface-spec.md 3b):
-  decoded = type (1 byte) | payload | CRC-16 of type + payload (same CRC as the BLE packet)
-  e.g. CONFIG n_ch 3, fs 20, record 0, 16 bit, session 0x9c2a -> 10 03 14 00 00 00 10 2a 9c | crc
-       FAULT --faults drop=0.05,burst=3       -> 13 01 00 00 00 | 7e 04 | 55 55 | 00 00 | 00 00 | crc
-                                                 (seed 1, good->bad 1150/65536, bad->good 21845/65536)
-       DATA frame_idx 0, 2 frames            -> 11 00 00 00 00 02 45 04 ab 00 14 fd 79 04 b4 00 ea fc | crc
-       SYNC ping 7                        -> 12 07 00 00 00 | crc   (once a second)
-  Frames are numbered from 0 and keep counting when the record loops (row = frame_idx % n_frames),
-  which is what eval/integrity.py expects.
-  eval/results/sync_<node>.csv, 1 line per answered ping (laptop epoch s, board ticks at 32768/s):
-  e.g. ping,t_send,t_recv,tick
-       7,1791243069.10012,1791243069.10498,81920
-  eval/latency.py uses it to pin the board->laptop clock offset independently of Bluetooth (H1).
-  eval/results/runs_<node>.csv, 1 line per feeder start: t_start, record, record_id, "--faults" text.
---sync-only --node EHG-93C0: for a board built with a built-in recording (firmware/build.sh --record): sends
-  only the once-a-second clock pings below and logs them, so eval/latency.py still gets the exact offset.
-HOW: Send CONFIG until the board answers @HELLO. Then keep about --lead seconds of frames waiting on the
-  board: on each @LVL (once a second) top the queue back up to the target. --lead must be over 1 s so
-  the queue never runs dry between reports.
-  The board, not this script, decides when each frame is "sampled", so serial timing jitter never
-  reaches the measurements (only the buffer level moves). Once a second it also sends a clock ping and
-  logs when it went out, when the answer came back and the board tick inside it.
-ROLE IN THESIS: The digital-injection source of report 8.2 (Sensor-in-the-Loop pattern [60]), now streamed.
-BEFORE -> AFTER: Before: tools/convert.py. After: firmware/ehg_node/src/replay.c -> ehg_service.c -> BLE.
-  Owns the serial port while running (the board's log is printed here instead of in screen).
-  Tested by tests/test_feed.py.
 """
 
 import argparse
@@ -121,7 +82,7 @@ def sync_msg(ping_id: int) -> bytes:
 
 
 def parse_faults(spec: str) -> dict:
-    """'drop=0.02,burst=4,corrupt=0.001,disc=60,seed=1' -> the board's settings (docs/fault-injection.md).
+    """'drop=0.02,burst=4,corrupt=0.001,disc=60,seed=1' -> the board's settings.
 
     drop = long-run share of packets lost, burst = mean length of a loss run (packets). Gilbert model:
     bad->good r = 1/burst, good->bad p = drop*r/(1-drop), so the share of time in "bad" is drop.
@@ -154,7 +115,7 @@ def parse_at(line: str):
 
 
 def record_id_for(npz: Path) -> int:
-    """record_id of this .npz from the manifest.json in the same folder (tools/convert.py)."""
+    """record_id of this.npz from the manifest.json in the same folder (tools/convert.py)."""
     for e in json.loads((npz.parent / "manifest.json").read_text()):
         if e["file"] == npz.name:
             return e["record_id"]

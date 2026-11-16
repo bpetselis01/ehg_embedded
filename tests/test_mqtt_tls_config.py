@@ -2,7 +2,8 @@
 tools/pki.sh makes certificates that do what the broker needs, and the clients refuse to fall back to plain MQTT.
 
 Three groups. (1) text checks, always run. (2) PKI + a loopback TLS server, run when OpenSSL 3 is installed. (3) a real Mosquitto with
-the repo's config and ACL, run only with EHG_INTEGRATION=1 and `mosquitto` on PATH (brew install mosquitto)."""
+the repo's config and ACL, run only with EHG_INTEGRATION=1 and `mosquitto` on PATH (brew install mosquitto).
+"""
 
 import hashlib
 import importlib.util
@@ -569,7 +570,7 @@ def test_real_broker_refuses_no_certificate_tls12_and_wrong_ca(broker, tmp_path)
 @needs_openssl
 @needs_broker
 def test_revoked_certificate_is_refused_after_the_broker_reloads(broker):
-    """Observed on Mosquitto 2.1.2: the CRL is read at start-up and again on SIGHUP, not on its own (docs/security.md)."""
+    """Observed on Mosquitto 2.1.2: the CRL is read at start-up and again on SIGHUP, not on its own."""
     assert connack(broker, client_context(broker.pki, "ehg-gw-01"))
     run_pki(broker.pki, "revoke", "ehg-gw-01")
     broker.proc.send_signal(signal.SIGHUP)

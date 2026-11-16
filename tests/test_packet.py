@@ -1,5 +1,6 @@
 """Checks gateway/packet.py: pack -> parse returns the same packet, and short or
-wrong-version packets are rejected (they would otherwise corrupt stored data)."""
+wrong-version packets are rejected (they would otherwise corrupt stored data).
+"""
 
 import pytest
 

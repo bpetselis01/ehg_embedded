@@ -1,5 +1,6 @@
 """Checks the gateway's durable outbox (decision 0009): a message is written to disk BEFORE it is sent, deleted only when the broker's
-PUBACK arrives, replayed oldest-first after an outage or restart, bounded by a disk cap, and the whole thing is off unless asked for."""
+PUBACK arrives, replayed oldest-first after an outage or restart, bounded by a disk cap, and the whole thing is off unless asked for.
+"""
 
 import json
 import os
@@ -196,7 +197,7 @@ class FakePaho:
         self.on_connect = self.on_disconnect = self.on_publish = self.on_connect_fail = None
         FakePaho.instances.append(self)
 
-    def __getattr__(self, name):        # max_queued_messages_set, loop_start, connect, ...: record and ignore
+    def __getattr__(self, name):        # max_queued_messages_set, loop_start, connect,...: record and ignore
         return lambda *a, **k: self.calls.append((name, a, k))
 
     def publish(self, topic, payload, qos=0, retain=False):

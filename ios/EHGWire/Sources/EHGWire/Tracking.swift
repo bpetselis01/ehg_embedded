@@ -1,14 +1,4 @@
-// PURPOSE: Packet-loss tracking and board-to-phone clock mapping for the iPhone gateway. A line-for-line port of gateway/tracking.py (GapTracker, ClockMap, ResendScheduler); change them together.
-// INPUT: GapTracker.observe(seq): the sequence number of each arriving packet. ClockMap.update(ticks, tHost): the board's tick counter (32768 per second, 32 bits, wraps) and the phone's clock when the packet arrived.
-// OUTPUT: observe() returns the sequence numbers newly found missing (empty for none), in ascending order; ClockMap.toHost(ticks) returns phone time in Unix seconds, or nil before the first update.
-//   e.g. observe(0), observe(1), observe(2), observe(5), observe(3) return [], [], [], [3, 4], [].
-// HOW: Same rules as Python: a late arrival fills a hole; a repeat is counted and ignored; a sequence number more than 1000 below the last one starts a new stream (the node rebooted) and forgets the old holes.
-//   The clock offset is the smallest (phone time - board time) seen, which bounds the true offset from above. The tick counter's 32-bit roll-over is undone relative to the last tick.
-//   KNOWN LIMIT, shared with Python on purpose (changing it would break "every loss is identified" after a long outage): a huge forward jump returns a huge list of missing numbers. The app must cap what it asks the board to re-send (the board keeps only 256 packets).
-//   Sequence numbers are Int (64-bit) so the arithmetic matches Python's unbounded integers for every 32-bit value.
-// STATUS: checked against tests/fixtures/packet_vectors.json ("tracking"), generated from the Python classes. Never run on a phone.
-// ROLE IN THESIS: Makes every loss identifiable on the phone as on the Mac (H2) and gives samples real timestamps (H1).
-// BEFORE -> AFTER: Before: only the packet decoder existed in Swift. After: the loss and clock logic too.
+// Packet-loss tracking and board-to-phone clock mapping for the iPhone gateway.
 
 public struct GapTracker {
     public static let newStreamBackstep = 1000

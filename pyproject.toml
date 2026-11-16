@@ -1,7 +1,4 @@
-# PURPOSE: Lists the laptop-side Python code's dependencies; `uv sync` installs them.
-# wfdb = read PhysioNet records (tools/), bleak = Bluetooth (gateway/), paho-mqtt = MQTT
-# (gateway/, viewer/, ingest), influxdb-client = database (eval/, ingest), matplotlib = plots
-# (eval/latency.py), websockets = live viewer. pythonpath lets tests import gateway/, tools/, eval/.
+# Lists the laptop-side Python code's dependencies; `uv sync` installs them.
 [project]
 name = "thesis-b-ehg"
 version = "0.1.0"

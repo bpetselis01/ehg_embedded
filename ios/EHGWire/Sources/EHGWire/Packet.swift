@@ -1,12 +1,4 @@
-// PURPOSE: EHG wire format v2 (v1 + CRC-16 trailer) for the iPhone gateway. Mirror of gateway/packet.py and firmware/ehg_node/src/ehg_packet.h. Change all three together.
-// INPUT: Packet.parse(bytes): one BLE notification, little-endian. 20-byte header, then nFrames x nCh samples (Int16, or 3-byte signed when flags has flag24Bit), then a 2-byte CRC-16/CCITT-FALSE of everything before it.
-//   e.g. 3 channels x 10 frames = 20 + 60 + 2 = 82 bytes (24-bit: 20 + 90 + 2 = 112).
-// OUTPUT: a Packet value (version, nCh, fsHz, seq, frameIdx, tInject, nFrames, flags, recordId, samples[frame][channel] as Int32), or a PacketError. pack() is the exact inverse (used by the tests and a future simulator).
-//   The checks run in the same order as gateway/packet.py: too short, unknown version, wrong length, bad CRC. A damaged packet is refused, never stored (H2/H4); samples stay raw ADC counts, unscaled.
-// HOW: Fixed byte offsets (0 version, 1 nCh, 2-3 fsHz, 4-7 seq, 8-11 frameIdx, 12-15 tInject, 16 nFrames, 17 flags, 18-19 recordId), no padding. Verified against tests/fixtures/packet_vectors.json, generated from gateway/packet.py.
-// STATUS: compiled and tested with `swift test` (command line only). NEVER run on a phone, with CoreBluetooth, or in Xcode.
-// ROLE IN THESIS: Keeps the phone's decode bit-exact with the laptop's (decision 0015, hypothesis H4).
-// BEFORE -> AFTER: Before: the wire format existed in C and Python. After: also Swift, guarded by shared golden vectors.
+// EHG wire format v2 (v1 + CRC-16 trailer) for the iPhone gateway.
 
 public enum WireFormat {
     public static let version: UInt8 = 2
@@ -38,7 +30,7 @@ public enum PacketError: Error, Equatable {
     }
 }
 
-/// CRC-16/CCITT-FALSE (poly 0x1021, init 0xFFFF, no reflection): the same as Zephyr's crc16_itu_t(0xFFFF, ...) and Python's binascii.crc_hqx(b, 0xFFFF).
+/// CRC-16/CCITT-FALSE (poly 0x1021, init 0xFFFF, no reflection): the same as Zephyr's crc16_itu_t(0xFFFF,...) and Python's binascii.crc_hqx(b, 0xFFFF).
 public func crc16(_ bytes: [UInt8]) -> UInt16 {
     var crc = WireFormat.crcInitial
     for byte in bytes {

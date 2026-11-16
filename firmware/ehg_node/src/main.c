@@ -1,31 +1,5 @@
-/*
- * main.c - start-up + Bluetooth connection. The program starts here.
- *
- * PURPOSE: Names the board, makes it findable over Bluetooth, accepts the laptop's connection,
- *   prints link info + counters to the serial log.
- * INPUT: chip ID (for the name); the connection from the laptop (gateway/gateway.py).
- *   e.g. chip ID 8 bytes, last 2 = 93 C0 (our DK) -> name "EHG-93C0".
- *   e.g. connection: the laptop connects and asks for its link settings; main.c only accepts.
- * OUTPUT: Bluetooth adverts as "EHG-XXXX" (XXXX from the chip ID, so every board has its own name, H3).
- *   Serial log (VCOM0, 460800 baud): link settings when they change, packet counters every 10 s.
- *   e.g. advert: flags 06 + name "EHG-93C0"; scan response: service ID 4e480001-a0e1-...-9a1b2c3d4e5f
- *   e.g. log of 1 connection (timestamps vary; values from the 2026-10-06 run):
- *     [00:00:00.010,000] <inf> main: advertising as EHG-93C0
- *     [00:00:04.120,000] <inf> main: connected
- *     [00:00:04.300,000] <inf> main: PHY: tx 2 rx 2 (1=1M 2=2M)
- *     [00:00:04.350,000] <inf> main: data length: tx 251 B rx 251 B
- *     [00:00:04.400,000] <inf> main: ATT MTU: tx 247 rx 247
- *     [00:00:04.900,000] <inf> main: conn params: interval 30.00 ms, latency 0, timeout 6000 ms
- *     [00:00:10.000,000] <inf> ehg_svc: sent=11 resent=0 resend_miss=0 notify_err=0 ring_overflow=0 max_inject_late=31 us
- *     [00:05:00.000,000] <inf> main: disconnected (0x13)   (0x13 = laptop closed it; 0x08 = link timed out)
- * HOW: name from chip ID -> Bluetooth on -> advertise ("I'm here, connect to me").
- *   Button 1 starts/stops a session (as the laptop's START/STOP does). LED1 = connected, LED2 = sampling.
- *   On connect: hand the connection to ehg_service.c, ask for the fastest radio settings.
- *   The laptop decides what it actually grants; the callbacks below only log it.
- *   Streaming starts later, when the laptop sends START.
- * ROLE IN THESIS: Board side of the Bluetooth link (report Fig. 10). Logged settings explain latency (H1).
- * SEE: ehg_service.c (data + commands), docs/firmware.md (overview + glossary).
-  */
+/* main.c - start-up + Bluetooth connection. The program starts here.
+ */
 #include <stdio.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>

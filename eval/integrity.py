@@ -1,22 +1,6 @@
 """H2 (delivery) and H4 (bit-exact fidelity): compare what reached InfluxDB with the source file.
 
 Usage: uv run python eval/integrity.py --node EHG-0001 --since 2h [--db tpehgdb]
-
-PURPOSE: H2: did every sample arrive (target > 99 %)? H4 bit-exact half: is every stored number identical to the original?
-INPUT: stored samples + record_id from eval/backend_client.py:query_frames;
-  data/converted/<db>/manifest.json and the .npz it names (tools/convert.py; docs/data/tpehgdb.md).
-  e.g. stored {0: [1093, 171, -748], 1: [1145, 180, -790], ...}, record_id 0
-       -> manifest says tpehg1007.npz, whose row 0 is [1093, 171, -748] (match), row 1 [1145, 180, -790] ...
-OUTPUT (printed), e.g.:
-    node=EHG-0001 record_id=0 frames 0..35999
-    delivery 35990/36000 = 99.9722 %
-    bit-exact mismatches: 0
-    missing ranges (first 20): [(120, 129)]
-HOW: Look up the source file by record_id. Line stored and source frames up by frame_idx
-  (source loops: row = frame_idx % length). Count delivered, differing, and runs of missing frames.
-ROLE IN THESIS: H2/H4 result, end to end (dataset -> board -> radio -> gateway -> DB).
-BEFORE -> AFTER: Before: ehg_raw rows (backend/ingest/ingest.py) and data/converted/ (tools/convert.py).
-  After: printed results. Tested by tests/test_integrity.py.
 """
 
 import argparse

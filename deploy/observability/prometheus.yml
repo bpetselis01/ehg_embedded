@@ -1,9 +1,4 @@
-# PURPOSE: Prometheus: what to scrape, the SLO recording rules and the alert rules (rules/), and where alerts go (Alertmanager).
-# INPUT: none. OUTPUT: metrics from every service that has a metrics endpoint, every 15 s, kept 15 days (set on the command line).
-# HOW: Targets are Docker service names on the private network. Grafana is NOT scraped (its metrics endpoint is switched off, GF_METRICS_ENABLED=false, so the target would be down for ever and EhgTargetDown would page for ever).
-#   The broker has no scrape job: the custom MQTT exporter was removed on 2026-11-11; the standard tool is sapcc/mosquitto-exporter (not configured here).
-# ROLE IN THESIS: Measured resource use and health of the cloud core (docs/decisions/0016-observability-and-slos.md).
-# BEFORE -> AFTER: Before: nothing scraped. After: the targets below.
+# Prometheus: what to scrape, the SLO recording rules and the alert rules (rules/), and where alerts go (Alertmanager).
 global:
   scrape_interval: 15s
   evaluation_interval: 15s

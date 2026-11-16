@@ -1,6 +1,7 @@
 """Checks gateway/gateway.py:Node across a reconnect: the board keeps sampling while the link is down,
 so the first packet after reconnecting shows a seq jump, and the same Node must ask for exactly the
-missing range through the new connection's resend function (one stream, nothing restarted)."""
+missing range through the new connection's resend function (one stream, nothing restarted).
+"""
 
 import pytest
 

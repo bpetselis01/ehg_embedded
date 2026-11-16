@@ -1,43 +1,6 @@
-"""Convert PhysioNet WFDB recordings -> 1 .npz file per recording.
+"""Convert PhysioNet WFDB recordings -> 1.npz file per recording.
 
 Usage: uv run python tools/convert.py tpehgdb|tpehgt|ehgdb|icehg [--bits 16|24]
-
-PURPOSE: Step 0. Public EHG recordings -> files every later step reads. Numbers kept exactly as stored.
-INPUT (per recording, e.g. tpehg1007):
-  data/raw/tpehgdb/tpehgdb/tpehg1007.hea  text labels (rate, gain, patient notes)
-  data/raw/tpehgdb/tpehgdb/tpehg1007.dat  binary: 35180 rows x 12 signals, 16-bit whole numbers
-  contents explained: docs/data/tpehgdb.md (same for other DBs)
-  e.g. .hea first lines:  tpehg1007 12 20.000000 35180          (name, 12 signals, 20 Hz, 35180 rows)
-                          tpehg1007.dat 16 13107/mV 16 0 1093 -7439 0 1   (signal "1": gain 13107/mV,
-                          first value 1093)
-  e.g. .dat first bytes:  45 04 20 00 0a 00 1d 00 ab 00 ...  = 1093, 32, 10, 29, 171, ... (row 0, 12 signals)
-OUTPUT:
-  data/converted/tpehgdb/tpehg1007.npz    3 raw signals + labels to read them
-  data/converted/tpehgdb/manifest.json    all records + their record_id (tracked in git)
-  .npz arrays:
-    samples   int16 [n_frames, n_ch]  untouched numbers (row 0: 1093 171 -748). --bits 24: int32
-    fs        float                   samples/s (20.0)
-    channels  str[n_ch]               "1" "2" "3"
-    gain      float[n_ch]             units per mV (13107)
-    baseline  int[n_ch]               stored value = 0 mV (0)
-    units     str[n_ch]               "mV"
-  e.g. manifest.json entry: {"record_id": 0, "record": "tpehg1007", "n_frames": 35180, "n_ch": 3,
-                             "fs": 20.0, "file": "tpehg1007.npz"}
-    mV = (samples - baseline) / gain     e.g. (1093 - 0) / 13107 = 0.0834 mV
-    why: samples are ADC counts, gain/baseline differ per DB (13107 here, 131.068 in ehgdb), so
-    counts alone aren't comparable; classifier + plots need mV. Kept as counts here so the
-    bit-exact check (H2/H4) works; mV only downstream. More: docs/data/tpehgdb.md
-HOW: wfdb reads .hea/.dat with physical=False (no mV conversion), keeps chosen channels
-  (filtered copies dropped), np.savez. Values that don't fit the chosen width -> error, never wrap.
-RECORD_ID: tied to the record *name*, not file order. An existing manifest.json is reused: known
-  names keep their id, new names get the next free id, ids of removed records are never reused.
-  Needed because record_id is baked into firmware builds and stored DB rows.
-WHY .npz: numbers + labels in 1 file, 1-line NumPy load, later steps all Python. (Inferred.)
-ROLE IN THESIS: "Ground truth" the transmitted data is compared against. Raw numbers kept
-  -> bit-exact checks (H2/H4) possible.
-BEFORE -> AFTER: Before: data/raw/ (README step 0). After: data/converted/, read by
-  tools/feed.py (streams it into the board), gateway.py --simulate, eval/integrity.py (answer key).
-  Tested by tests/test_convert.py.
 """
 
 import argparse
@@ -57,7 +20,7 @@ DATABASES = {
     "tpehgdb": (RAW / "tpehgdb/tpehgdb", ["1", "2", "3"], ()),
     "tpehgt": (RAW / "tpehgt", ["EHG1", "EHG2", "EHG3", "TOCO"], ()),
     "ehgdb": (RAW / "ehgdb", [f"EHG{i}" for i in range(1, 17)], ()),  # numeric order = 4x4 grid order
-    # records live in per-outcome subfolders; icehgdsmat/ = same 126 records again as .mat copies
+    # records live in per-outcome subfolders; icehgdsmat/ = same 126 records again as.mat copies
     "icehg": (RAW / "icehg-ds", ["S1", "S2", "S3"], ("icehgdsmat",)),
 }
 
@@ -65,7 +28,7 @@ DTYPES = {16: np.int16, 24: np.int32}  # 24-bit values are carried in int32
 
 
 def convert_record(path: str, channels: list[str] | None, bits: int = 16) -> dict:
-    """Read one WFDB record and return the arrays that go into its .npz file."""
+    """Read one WFDB record and return the arrays that go into its.npz file."""
     rec = wfdb.rdrecord(str(path), physical=False)
     idx = list(range(rec.n_sig)) if channels is None else [rec.sig_name.index(c) for c in channels]
     d = rec.d_signal[:, idx]
@@ -115,7 +78,7 @@ def convert_db(src: Path, channels: list[str] | None, out_dir: Path, skip=(), bi
 
 
 def source_file(db_dir: Path, record_id: int) -> Path:
-    """The converted .npz for a record_id (looked up by id, not by list position)."""
+    """The converted.npz for a record_id (looked up by id, not by list position)."""
     manifest = json.loads((db_dir / "manifest.json").read_text())
     return db_dir / next(e["file"] for e in manifest if e["record_id"] == record_id)
 
