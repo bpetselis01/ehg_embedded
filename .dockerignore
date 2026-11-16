@@ -25,7 +25,6 @@ deploy/.sops.yaml
 gateway/logs
 gateway/outbox.db*
 eval/results
-.claude
 .serena
 .ua
 .vscode

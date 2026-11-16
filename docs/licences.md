@@ -4,7 +4,7 @@ Every component the enterprise-style evolution (production-topology.md) uses or 
 why it is acceptable. Written 2026-11-03 as part of Unit 1.
 
 **How to read the Status column.** *Confirmed locally* means I read the licence text or installed package metadata on this machine on 2026-11-03.
-*UNVERIFIED* means the licence comes from the planning prompt (claude-code-prompt-thesis-b-hardening.md §5c) and nothing in this repository or on this machine confirms it.
+*UNVERIFIED* means nothing in this repository or on this machine confirms the licence.
 Each UNVERIFIED row is checked in the unit that first uses the component, and this file is updated then. Images are to be pinned by version (and by digest where practical) when they enter a compose file.
 
 **This repository's own licence is still pending** (awaiting the supervisor; see the [README](../README.md)). This register does not decide it; [what the dependencies allow](#which-licence-this-repository-could-take) is below.

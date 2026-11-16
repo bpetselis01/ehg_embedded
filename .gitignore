@@ -17,9 +17,6 @@ gateway/logs/
 *.pdf
 
 # local AI tooling
-CLAUDE.md
-Claude outputs/
-.claude/
 .serena/
 .ua/
 .vscode/

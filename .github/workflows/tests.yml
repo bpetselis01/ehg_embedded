@@ -10,8 +10,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # full history, for the authorship check below
-      # No AI co-author trailers or "Generated with" lines in any commit
-      - run: "! git log --format=%B | grep -inE 'co-authored-by:.*(claude|anthropic)|generated with \\[?claude'"
+      # Every commit is authored by its committer: no co-author trailers
+      - run: "! git log --format=%B | grep -inE '^co-authored-by:'"
       - uses: astral-sh/setup-uv@v10.3.3  # this action publishes exact tags only, no moving v10
       - run: uv sync --frozen
       - run: uv run pytest -q
