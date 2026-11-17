@@ -1,7 +1,7 @@
 # PURPOSE: Recipe for the ingest container: a small Python image + two libraries + ingest.py.
 # BEFORE -> AFTER: Built by backend/docker-compose.yml ("build: ./ingest"); runs ingest.py,
 #   which moves MQTT messages into InfluxDB. (-u = print logs immediately.)
-FROM python:3.13-slim
+FROM python:3.15-slim
 RUN pip install --no-cache-dir "paho-mqtt>=2.1,<3" "influxdb-client>=1.46,<2" "nats-py>=2.16,<3"
 COPY ingest.py /app/ingest.py
 # not root: it needs to write nothing (trivy DS-0002); the TLS override mounts its key read-only
